@@ -1,4 +1,5 @@
 import os
+import asyncio
 import discord
 import tempfile
 import fitz
@@ -81,7 +82,7 @@ def summarize_image(path: str) -> str:
     media_type = media_map.get(ext, "image/jpeg")
     b64 = base64.standard_b64encode(image_data).decode("utf-8")
     response = client.messages.create(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-5-5",
         max_tokens=1024,
         messages=[{
             "role": "user",
@@ -160,7 +161,7 @@ async def on_message(message):
     if content.lower() in ["!brief", "brief me", "send brief"]:
         await message.channel.send("Building your briefing now. Give me 2-3 minutes...")
         from digest import build_digest
-        digest = build_digest()
+        digest = await asyncio.to_thread(build_digest)
         chunks = [digest[i:i+2000] for i in range(0, len(digest), 2000)]
         for chunk in chunks:
             await message.channel.send(chunk)
@@ -181,21 +182,21 @@ async def on_message(message):
             try:
                 if filename.endswith(".pdf"):
                     text = extract_pdf(tmp_path)
-                    response = summarize_text(user_id, text, attachment.filename)
+                    response = await asyncio.to_thread(summarize_text, user_id, text, attachment.filename)
                 elif filename.endswith((".pptx", ".ppt")):
                     text = extract_pptx(tmp_path)
-                    response = summarize_text(user_id, text, attachment.filename)
+                    response = await asyncio.to_thread(summarize_text, user_id, text, attachment.filename)
                 elif filename.endswith((".docx", ".doc")):
                     text = extract_docx(tmp_path)
-                    response = summarize_text(user_id, text, attachment.filename)
+                    response = await asyncio.to_thread(summarize_text, user_id, text, attachment.filename)
                 elif filename.endswith((".txt", ".csv")):
                     text = extract_txt(tmp_path)
-                    response = summarize_text(user_id, text, attachment.filename)
+                    response = await asyncio.to_thread(summarize_text, user_id, text, attachment.filename)
                 elif filename.endswith((".xlsx", ".xls")):
                     text = extract_excel(tmp_path)
-                    response = summarize_text(user_id, text, attachment.filename)
+                    response = await asyncio.to_thread(summarize_text, user_id, text, attachment.filename)
                 elif filename.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
-                    response = summarize_image(tmp_path)
+                    response = await asyncio.to_thread(summarize_image, tmp_path)
                 else:
                     response = "File type not supported. Send PDF, Word, PowerPoint, Excel, image, or text files."
             except Exception as e:
@@ -217,7 +218,7 @@ async def on_message(message):
         prompt = extract_image_prompt(content)
         await message.channel.send("Generating image...")
         try:
-            image_bytes = generate_image(prompt)
+            image_bytes = await asyncio.to_thread(generate_image, prompt)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                 tmp.write(image_bytes)
                 tmp_path = tmp.name
@@ -228,7 +229,7 @@ async def on_message(message):
         return
 
     async with message.channel.typing():
-        response = chat(user_id, "discord", content)
+        response = await asyncio.to_thread(chat, user_id, "discord", content)
 
     if len(response) <= 2000:
         await message.channel.send(response)

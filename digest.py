@@ -4,8 +4,6 @@ import schedule
 import time
 import threading
 from datetime import datetime
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtubesearchpython import VideosSearch
 from core.tools import web_search
 from dotenv import load_dotenv
 import anthropic
@@ -17,7 +15,15 @@ import json
 load_dotenv()
 
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-DISCORD_USER_ID = os.getenv("ALLOWED_DISCORD_IDS")
+DISCORD_USER_ID = (os.getenv("ALLOWED_DISCORD_IDS") or "").split(",")[0]
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OWNER_TELEGRAM_ID = os.getenv("OWNER_TELEGRAM_ID")
+
+# Where briefs go: telegram, discord, or both
+DIGEST_TO = os.getenv("DIGEST_TO", "telegram").lower()
+# Local times for the two daily briefs, and minutes between breaking-news checks
+DIGEST_TIMES = [t.strip() for t in os.getenv("DIGEST_TIMES", "08:00,19:00").split(",") if t.strip()]
+BREAKING_EVERY_MIN = int(os.getenv("BREAKING_EVERY_MIN", "60"))
 client = anthropic.Anthropic()
 
 COVERED_NEWS_FILE = "covered_news.json"
@@ -58,18 +64,26 @@ def send_discord(message: str):
         print(f"Discord send error: {e}")
 
 
-def get_youtube_transcript(query: str) -> str:
-    try:
-        search = VideosSearch(query, limit=1)
-        results = search.result()
-        if not results["result"]:
-            return ""
-        video_id = results["result"][0]["id"]
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-        text = " ".join([t["text"] for t in transcript[:20]])
-        return text
-    except Exception:
-        return ""
+def send_telegram(message: str):
+    if not (TELEGRAM_BOT_TOKEN and OWNER_TELEGRAM_ID):
+        print("Telegram send skipped: TELEGRAM_BOT_TOKEN or OWNER_TELEGRAM_ID missing")
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    for i in range(0, len(message), 4096):
+        try:
+            r = requests.post(url, json={"chat_id": OWNER_TELEGRAM_ID, "text": message[i:i + 4096]}, timeout=20)
+            if not r.ok:
+                print(f"Telegram send error: {r.status_code} {r.text[:200]}")
+        except Exception as e:
+            print(f"Telegram send error: {e}")
+        time.sleep(0.5)
+
+
+def deliver(message: str):
+    if DIGEST_TO in ("telegram", "both"):
+        send_telegram(message)
+    if DIGEST_TO in ("discord", "both") and DISCORD_BOT_TOKEN:
+        send_discord(message)
 
 
 def search_clean(query: str) -> str:
@@ -110,8 +124,7 @@ def build_digest():
     for category, query in categories.items():
         google = search_clean(query)
         reddit = search_clean(f"site:reddit.com {query}")
-        yt = get_youtube_transcript(query)
-        raw_data[category] = f"{google}\n{reddit}\n{yt}"
+        raw_data[category] = f"{google}\n{reddit}"
 
     combined = ""
     for category, data in raw_data.items():
@@ -204,7 +217,7 @@ Plain text only. No markdown."""
 
     result = response.content[0].text.strip()
     if result != "NOTHING" and "BREAKING" in result:
-        send_discord(result)
+        deliver(result)
         print(f"Breaking news sent: {result[:100]}")
 
 
@@ -212,18 +225,24 @@ def send_digest():
     print(f"Sending digest at {datetime.now().strftime('%H:%M')}")
     try:
         digest = build_digest()
-        send_discord(digest)
-        print("Digest sent to Discord.")
+        deliver(digest)
+        print(f"Digest sent to {DIGEST_TO}.")
     except Exception as e:
         print(f"Digest error: {e}")
 
 
 def start_digest_scheduler():
-    schedule.every(2).hours.do(send_digest)
-    schedule.every(15).minutes.do(check_and_send_breaking)
+    for t in DIGEST_TIMES:
+        schedule.every().day.at(t).do(send_digest)
+    if BREAKING_EVERY_MIN > 0:
+        schedule.every(BREAKING_EVERY_MIN).minutes.do(check_and_send_breaking)
+    print(f"Digest: briefs at {', '.join(DIGEST_TIMES)} to {DIGEST_TO}; breaking check every {BREAKING_EVERY_MIN} min")
     while True:
-        schedule.run_pending()
-        time.sleep(60)
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            print(f"Digest scheduler error: {e}")
+        time.sleep(30)
 
 
 def run_digest():
