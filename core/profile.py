@@ -149,6 +149,46 @@ def note_message(uid: str, history: list):
         threading.Thread(target=_learn, args=(uid, msgs), daemon=True).start()
 
 
+def expand_keywords(topics: list, context_hint: str = "") -> dict:
+    """Turn each interest into 3-6 search keywords (names, abbreviations, key people/brands)."""
+    if not topics:
+        return {}
+    resp = client.messages.create(
+        model=LEARN_MODEL,
+        max_tokens=800,
+        messages=[{"role": "user", "content": (
+            "For each news interest below, give 3-6 keywords that news headlines and social posts about it would "
+            "literally contain: official names, common abbreviations, key companies, leagues, people or products. "
+            "Specific beats generic (for 'BGMI esports': BGMI, Battlegrounds Mobile India, BMPS, Krafton India). "
+            "No generic words like 'news' or 'update'.\n"
+            f"Reader context: {context_hint[:300] or 'n/a'}\n"
+            f"Interests: {topics}\n"
+            'Return only JSON mapping each interest exactly as written to a list of keywords.'
+        )}],
+    )
+    data = _json_from(resp.content[0].text)
+    out = {}
+    for t in topics:
+        kws = data.get(t) or []
+        out[t] = [str(k).strip()[:50] for k in kws if str(k).strip()][:6]
+    return out
+
+
+def ensure_keywords(uid: str) -> dict:
+    """Keywords for every current interest; expands only the ones that are missing."""
+    u = store.get_user(uid) or {}
+    topics = store.interests(u)
+    kw = {t: v for t, v in store.keywords(u).items() if t in topics}
+    missing = [t for t in topics if not kw.get(t)]
+    if missing:
+        try:
+            kw.update(expand_keywords(missing, u.get("profile") or ""))
+        except Exception as e:
+            print(f"Keyword expansion failed for {uid}: {e}")
+        store.update_user(uid, keywords=kw)
+    return kw
+
+
 def profile_block(uid: str) -> str:
     """What the agent knows about this user, added to the system prompt each turn."""
     u = store.get_user(uid)
