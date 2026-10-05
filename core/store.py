@@ -72,6 +72,10 @@ def _init(c):
         key TEXT PRIMARY KEY, value TEXT
     );
     """)
+    cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
+    for col, ddl in (("keywords", "TEXT DEFAULT '{}'"), ("custom_keywords", "TEXT DEFAULT '[]'")):
+        if col not in cols:
+            c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
     c.commit()
 
 
@@ -159,6 +163,20 @@ def interests(u: dict) -> list:
         return []
 
 
+def keywords(u: dict) -> dict:
+    try:
+        return json.loads(u.get("keywords") or "{}")
+    except json.JSONDecodeError:
+        return {}
+
+
+def custom_keywords(u: dict) -> list:
+    try:
+        return json.loads(u.get("custom_keywords") or "[]")
+    except json.JSONDecodeError:
+        return []
+
+
 def user_tz(u: dict) -> ZoneInfo:
     try:
         return ZoneInfo(u.get("timezone") or OWNER_TZ)
@@ -175,7 +193,7 @@ def forget_user(uid: str):
         c.execute("DELETE FROM reminders WHERE uid=?", (uid,))
         c.execute("DELETE FROM conversations WHERE key LIKE ?", (f"%|{uid}",))
         c.execute(
-            "UPDATE users SET interests='[]', profile='', language='', msg_count=0, "
+            "UPDATE users SET interests='[]', profile='', language='', msg_count=0, keywords='{}', custom_keywords='[]', "
             "state=CASE WHEN uid='owner' THEN 'active' ELSE 'awaiting_interests' END WHERE uid=?",
             (uid,),
         )
