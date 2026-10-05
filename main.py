@@ -18,7 +18,7 @@ def start_discord():
 if __name__ == "__main__":
     print("\nStarting your Personal Strategic Agent...\n")
 
-    if os.getenv("TWILIO_ACCOUNT_SID"):
+    if os.getenv("ENABLE_WHATSAPP", "").lower() == "true" and os.getenv("TWILIO_ACCOUNT_SID"):
         print("Starting WhatsApp...")
         w = threading.Thread(target=start_whatsapp, daemon=True)
         w.start()

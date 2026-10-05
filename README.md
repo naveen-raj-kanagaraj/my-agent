@@ -15,6 +15,15 @@ python main.py
 
 Then send `/start` to the bot on Telegram. The bot runs only while this terminal stays open and the computer is awake.
 
+## Telegram commands
+
+- `/brief`: news briefing now
+- `/deep <question>`: force Sonnet 5.5 (best answers)
+- `/quick <question>`: force Haiku 4.5 (fast, cheap)
+- `/clear`: reset memory
+
+Without a prefix, quick questions go to Haiku and strategy, writing and long messages go to Sonnet.
+
 ## Layout
 
 - `main.py`: starts every platform whose keys are present in `.env`
