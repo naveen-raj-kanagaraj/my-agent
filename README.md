@@ -1,6 +1,6 @@
 # Personal Strategic Agent
 
-A Claude-powered personal agent reachable on Telegram, Discord and WhatsApp, with web search, notes, memory, file reading (PDF, PPTX, DOCX, XLSX) and an hourly digest.
+A Claude-powered personal agent reachable on Telegram, Discord and WhatsApp, with web search, notes, memory, file reading (PDF, PPTX, DOCX, XLSX), video downloading (X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook, Threads; up to 50 MB) and an hourly digest.
 
 ## Run on a Mac
 
@@ -20,10 +20,17 @@ Then send `/start` to the bot on Telegram. The bot runs only while this terminal
 - `main.py`: starts every platform whose keys are present in `.env`
 - `core/agent.py`: system prompt and Claude tool loop
 - `core/tools.py`: web search, notes, calculator, date/time
+- `core/downloader.py`: video downloads via yt-dlp (bare links, plus the agent's `download_video` tool)
 - `core/memory.py`: per-user conversation memory (`memory.json`)
 - `digest.py`: hourly news digest
 - `platforms/`: Telegram, Discord and WhatsApp front ends
 
+## Maintenance
+
+- Check API keys: `python check_keys.py`
+- Downloads failing: `pip install -U yt-dlp`
+- Instagram blocked: put a browser-exported `cookies.txt` in this folder
+
 ## Never commit
 
-`.env`, `memory.json`, `covered_news.json`, `venv/` (already in `.gitignore`).
+`.env`, `memory.json`, `covered_news.json`, `cookies.txt`, `venv/` (already in `.gitignore`).

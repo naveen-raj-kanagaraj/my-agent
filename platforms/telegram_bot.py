@@ -1,5 +1,6 @@
 import os
 import random
+import asyncio
 import logging
 import tempfile
 import fitz
@@ -12,6 +13,7 @@ from telegram.ext import (
     MessageHandler, filters, ContextTypes
 )
 from core.agent import chat
+from core import downloader
 from core.memory import Memory
 from dotenv import load_dotenv
 import anthropic
@@ -134,8 +136,32 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/clear - Clear memory\n"
         "/help - Help\n\n"
         "Send any file and I will read it.\n"
+        "Send an X, Instagram, TikTok or YouTube Shorts link and I will download the video.\n"
         "Just type normally to talk."
     )
+
+
+async def send_long(update: Update, text: str):
+    for i in range(0, len(text), 4096):
+        await update.message.reply_text(text[i:i + 4096])
+
+
+async def send_downloaded(update: Update, result: dict):
+    try:
+        with open(result["path"], "rb") as f:
+            await update.message.reply_video(
+                video=f,
+                duration=result["duration"] or None,
+                width=result["width"] or None,
+                height=result["height"] or None,
+                supports_streaming=True,
+                read_timeout=300,
+                write_timeout=300,
+            )
+    except Exception as e:
+        await update.message.reply_text(f"Upload failed: {str(e)[:200]}")
+    finally:
+        downloader.cleanup(result)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -146,13 +172,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     text = update.message.text
 
+    # Fast path: a bare video link gets downloaded directly, no AI call.
+    if downloader.is_bare_link(text):
+        url = downloader.find_url(text)
+        status = await update.message.reply_text("Downloading...")
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_video")
+        try:
+            result = await asyncio.to_thread(downloader.download_video, url)
+        except downloader.DownloadFailed as e:
+            await status.edit_text(str(e))
+            return
+        except Exception as e:
+            await status.edit_text(f"Something went wrong: {str(e)[:200]}")
+            return
+        await status.edit_text(f"Uploading {result['size_mb']} MB...")
+        await send_downloaded(update, result)
+        try:
+            await status.delete()
+        except Exception:
+            pass
+        return
+
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
         action="typing"
     )
 
-    response = chat(user_id, "telegram", text)
-    await update.message.reply_text(response)
+    # Run the agent in a thread so a long download or search does not freeze the bot.
+    response = await asyncio.to_thread(chat, user_id, "telegram", text)
+    await send_long(update, response)
+
+    # Send any videos the agent downloaded with its download_video tool.
+    for result in downloader.take_outbox("telegram", user_id):
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_video")
+        await send_downloaded(update, result)
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -3,6 +3,7 @@ import anthropic
 from datetime import datetime
 from core.memory import Memory
 from core.tools import TOOLS, execute_tool
+from core import downloader
 
 client = anthropic.Anthropic()
 memory = Memory()
@@ -75,6 +76,7 @@ save_note: save tasks, ideas, research, strategy
 get_notes: retrieve saved notes by tag
 calculate: math, financial modeling, projections
 get_datetime: current date and time
+download_video: download a video from an X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link; the file is sent to me automatically after your reply
 
 OUTPUT STYLE
 
@@ -96,7 +98,7 @@ Be warm, patient, and helpful with everyone by default. Answer all questions ful
 
 Only switch your tone when someone is genuinely disrespectful or abusive. If they are rude, clap back hard. If they troll you, roast them without mercy. If they are dismissive, be dismissive back. You are sharp, witty, and ruthless when provoked. You do not explain yourself to rude people. You put them in their place and move on. But normal people asking many questions deserve full, helpful, patient answers every single time.
 
-You can search the web for current information, save notes, do calculations, and remember the conversation. Answer questions directly. If you need current information, search first before answering.
+You can search the web for current information, download videos from social media links (they are sent automatically), save notes, do calculations, and remember the conversation. Answer questions directly. If you need current information, search first before answering.
 
 Never use markdown formatting. Write in plain text only. No bullet points, no headers, no bold text.
 
@@ -118,6 +120,9 @@ def strip_markdown(text: str) -> str:
 def chat(user_id: str, platform: str, message: str) -> str:
     history = memory.get(user_id, platform)
     history.append({"role": "user", "content": message})
+
+    downloader.CURRENT["platform"] = platform
+    downloader.CURRENT["user_id"] = user_id
 
     if user_id == OWNER_ID:
         system = OWNER_PROMPT.format(
