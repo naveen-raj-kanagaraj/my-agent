@@ -89,7 +89,7 @@ def summarize_image(path: str) -> str:
     media_type = media_map.get(ext, "image/jpeg")
     b64 = base64.standard_b64encode(image_data).decode("utf-8")
     response = client.messages.create(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-5-5",
         max_tokens=1024,
         messages=[{
             "role": "user",
@@ -134,6 +134,9 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "/start - Wake agent\n"
         "/clear - Clear memory\n"
+        "/brief - Get a news briefing now\n"
+        "/deep <question> - Force the strongest model\n"
+        "/quick <question> - Force the fast, cheap model\n"
         "/help - Help\n\n"
         "Send any file and I will read it.\n"
         "Send an X, Instagram, TikTok or YouTube Shorts link and I will download the video.\n"
@@ -162,6 +165,18 @@ async def send_downloaded(update: Update, result: dict):
         await update.message.reply_text(f"Upload failed: {str(e)[:200]}")
     finally:
         downloader.cleanup(result)
+
+
+async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):
+        return
+    await update.message.reply_text("Building your briefing. Give me 2-3 minutes...")
+    from digest import build_digest
+    try:
+        brief = await asyncio.to_thread(build_digest)
+    except Exception as e:
+        brief = f"Could not build the briefing: {str(e)[:200]}"
+    await send_long(update, brief)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -231,21 +246,21 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if filename.endswith(".pdf"):
             text = extract_pdf(tmp_path)
-            response = summarize_text(user_id, text, doc.file_name)
+            response = await asyncio.to_thread(summarize_text, user_id, text, doc.file_name)
         elif filename.endswith((".pptx", ".ppt")):
             text = extract_pptx(tmp_path)
-            response = summarize_text(user_id, text, doc.file_name)
+            response = await asyncio.to_thread(summarize_text, user_id, text, doc.file_name)
         elif filename.endswith((".docx", ".doc")):
             text = extract_docx(tmp_path)
-            response = summarize_text(user_id, text, doc.file_name)
+            response = await asyncio.to_thread(summarize_text, user_id, text, doc.file_name)
         elif filename.endswith((".txt", ".csv")):
             text = extract_txt(tmp_path)
-            response = summarize_text(user_id, text, doc.file_name)
+            response = await asyncio.to_thread(summarize_text, user_id, text, doc.file_name)
         elif filename.endswith((".xlsx", ".xls")):
             text = extract_excel(tmp_path)
-            response = summarize_text(user_id, text, doc.file_name)
+            response = await asyncio.to_thread(summarize_text, user_id, text, doc.file_name)
         elif filename.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
-            response = summarize_image(tmp_path)
+            response = await asyncio.to_thread(summarize_image, tmp_path)
         else:
             response = "File type not supported. Send PDF, Word, PowerPoint, Excel, image, or text files."
     except Exception as e:
@@ -253,11 +268,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         os.unlink(tmp_path)
 
-    if len(response) <= 4096:
-        await update.message.reply_text(response)
-    else:
-        for i in range(0, len(response), 4096):
-            await update.message.reply_text(response[i:i+4096])
+    await send_long(update, response)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -280,13 +291,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tmp_path = tmp.name
 
     try:
-        response = summarize_image(tmp_path)
+        response = await asyncio.to_thread(summarize_image, tmp_path)
     except Exception as e:
         response = f"Could not read image: {str(e)}"
     finally:
         os.unlink(tmp_path)
 
-    await update.message.reply_text(response)
+    await send_long(update, response)
 
 
 def run_telegram():
@@ -295,6 +306,7 @@ def run_telegram():
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("clear", cmd_clear))
     app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("brief", cmd_brief))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

@@ -27,7 +27,7 @@ def web_search(query: str) -> str:
             "Content-Type": "application/json"
         }
         payload = {"q": query, "num": 5}
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         data = response.json()
 
         output = ""
@@ -75,13 +75,57 @@ def get_datetime() -> str:
     return datetime.now().strftime("Date: %A, %B %d %Y | Time: %I:%M %p")
 
 
+import ast
+import math
+import operator
+
+_BIN_OPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod, ast.Pow: operator.pow,
+}
+_UNARY_OPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+_FUNCS = {
+    "abs": abs, "round": round, "min": min, "max": max, "sum": lambda *a: sum(a),
+    "pow": pow, "sqrt": math.sqrt, "log": math.log, "log10": math.log10,
+    "exp": math.exp, "ceil": math.ceil, "floor": math.floor,
+}
+_CONSTS = {"pi": math.pi, "e": math.e}
+
+
+def _eval_node(node):
+    if isinstance(node, ast.Expression):
+        return _eval_node(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.Name) and node.id in _CONSTS:
+        return _CONSTS[node.id]
+    if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+        left, right = _eval_node(node.left), _eval_node(node.right)
+        if isinstance(node.op, ast.Pow) and abs(right) > 1000:
+            raise ValueError("exponent too large")
+        return _BIN_OPS[type(node.op)](left, right)
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+        return _UNARY_OPS[type(node.op)](_eval_node(node.operand))
+    if isinstance(node, (ast.List, ast.Tuple)):
+        return [_eval_node(e) for e in node.elts]
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id in _FUNCS and not node.keywords):
+        args = []
+        for a in node.args:
+            v = _eval_node(a)
+            args.extend(v if isinstance(v, list) else [v])
+        return _FUNCS[node.func.id](*args)
+    raise ValueError("only numbers, + - * / // % **, and basic math functions are allowed")
+
+
 def calculate(expression: str) -> str:
+    """Safe calculator: parses the expression as math only, never runs code."""
     try:
-        safe_builtins = {
-            "abs": abs, "round": round, "min": min,
-            "max": max, "sum": sum, "pow": pow
-        }
-        result = eval(expression, {"__builtins__": safe_builtins})
+        expr = expression.replace("^", "**").replace(",", "") if expression.count(",") and "(" not in expression else expression.replace("^", "**")
+        result = _eval_node(ast.parse(expr, mode="eval"))
+        if isinstance(result, float):
+            result = round(result, 10)
         return f"{expression} = {result}"
     except Exception as e:
         return f"Error: {str(e)}"
@@ -154,7 +198,7 @@ TOOLS = [
     },
     {
         "name": "calculate",
-        "description": "Perform math calculations.",
+        "description": "Perform math calculations. Supports + - * / // % ** (or ^), parentheses, and abs, round, min, max, sum, pow, sqrt, log, log10, exp, ceil, floor, pi, e.",
         "input_schema": {
             "type": "object",
             "properties": {

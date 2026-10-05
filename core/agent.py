@@ -84,10 +84,7 @@ FORMATTING IS NON-NEGOTIABLE. Never use ## or ** or -- or bullet points or numbe
 
 Tone: direct, sharp, no fluff. Speak like a CEO who has built things, lost money, learned hard lessons, and now sees patterns others miss. Decisive, confident, grounded in reality. No filler words.
 
-Length: short for simple questions, deeper for complex strategy, stop when the point is made.
-
-Current time: {datetime}
-Platform: {platform}"""
+Length: short for simple questions, deeper for complex strategy, stop when the point is made."""
 
 
 PUBLIC_PROMPT = """You are a smart, helpful AI assistant built by Naveen Raj, founder of a gaming media brand and startup ecosystem.
@@ -100,10 +97,7 @@ Only switch your tone when someone is genuinely disrespectful or abusive. If the
 
 You can search the web for current information, download videos from social media links (they are sent automatically), save notes, do calculations, and remember the conversation. Answer questions directly. If you need current information, search first before answering.
 
-Never use markdown formatting. Write in plain text only. No bullet points, no headers, no bold text.
-
-Current time: {datetime}
-Platform: {platform}"""
+Never use markdown formatting. Write in plain text only. No bullet points, no headers, no bold text."""
 
 
 def strip_markdown(text: str) -> str:
@@ -117,54 +111,112 @@ def strip_markdown(text: str) -> str:
     return text.strip()
 
 
+# Models: quick questions go to Haiku, strategy and long work to Sonnet.
+FAST_MODEL = "claude-haiku-4-5-20251001"
+SMART_MODEL = "claude-sonnet-5-5"
+MAX_TOOL_ROUNDS = 6
+
+DEEP_HINTS = (
+    "strategy", "strategic", "plan", "analy", "should i", "why", "compare", "evaluate",
+    "pitch", "business", "startup", "career", "resume", "linkedin", "interview",
+    "write", "draft", "essay", "assignment", "project", "framework", "swot", "pros and cons",
+    "brainstorm", "idea", "ideas", "content", "brand", "positioning", "monetiz",
+    "negotiat", "invest", "market", "explain", "review", "feedback", "improve",
+    "deep", "detailed", "thorough",
+)
+
+
+def pick_model(user_id: str, message: str) -> tuple:
+    """Return (model, cleaned_message). Prefix a message with /deep or /quick to force a model."""
+    text = message.strip()
+    low = text.lower()
+    if low.startswith("/deep"):
+        return SMART_MODEL, text[5:].strip() or text
+    if low.startswith("/quick"):
+        return FAST_MODEL, text[6:].strip() or text
+    if user_id != OWNER_ID:
+        return FAST_MODEL, text
+    if len(text) > 280 or "file content:" in low or any(h in low for h in DEEP_HINTS):
+        return SMART_MODEL, text
+    return FAST_MODEL, text
+
+
+def build_system(user_id: str, platform: str) -> list:
+    """Big static prompt is cached (cheap after the first call); time/platform sit after it."""
+    base = OWNER_PROMPT if user_id == OWNER_ID else PUBLIC_PROMPT
+    now = datetime.now().strftime("%A, %B %d %Y, %I:%M %p")
+    return [
+        {"type": "text", "text": base, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": f"Current time: {now}\nPlatform: {platform}"},
+    ]
+
+
+def friendly_error(e: Exception) -> str:
+    msg = str(e).lower()
+    if "credit balance" in msg or "billing" in msg:
+        return ("I'm out of Anthropic API credits, so I can't answer right now. "
+                "Top up at console.anthropic.com > Billing.")
+    if isinstance(e, anthropic.AuthenticationError):
+        return "My Anthropic API key was rejected. Check ANTHROPIC_API_KEY in .env (run check_keys.py)."
+    if isinstance(e, anthropic.RateLimitError):
+        return "I'm being rate limited by Anthropic. Try again in a minute."
+    if isinstance(e, (anthropic.APIConnectionError, anthropic.APITimeoutError)):
+        return "I couldn't reach Anthropic. Check the internet connection and try again."
+    if isinstance(e, anthropic.InternalServerError):
+        return "Anthropic is having problems right now. Try again in a few minutes."
+    return f"Something went wrong: {str(e)[:200]}"
+
+
 def chat(user_id: str, platform: str, message: str) -> str:
+    model, message = pick_model(user_id, message)
     history = memory.get(user_id, platform)
     history.append({"role": "user", "content": message})
 
     downloader.CURRENT["platform"] = platform
     downloader.CURRENT["user_id"] = user_id
 
-    if user_id == OWNER_ID:
-        system = OWNER_PROMPT.format(
-            datetime=datetime.now().strftime("%A, %B %d %Y, %I:%M %p"),
-            platform=platform
-        )
-    else:
-        system = PUBLIC_PROMPT.format(
-            datetime=datetime.now().strftime("%A, %B %d %Y, %I:%M %p"),
-            platform=platform
-        )
-
+    system = build_system(user_id, platform)
     messages = history.copy()
 
-    while True:
-        response = client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=2048,
-            system=system,
-            tools=TOOLS,
-            messages=messages
-        )
-
-        if response.stop_reason == "tool_use":
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    result = execute_tool(block.name, block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result
-                    })
-            messages.append({"role": "assistant", "content": response.content})
-            messages.append({"role": "user", "content": tool_results})
-
-        else:
-            final_text = next(
-                (block.text for block in response.content if hasattr(block, "text")),
-                "No response."
+    try:
+        for _ in range(MAX_TOOL_ROUNDS + 1):
+            last_round = _ == MAX_TOOL_ROUNDS
+            response = client.messages.create(
+                model=model,
+                max_tokens=2048,
+                system=system,
+                tools=TOOLS,
+                tool_choice={"type": "none"} if last_round else {"type": "auto"},
+                messages=messages,
             )
+
+            if response.stop_reason == "tool_use" and not last_round:
+                tool_results = []
+                for block in response.content:
+                    if block.type == "tool_use":
+                        try:
+                            result = execute_tool(block.name, block.input)
+                        except Exception as e:
+                            result = f"Tool error: {str(e)[:200]}"
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": result,
+                        })
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "user", "content": tool_results})
+                continue
+
+            final_text = "\n".join(
+                block.text for block in response.content if getattr(block, "type", "") == "text"
+            ).strip() or "No response."
             final_text = strip_markdown(final_text)
             history.append({"role": "assistant", "content": final_text})
             memory.save(user_id, platform, history)
             return final_text
+    except anthropic.APIError as e:
+        return friendly_error(e)
+    except Exception as e:
+        return f"Something went wrong: {str(e)[:200]}"
+
+    return "I got stuck in a loop of tool calls. Try rephrasing."
