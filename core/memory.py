@@ -1,53 +1,32 @@
-import json
-import os
-import threading
+"""Conversation memory, stored in SQLite (data/agent.db).
 
-MEMORY_FILE = "memory.json"
+`user_id` here is the agent identity from core.store.uid_for ('owner' or 'telegram:<id>').
+Each platform keeps its own thread of conversation.
+"""
+from core import store
+
 MAX_MESSAGES = 30
 
 
+def _key(user_id: str, platform: str) -> str:
+    return f"{platform}|{user_id}"
+
+
 class Memory:
-    """Conversation memory shared by every platform.
-
-    All Memory() instances share one in-memory store and one lock, so Telegram,
-    Discord and the agent can no longer overwrite each other's copy of memory.json.
-    """
-
-    _data = None
-    _lock = threading.RLock()
-
-    def __init__(self):
-        with Memory._lock:
-            if Memory._data is None:
-                Memory._data = {}
-                if os.path.exists(MEMORY_FILE):
-                    try:
-                        with open(MEMORY_FILE, "r") as f:
-                            Memory._data = json.load(f)
-                    except (json.JSONDecodeError, OSError):
-                        os.replace(MEMORY_FILE, MEMORY_FILE + ".corrupt")
-        self.data = Memory._data
-
-    def _save(self):
-        tmp = MEMORY_FILE + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(Memory._data, f, indent=2)
-        os.replace(tmp, MEMORY_FILE)  # atomic: a crash mid-write can't corrupt memory
-
     def get(self, user_id: str, platform: str) -> list:
-        with Memory._lock:
-            return list(Memory._data.get(f"{platform}:{user_id}", []))
+        return store.load_conversation(_key(user_id, platform))
 
     def save(self, user_id: str, platform: str, history: list):
-        with Memory._lock:
-            trimmed = history[-MAX_MESSAGES:]
-            # History must start with a user turn for the API to accept it.
-            while trimmed and trimmed[0].get("role") != "user":
-                trimmed = trimmed[1:]
-            Memory._data[f"{platform}:{user_id}"] = trimmed
-            self._save()
+        trimmed = history[-MAX_MESSAGES:]
+        # The API needs the history to start with a user turn.
+        while trimmed and trimmed[0].get("role") != "user":
+            trimmed = trimmed[1:]
+        store.save_conversation(_key(user_id, platform), trimmed)
+
+    def add_exchange(self, user_id: str, platform: str, user_text: str, assistant_text: str):
+        history = self.get(user_id, platform)
+        history += [{"role": "user", "content": user_text}, {"role": "assistant", "content": assistant_text}]
+        self.save(user_id, platform, history)
 
     def clear(self, user_id: str, platform: str):
-        with Memory._lock:
-            Memory._data.pop(f"{platform}:{user_id}", None)
-            self._save()
+        store.delete_conversation(_key(user_id, platform))

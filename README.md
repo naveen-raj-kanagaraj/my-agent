@@ -1,6 +1,17 @@
 # Personal Strategic Agent
 
-A Claude-powered personal agent reachable on Telegram, Discord and WhatsApp, with web search, notes, memory, file reading (PDF, PPTX, DOCX, XLSX), video downloading (X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook, Threads; up to 50 MB) and an hourly digest.
+A Claude-powered agent on Telegram (open to anyone, with daily limits) and Discord (owner only).
+
+What it does:
+- Chat with a learned profile of each user: it asks new users what they're interested in, learns from their messages, files and images, and remembers facts long-term
+- Personalised news for every user at 8 AM and 7 PM their local time, plus the owner's full strategic briefing and breaking-news alerts
+- Reads links: articles, PDFs, YouTube transcripts
+- Downloads videos from X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook, Threads (up to 50 MB)
+- Reads files (PDF, DOCX, PPTX, XLSX, CSV, TXT) and images; remembers images for follow-up questions
+- Voice notes, transcribed on the machine with faster-whisper (free)
+- Reminders (one-off, daily, weekdays, weekly), notes, calculator, web search
+- Image generation (owner by default)
+- Daily content radar for an Indian gaming media brand (news, YouTube, Reddit, competitors)
 
 ## Run on a Mac
 
@@ -17,18 +28,34 @@ Then send `/start` to the bot on Telegram. The bot runs only while this terminal
 
 ## Telegram commands
 
-- `/brief`: news briefing now
-- `/deep <question>`: force Sonnet 5.5 (best answers)
-- `/quick <question>`: force Haiku 4.5 (fast, cheap)
-- `/clear`: reset memory
+Everyone: `/start`, `/news`, `/interests <topics>`, `/newsoff`, `/newson`, `/profile`, `/forget`, `/clear`, `/help`, `/quick <q>`
 
-Without a prefix, quick questions go to Haiku and strategy, writing and long messages go to Sonnet.
+Owner: `/deep <q>` (Sonnet 5.5), `/brief` (full briefing), `/radar` (content radar), `/users`, `/block <id>`, `/unblock <id>`
+
+Non-owners get `DAILY_LIMIT` requests a day (default 20) and always use Haiku 4.5. The owner has no limit; quick
+questions go to Haiku and strategy, writing and long messages to Sonnet 5.5.
+
+## Data
+
+Everything is in `data/agent.db` (SQLite): users, learned profiles, facts, notes, reminders, conversations, usage.
+Users can see their data with `/profile` and erase it with `/forget`. Never commit `data/`.
+
+## Run 24/7
+
+See DEPLOY.md (free Oracle Cloud server).
 
 ## Layout
 
 - `main.py`: starts every platform whose keys are present in `.env`
 - `core/agent.py`: system prompt and Claude tool loop
 - `core/tools.py`: web search, notes, calculator, date/time
+- `core/store.py`: SQLite storage
+- `core/profile.py`: onboarding and learning about users
+- `core/news.py`: personalised news
+- `core/radar.py`: content radar
+- `core/web.py`: link reading
+- `core/voice.py`: voice transcription
+- `core/context.py`: per-request user context
 - `core/downloader.py`: video downloads via yt-dlp (bare links, plus the agent's `download_video` tool)
 - `core/memory.py`: per-user conversation memory (`memory.json`)
 - `digest.py`: hourly news digest

@@ -4,6 +4,7 @@
 !.env.example
 
 # Personal runtime data
+data/
 memory.json
 notes.json
 covered_news.json

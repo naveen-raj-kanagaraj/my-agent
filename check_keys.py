@@ -58,4 +58,4 @@ if env.get("TWILIO_ACCOUNT_SID"):
     s, b = call(f"https://api.twilio.com/2010-04-01/Accounts/{sid}.json", {"Authorization": "Basic " + auth})
     show("Twilio", s == 200, f"account {b.get('status')}" if s == 200 else b.get("message", b))
 
-print("\nAllowed Telegram IDs:", env.get("ALLOWED_TELEGRAM_IDS", "MISSING"))
+print("\nOwner Telegram ID set:", "yes" if env.get("OWNER_TELEGRAM_ID") else "MISSING")

@@ -1,22 +1,26 @@
-import json
+"""Tools the agent can call. Every tool acts for the current user (core.context)."""
 import os
+import tempfile
+from datetime import datetime, timedelta
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
+
 import requests
+
+from core import context, store
 from core.downloader import tool_download_video
-from datetime import datetime
+from core.web import read_url
 
-NOTES_FILE = "notes.json"
-
-
-def _load_notes():
-    if os.path.exists(NOTES_FILE):
-        with open(NOTES_FILE, "r") as f:
-            return json.load(f)
-    return []
+PUBLIC_IMAGE_GEN = os.getenv("PUBLIC_IMAGE_GEN", "false").lower() == "true"
 
 
-def _save_notes(notes):
-    with open(NOTES_FILE, "w") as f:
-        json.dump(notes, f, indent=2)
+def _uid() -> str:
+    return context.get().uid or "unknown"
+
+
+def _tz() -> ZoneInfo:
+    u = store.get_user(_uid()) or {}
+    return store.user_tz(u)
 
 
 def web_search(query: str) -> str:
@@ -45,34 +49,94 @@ def web_search(query: str) -> str:
 
 
 def save_note(content: str, tag: str = "general") -> str:
-    notes = _load_notes()
-    note = {
-        "id": len(notes) + 1,
-        "content": content,
-        "tag": tag,
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-    }
-    notes.append(note)
-    _save_notes(notes)
-    return f"Note saved. ID: {note['id']}, Tag: '{tag}'."
+    nid = store.add_note(_uid(), content, tag)
+    return f"Note saved. ID: {nid}, tag: '{tag or 'general'}'."
 
 
 def get_notes(tag: str = None) -> str:
-    notes = _load_notes()
+    notes = store.get_notes(_uid(), tag)
     if not notes:
-        return "No notes saved yet."
-    if tag:
-        notes = [n for n in notes if n.get("tag") == tag]
-    if not notes:
-        return f"No notes found under tag '{tag}'."
-    output = ""
-    for n in notes[-10:]:
-        output += f"[{n['id']}] [{n['tag']}] {n['created_at']}\n{n['content']}\n\n"
-    return output.strip()
+        return f"No notes found under tag '{tag}'." if tag else "No notes saved yet."
+    return "\n\n".join(f"[{n['id']}] [{n['tag']}] {n['created_at'][:10]}\n{n['content']}" for n in notes)
+
+
+def delete_note(note_id: int) -> str:
+    return "Note deleted." if store.delete_note(_uid(), int(note_id)) else "No note with that ID."
+
+
+def remember(fact: str) -> str:
+    store.add_fact(_uid(), fact)
+    return "Saved to long-term memory."
+
+
+def forget(about: str) -> str:
+    n = store.delete_facts_matching(_uid(), about)
+    return f"Forgot {n} saved fact(s)." if n else "Nothing saved matched that."
 
 
 def get_datetime() -> str:
-    return datetime.now().strftime("Date: %A, %B %d %Y | Time: %I:%M %p")
+    tz = _tz()
+    return datetime.now(tz).strftime(f"Date: %A, %B %d %Y | Time: %I:%M %p ({tz.key})")
+
+
+def set_reminder(text: str, when: str, repeat: str = "") -> str:
+    """`when` is a local date-time like 2026-10-09T09:00 in the user's timezone."""
+    ctx = context.get()
+    tz = _tz()
+    try:
+        local = datetime.fromisoformat(when.strip().replace("Z", ""))
+    except ValueError:
+        return "Couldn't understand that time. Use format YYYY-MM-DDTHH:MM."
+    if local.tzinfo is None:
+        local = local.replace(tzinfo=tz)
+    if local < datetime.now(tz) - timedelta(minutes=1):
+        return "That time is in the past. Ask the user for a future time."
+    repeat = (repeat or "").lower().strip()
+    if repeat not in ("", "daily", "weekly", "weekdays"):
+        repeat = ""
+    user = store.get_user(ctx.uid) or {}
+    chat_id = user.get("chat_id") or ctx.chat_id
+    if not chat_id:
+        return "I can only send reminders on Telegram. Ask the user to message me there once."
+    rid = store.add_reminder(ctx.uid, chat_id, text, store.iso(local), repeat)
+    when_txt = local.strftime("%a %b %d, %I:%M %p")
+    return f"Reminder {rid} set for {when_txt} ({tz.key}){' repeating ' + repeat if repeat else ''}."
+
+
+def list_reminders() -> str:
+    tz = _tz()
+    items = store.list_reminders(_uid())
+    if not items:
+        return "No upcoming reminders."
+    out = []
+    for r in items:
+        due = datetime.fromisoformat(r["due_utc"].replace("Z", "+00:00")).astimezone(tz)
+        out.append(f"[{r['id']}] {due.strftime('%a %b %d, %I:%M %p')}{' (' + r['repeat'] + ')' if r['repeat'] else ''}: {r['text']}")
+    return "\n".join(out)
+
+
+def cancel_reminder(reminder_id: int) -> str:
+    return "Reminder cancelled." if store.cancel_reminder(_uid(), int(reminder_id)) else "No active reminder with that ID."
+
+
+def generate_image(prompt: str) -> str:
+    ctx = context.get()
+    if not ctx.is_owner and not PUBLIC_IMAGE_GEN:
+        return "Image generation is only available to the bot owner."
+    if ctx.platform != "telegram":
+        return "On this platform, ask with 'draw ...' or 'imagine ...' instead."
+    url = f"https://image.pollinations.ai/prompt/{quote(prompt[:800])}?width=1024&height=1024&nologo=true&model=flux"
+    try:
+        r = requests.get(url, timeout=90)
+    except requests.RequestException as e:
+        return f"Image service unreachable: {str(e)[:120]}"
+    if r.status_code != 200 or not r.headers.get("content-type", "").startswith("image"):
+        return f"Image service failed (status {r.status_code})."
+    fd, path = tempfile.mkstemp(suffix=".jpg", prefix="agentimg_")
+    with os.fdopen(fd, "wb") as f:
+        f.write(r.content)
+    ctx.outbox.append({"kind": "photo", "path": path, "dir": None, "caption": prompt[:200]})
+    return "Image generated. It will be sent right after your reply; keep your reply to one short line."
 
 
 import ast
@@ -131,99 +195,73 @@ def calculate(expression: str) -> str:
         return f"Error: {str(e)}"
 
 
-TOOLS = [
-    {
-        "name": "web_search",
-        "description": "Search the web for current news, prices, facts, people, events. Use this whenever you need real-time or recent information.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query. Be specific."
-                }
-            },
-            "required": ["query"]
-        }
-    },
-    {
-        "name": "save_note",
-        "description": "Save a note, task, idea, or information for later retrieval.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string",
-                    "description": "The content of the note."
-                },
-                "tag": {
-                    "type": "string",
-                    "description": "Category: task, idea, research, meeting, general"
-                }
-            },
-            "required": ["content"]
-        }
-    },
-    {
-        "name": "get_notes",
-        "description": "Retrieve saved notes. Can filter by tag.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "tag": {
-                    "type": "string",
-                    "description": "Optional tag to filter by."
-                }
-            }
-        }
-    },
-    {
-        "name": "get_datetime",
-        "description": "Get the current date and time.",
-        "input_schema": {
-            "type": "object",
-            "properties": {}
-        }
-    },
-    {
-        "name": "download_video",
-        "description": "Download a video from a Twitter/X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link and send the video file to the user in this chat. Also returns the post's title and caption so you can describe it. Use whenever the user wants a video saved, downloaded, sent, or asks about a video link.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "The full video post URL."}
-            },
-            "required": ["url"]
-        }
-    },
-    {
-        "name": "calculate",
-        "description": "Perform math calculations. Supports + - * / // % ** (or ^), parentheses, and abs, round, min, max, sum, pow, sqrt, log, log10, exp, ceil, floor, pi, e.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "expression": {
-                    "type": "string",
-                    "description": "Math expression like '250 * 12 / 100'"
-                }
-            },
-            "required": ["expression"]
-        }
-    }
+def _schema(name, desc, props=None, required=None):
+    return {"name": name, "description": desc,
+            "input_schema": {"type": "object", "properties": props or {}, "required": required or []}}
+
+
+S = {"type": "string"}
+I = {"type": "integer"}
+
+ALL_TOOLS = [
+    _schema("web_search", "Search Google for current news, prices, facts, people, events. Returns top snippets only; "
+            "use read_url on a result to read the full page when details matter.",
+            {"query": {**S, "description": "Specific search query."}}, ["query"]),
+    _schema("read_url", "Open a link and read it: articles, blog posts, PDFs, and YouTube video transcripts. Use this "
+            "whenever the user shares a link (other than a short video they want downloaded) or asks about a page.",
+            {"url": S}, ["url"]),
+    _schema("download_video", "Download a video from an X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads "
+            "link and send the file to the user. Also returns its title and caption.",
+            {"url": S}, ["url"]),
+    _schema("remember", "Save a durable fact about the user to long-term memory (preferences, projects, people, goals, "
+            "deadlines). Use when they say 'remember...' or share something clearly worth keeping.",
+            {"fact": S}, ["fact"]),
+    _schema("forget", "Delete saved facts about the user that contain the given text.", {"about": S}, ["about"]),
+    _schema("set_reminder", "Schedule a Telegram reminder. Convert the user's words to a local date-time in THEIR "
+            "timezone (given in the system prompt) using the current time.",
+            {"text": {**S, "description": "What to remind them about, written as the reminder message."},
+             "when": {**S, "description": "Local date-time, format YYYY-MM-DDTHH:MM"},
+             "repeat": {**S, "description": "'', 'daily', 'weekdays' or 'weekly'"}}, ["text", "when"]),
+    _schema("list_reminders", "List the user's upcoming reminders with IDs."),
+    _schema("cancel_reminder", "Cancel a reminder by ID.", {"reminder_id": I}, ["reminder_id"]),
+    _schema("save_note", "Save a note, task or idea.",
+            {"content": S, "tag": {**S, "description": "task, idea, research, meeting, general"}}, ["content"]),
+    _schema("get_notes", "Show the user's saved notes, optionally filtered by tag.", {"tag": S}),
+    _schema("delete_note", "Delete a note by ID.", {"note_id": I}, ["note_id"]),
+    _schema("calculate", "Math: + - * / // % ** (or ^), parentheses, abs, round, min, max, sum, pow, sqrt, log, log10, "
+            "exp, ceil, floor, pi, e.", {"expression": S}, ["expression"]),
+    _schema("get_datetime", "Current date and time in the user's timezone."),
+    _schema("generate_image", "Create an image from a text description and send it to the user (thumbnails, mockups, "
+            "concept art). Write a detailed visual prompt.", {"prompt": S}, ["prompt"]),
 ]
+
+OWNER_ONLY = {"generate_image"} if not PUBLIC_IMAGE_GEN else set()
+
+
+def tools_for(is_owner: bool) -> list:
+    return [t for t in ALL_TOOLS if is_owner or t["name"] not in OWNER_ONLY]
+
+
+# Kept for older imports.
+TOOLS = ALL_TOOLS
 
 
 def execute_tool(name: str, inputs: dict) -> str:
-    if name == "web_search":
-        return web_search(inputs["query"])
-    elif name == "save_note":
-        return save_note(inputs["content"], inputs.get("tag", "general"))
-    elif name == "get_notes":
-        return get_notes(inputs.get("tag"))
-    elif name == "get_datetime":
-        return get_datetime()
-    elif name == "calculate":
-        return calculate(inputs["expression"])
-    elif name == "download_video":
-        return tool_download_video(inputs["url"])
-    return "Unknown tool."
+    handlers = {
+        "web_search": lambda: web_search(inputs["query"]),
+        "read_url": lambda: read_url(inputs["url"]),
+        "download_video": lambda: tool_download_video(inputs["url"]),
+        "remember": lambda: remember(inputs["fact"]),
+        "forget": lambda: forget(inputs["about"]),
+        "set_reminder": lambda: set_reminder(inputs["text"], inputs["when"], inputs.get("repeat", "")),
+        "list_reminders": list_reminders,
+        "cancel_reminder": lambda: cancel_reminder(inputs["reminder_id"]),
+        "save_note": lambda: save_note(inputs["content"], inputs.get("tag", "general")),
+        "get_notes": lambda: get_notes(inputs.get("tag")),
+        "delete_note": lambda: delete_note(inputs["note_id"]),
+        "calculate": lambda: calculate(inputs["expression"]),
+        "get_datetime": get_datetime,
+        "generate_image": lambda: generate_image(inputs["prompt"]),
+    }
+    fn = handlers.get(name)
+    return fn() if fn else "Unknown tool."
