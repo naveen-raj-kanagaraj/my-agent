@@ -10,6 +10,7 @@ from docx import Document
 import openpyxl
 from core.agent import chat
 from core.memory import Memory
+from core import store
 from dotenv import load_dotenv
 import anthropic
 
@@ -154,7 +155,7 @@ async def on_message(message):
     content = message.content.replace(f"<@{bot.user.id}>", "").strip()
 
     if content.lower() == "!clear":
-        memory.clear(user_id, "discord")
+        memory.clear(store.uid_for("discord", user_id), "discord")
         await message.channel.send("Memory cleared.")
         return
 

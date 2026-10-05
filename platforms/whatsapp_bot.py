@@ -3,6 +3,7 @@ from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 from core.agent import chat
 from core.memory import Memory
+from core import store
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,7 +26,7 @@ def whatsapp():
         return str(resp)
 
     if body.lower() == "!clear":
-        memory.clear(user_id, "whatsapp")
+        memory.clear(store.uid_for("whatsapp", user_id), "whatsapp")
         resp.message("Memory cleared.")
         return str(resp)
 

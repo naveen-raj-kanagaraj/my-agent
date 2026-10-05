@@ -5,6 +5,9 @@ import time
 import threading
 from datetime import datetime
 from core.tools import web_search
+from core import store
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from dotenv import load_dotenv
 import anthropic
 import re
@@ -26,19 +29,17 @@ DIGEST_TIMES = [t.strip() for t in os.getenv("DIGEST_TIMES", "08:00,19:00").spli
 BREAKING_EVERY_MIN = int(os.getenv("BREAKING_EVERY_MIN", "60"))
 client = anthropic.Anthropic()
 
-COVERED_NEWS_FILE = "covered_news.json"
+NEWS_TIMES = [t.strip() for t in os.getenv("NEWS_TIMES", "08:00,19:00").split(",") if t.strip()]
+RADAR_TIME = os.getenv("RADAR_TIME", "10:00")  # owner's local time; empty disables
+NEWS_WINDOW_MIN = 90  # if the Mac was asleep at 8:00, still send until 9:30
 
 
 def load_covered_news() -> list:
-    if os.path.exists(COVERED_NEWS_FILE):
-        with open(COVERED_NEWS_FILE, "r") as f:
-            return json.load(f)
-    return []
+    return store.kv_get("covered_news", [])
 
 
 def save_covered_news(news: list):
-    with open(COVERED_NEWS_FILE, "w") as f:
-        json.dump(news[-100:], f)
+    store.kv_set("covered_news", news[-100:])
 
 
 def send_discord(message: str):
@@ -64,19 +65,27 @@ def send_discord(message: str):
         print(f"Discord send error: {e}")
 
 
-def send_telegram(message: str):
-    if not (TELEGRAM_BOT_TOKEN and OWNER_TELEGRAM_ID):
-        print("Telegram send skipped: TELEGRAM_BOT_TOKEN or OWNER_TELEGRAM_ID missing")
-        return
+def send_telegram(message: str, chat_id: str = None) -> bool:
+    """Send via the Bot API. Returns False if the chat can't be reached (e.g. user blocked the bot)."""
+    chat_id = chat_id or OWNER_TELEGRAM_ID
+    if not (TELEGRAM_BOT_TOKEN and chat_id):
+        print("Telegram send skipped: TELEGRAM_BOT_TOKEN or chat id missing")
+        return False
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    ok = True
     for i in range(0, len(message), 4096):
         try:
-            r = requests.post(url, json={"chat_id": OWNER_TELEGRAM_ID, "text": message[i:i + 4096]}, timeout=20)
+            r = requests.post(url, json={"chat_id": chat_id, "text": message[i:i + 4096]}, timeout=20)
             if not r.ok:
-                print(f"Telegram send error: {r.status_code} {r.text[:200]}")
+                print(f"Telegram send error to {chat_id}: {r.status_code} {r.text[:200]}")
+                if r.status_code in (400, 403):
+                    return False
+                ok = False
         except Exception as e:
             print(f"Telegram send error: {e}")
+            ok = False
         time.sleep(0.5)
+    return ok
 
 
 def deliver(message: str):
@@ -120,6 +129,12 @@ def build_digest():
         "Finance and Economy": "global finance economy markets inflation interest rates today",
     }
 
+    owner = store.get_user("owner") or {}
+    known = " ".join(categories).lower()
+    for topic in store.interests(owner)[:3]:
+        if topic.lower() not in known:
+            categories[topic] = f"{topic} news today"
+
     raw_data = {}
     for category, query in categories.items():
         google = search_clean(query)
@@ -151,17 +166,7 @@ STRICT RULES:
 {covered_context}
 
 TOPICS IN ORDER (treat each as completely independent):
-World News
-India News
-Tamil Nadu
-Global Gaming and Esports
-Gaming Industry Investments
-Geopolitics
-Stocks to Watch
-Crypto Today
-Marketing and Creator Trends
-Tech and AI
-Finance and Economy
+{chr(10).join(categories)}
 
 AFTER ALL TOPICS write only:
 Trend Radar: 5 early signals most people are missing right now across any of the topics. One sentence each. Each on its own line.
@@ -231,17 +236,87 @@ def send_digest():
         print(f"Digest error: {e}")
 
 
+def _next_repeat(due_utc: str, repeat: str, tzname: str):
+    from zoneinfo import ZoneInfo
+    try:
+        tz = ZoneInfo(tzname or store.OWNER_TZ)
+    except Exception:
+        tz = ZoneInfo(store.OWNER_TZ)
+    due = datetime.fromisoformat(due_utc.replace("Z", "+00:00")).astimezone(tz)
+    now = datetime.now(tz)
+    step = {"daily": timedelta(days=1), "weekly": timedelta(days=7), "weekdays": timedelta(days=1)}.get(repeat)
+    if not step:
+        return None
+    while due <= now or (repeat == "weekdays" and due.weekday() >= 5):
+        due += step
+    return store.iso(due)
+
+
+def send_due_reminders():
+    for r in store.due_reminders():
+        u = store.get_user(r["uid"]) or {}
+        ok = send_telegram(f"Reminder: {r['text']}", r["chat_id"])
+        nxt = _next_repeat(r["due_utc"], r["repeat"], u.get("timezone")) if ok or r["repeat"] else None
+        store.finish_reminder(r["id"], nxt)
+
+
+def _send_user_news(u: dict, key: str):
+    from core.news import build_user_brief
+    store.update_user(u["uid"], last_news_key=key)  # mark first so a slow build never double-sends
+    try:
+        brief = build_user_brief(u["uid"])
+    except Exception as e:
+        print(f"News for {u['uid']} failed: {e}")
+        return
+    if not send_telegram(brief, u["chat_id"]):
+        store.update_user(u["uid"], news_on=0)  # they blocked the bot or the chat is gone
+        print(f"News off for {u['uid']}: chat unreachable")
+
+
+_pool = ThreadPoolExecutor(max_workers=3)
+
+
+def send_user_news():
+    for u in store.all_users():
+        if not (u.get("news_on") and u.get("state") == "active" and u.get("chat_id")) or u.get("blocked"):
+            continue
+        if not store.interests(u):
+            continue
+        now = datetime.now(store.user_tz(u))
+        for slot in NEWS_TIMES:
+            try:
+                hh, mm = map(int, slot.split(":"))
+            except ValueError:
+                continue
+            start = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            key = f"{now:%Y-%m-%d}-{slot}"
+            if start <= now < start + timedelta(minutes=NEWS_WINDOW_MIN) and u.get("last_news_key") != key:
+                _pool.submit(_send_user_news, u, key)
+
+
+def send_radar():
+    from core.radar import build_radar
+    try:
+        send_telegram(build_radar())
+    except Exception as e:
+        print(f"Radar error: {e}")
+
+
 def start_digest_scheduler():
     for t in DIGEST_TIMES:
         schedule.every().day.at(t).do(send_digest)
     if BREAKING_EVERY_MIN > 0:
         schedule.every(BREAKING_EVERY_MIN).minutes.do(check_and_send_breaking)
-    print(f"Digest: briefs at {', '.join(DIGEST_TIMES)} to {DIGEST_TO}; breaking check every {BREAKING_EVERY_MIN} min")
+    if RADAR_TIME:
+        schedule.every().day.at(RADAR_TIME).do(send_radar)
+    print(f"Scheduler: owner briefs at {', '.join(DIGEST_TIMES)} to {DIGEST_TO}; breaking every {BREAKING_EVERY_MIN} min; "
+          f"radar at {RADAR_TIME or 'off'}; user news at {', '.join(NEWS_TIMES)} local; reminders every 30 s")
     while True:
-        try:
-            schedule.run_pending()
-        except Exception as e:
-            print(f"Digest scheduler error: {e}")
+        for job in (schedule.run_pending, send_due_reminders, send_user_news):
+            try:
+                job()
+            except Exception as e:
+                print(f"Scheduler error in {getattr(job, '__name__', job)}: {e}")
         time.sleep(30)
 
 
