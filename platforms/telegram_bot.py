@@ -47,6 +47,7 @@ HELP = (
     "Just talk to me, send a link, a file, a photo or a voice note.\n\n"
     "/news - your personalised news now\n"
     "/interests <topics> - change your news topics\n"
+    "/keywords <words> - track exact keywords across news, Reddit, X, Instagram, YouTube\n"
     "/newsoff, /newson - stop or restart daily news\n"
     "/profile - what I know about you\n"
     "/forget - erase what I know about you\n"
@@ -226,6 +227,33 @@ async def cmd_interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
             + "\n\nChange them like this: /interests AI, cricket, Indian startups")
         return
     await finish_onboarding(update, user, text)
+
+
+async def cmd_keywords(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if not user:
+        return
+    arg = " ".join(context.args).strip()
+    if arg.lower() in ("clear", "reset"):
+        store.update_user(user["uid"], custom_keywords=[])
+        await update.message.reply_text("Your custom keywords are cleared.")
+        return
+    if arg:
+        new = [k.strip()[:50] for k in arg.split(",") if k.strip()]
+        merged = list(dict.fromkeys(store.custom_keywords(user) + new))[:15]
+        store.update_user(user["uid"], custom_keywords=merged)
+        await update.message.reply_text(
+            "Tracking: " + ", ".join(merged) + "\n\nI'll match these across news sites, Reddit, X, Instagram, "
+            "Threads, YouTube and Hacker News in every brief. Clear them with /keywords clear.")
+        return
+    kw = await asyncio.to_thread(profile.ensure_keywords, user["uid"])
+    lines = [f"{t}: {', '.join(k) or '(topic name only)'}" for t, k in kw.items()]
+    custom = store.custom_keywords(user)
+    if custom:
+        lines.append("Your own keywords: " + ", ".join(custom))
+    await update.message.reply_text(
+        ("Keywords I match in your news:\n\n" + "\n".join(lines) if lines else "No topics yet. Use /interests first.")
+        + "\n\nAdd your own: /keywords Krafton, BMPS, Jonathan Gaming")
 
 
 async def cmd_news_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -520,6 +548,7 @@ def run_telegram():
     app.add_handler(CommandHandler("forget", cmd_forget))
     app.add_handler(CommandHandler("interests", cmd_interests))
     app.add_handler(CommandHandler(["newson", "newsoff"], cmd_news_toggle))
+    app.add_handler(CommandHandler("keywords", cmd_keywords))
     app.add_handler(CommandHandler("news", cmd_news))
     app.add_handler(CommandHandler("brief", cmd_brief))
     app.add_handler(CommandHandler("radar", cmd_radar))

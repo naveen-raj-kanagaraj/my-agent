@@ -10,6 +10,7 @@ import requests
 from core import context, store
 from core.downloader import tool_download_video
 from core.web import read_url
+from core import sources
 
 PUBLIC_IMAGE_GEN = os.getenv("PUBLIC_IMAGE_GEN", "false").lower() == "true"
 
@@ -46,6 +47,17 @@ def web_search(query: str) -> str:
         return output.strip() if output else "No results found."
     except Exception as e:
         return f"Search failed: {str(e)}"
+
+
+def scan_sources(query: str) -> str:
+    """Keyword scan across news sites, Reddit, Hacker News, X/Instagram/Threads and YouTube."""
+    from core.news import _region, _fmt
+    u = store.get_user(_uid()) or {}
+    words = [w.strip() for w in query.split(",") if w.strip()]
+    items = sources.gather(words[0], words[1:], _region(u.get("timezone")), limit=10)
+    if not items:
+        return "Nothing matching that in the last day across news, Reddit, HN, X, Instagram, Threads or YouTube."
+    return "Matches from the last day (best first):\n" + "\n".join(_fmt(i) for i in items)
 
 
 def save_note(content: str, tag: str = "general") -> str:
@@ -207,6 +219,10 @@ ALL_TOOLS = [
     _schema("web_search", "Search Google for current news, prices, facts, people, events. Returns top snippets only; "
             "use read_url on a result to read the full page when details matter.",
             {"query": {**S, "description": "Specific search query."}}, ["query"]),
+    _schema("scan_sources", "Find what news sites, Reddit, Hacker News, X, Instagram, Threads and YouTube are saying "
+            "in the last day about a topic, matched by keywords and ranked by relevance, recency and engagement. Use for "
+            "'what's the buzz about', 'what is Reddit/X saying', trend checks. Pass comma-separated keywords, main one first.",
+            {"query": {**S, "description": "e.g. 'BGMI, Battlegrounds Mobile India, BMPS'"}}, ["query"]),
     _schema("read_url", "Open a link and read it: articles, blog posts, PDFs, and YouTube video transcripts. Use this "
             "whenever the user shares a link (other than a short video they want downloaded) or asks about a page.",
             {"url": S}, ["url"]),
@@ -250,6 +266,7 @@ def execute_tool(name: str, inputs: dict) -> str:
     handlers = {
         "web_search": lambda: web_search(inputs["query"]),
         "read_url": lambda: read_url(inputs["url"]),
+        "scan_sources": lambda: scan_sources(inputs["query"]),
         "download_video": lambda: tool_download_video(inputs["url"]),
         "remember": lambda: remember(inputs["fact"]),
         "forget": lambda: forget(inputs["about"]),
