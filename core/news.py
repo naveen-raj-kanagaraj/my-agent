@@ -7,7 +7,7 @@ from datetime import datetime
 import anthropic
 import requests
 
-from core import store
+from core import profile, sources, store
 
 client = anthropic.Anthropic()
 NEWS_MODEL = "claude-haiku-4-5-20251001"
@@ -57,41 +57,68 @@ def google_news(query: str, region: str = "us", num: int = 6) -> list:
     return items
 
 
+def _fmt(it: dict) -> str:
+    when = ""
+    if it.get("published"):
+        hours = (datetime.now(it["published"].tzinfo) - it["published"]).total_seconds() / 3600
+        when = f"{int(hours)}h ago" if hours >= 1 else "just now"
+    also = f"; also on {', '.join(it['also_on'])}" if it.get("also_on") else ""
+    buzz = f"; {it['engagement']} engagement" if it.get("engagement") else ""
+    return (f"- [{it['platform']} | {it['source']}{', ' + when if when else ''}{buzz}{also}] {it['title']}"
+            f"{': ' + it['snippet'][:200] if it['snippet'] else ''} <{it['url']}>")
+
+
+def collect_for_user(uid: str) -> dict:
+    """{topic: [items]} from every source, matched on the user's keywords."""
+    u = store.get_user(uid) or {}
+    topics = store.interests(u)[:MAX_TOPICS]
+    kw = profile.ensure_keywords(uid) if topics else {}
+    region = _region(u.get("timezone"))
+    found = {}
+    for t in topics:
+        items = sources.gather(t, kw.get(t, []), region)
+        if items:
+            found[t] = items
+    custom = store.custom_keywords(u)
+    if custom:
+        items = sources.gather(custom[0], custom[1:], region)
+        if items:
+            found["Your keywords (" + ", ".join(custom[:4]) + ")"] = items
+    return found
+
+
 def build_user_brief(uid: str) -> str:
     u = store.get_user(uid)
     if not u:
         return "I don't know you yet. Send /start first."
-    topics = store.interests(u)[:MAX_TOPICS]
-    if not topics:
+    if not store.interests(u) and not store.custom_keywords(u):
         return "Tell me what you're interested in first: send /interests followed by your topics."
-    region = _region(u.get("timezone"))
-    sections = []
-    for t in topics:
-        items = google_news(t, region)
-        if items:
-            lines = "\n".join(f"- {i['title']} ({i['source']}, {i['date']}): {i['snippet']} [{i['link']}]" for i in items[:5])
-            sections.append(f"TOPIC: {t}\n{lines}")
-    if not sections:
+    found = collect_for_user(uid)
+    if not found:
         return "I couldn't find fresh news on your topics in the last day. Try again later, or broaden your /interests."
+    sections = [f"TOPIC: {t}\n" + "\n".join(_fmt(i) for i in items) for t, items in found.items()]
 
     tz = store.user_tz(u)
     now = datetime.now(tz)
     part = "Morning" if now.hour < 12 else ("Afternoon" if now.hour < 17 else "Evening")
-    who = u.get("profile") or ""
     lang = u.get("language") or "English"
     resp = client.messages.create(
         model=NEWS_MODEL,
         max_tokens=1800,
         messages=[{"role": "user", "content": (
             f"Write a short personalised news brief for {u.get('name') or 'this reader'}.\n"
-            f"About them: {who or 'no profile yet'}\nTheir topics: {', '.join(topics)}\n"
+            f"About them: {u.get('profile') or 'no profile yet'}\nTheir topics: {', '.join(found)}\n"
             f"Write in {lang}. Plain text only: no markdown, no asterisks, no bullet symbols.\n\n"
-            "Format: a one-line greeting, then for each topic that has real news, the topic name on its own line, then "
-            "the 1-3 most important stories in 2-3 sentences each: what happened, then why it matters to this person "
-            "specifically. Put the single best source link after each story. Skip duplicates, filler and old news. "
-            "End with one line starting 'Worth watching:' about an early signal. Keep it under 450 words.\n\n"
-            f"NEWS FROM THE LAST 24 HOURS:\n{chr(10).join(sections)}"
+            "The items come from news sites, Reddit, Hacker News, X, Instagram, Threads and YouTube, already matched "
+            "to the reader's keywords and ranked. Format: a one-line greeting, then for each topic with real news, "
+            "the topic name on its own line, then the 1-3 most important stories in 2-3 sentences each: what "
+            "happened, then why it matters to this person. Say where it's buzzing when that's informative (for "
+            "example 'big thread on r/IndianGaming' or 'trending on X'). Treat social posts as claims, not confirmed "
+            "facts, unless a news outlet also reports them. Put the single best link after each story. Skip "
+            "duplicates and filler. End with one line starting 'Worth watching:'. Under 450 words.\n\n"
+            f"ITEMS FROM THE LAST DAY:\n{chr(10).join(sections)}"
         )}],
     )
     text = resp.content[0].text.strip().replace("**", "").replace("##", "")
-    return f"{part} brief, {now.strftime('%a %b %d')}\n\n{text}\n\nChange topics with /interests, stop with /newsoff."
+    return (f"{part} brief, {now.strftime('%a %b %d')}\n\n{text}\n\n"
+            "Change topics with /interests, add keywords with /keywords, stop with /newsoff.")
