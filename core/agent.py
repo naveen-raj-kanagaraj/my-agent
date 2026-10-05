@@ -2,13 +2,12 @@ import re
 import anthropic
 from datetime import datetime
 from core.memory import Memory
-from core.tools import TOOLS, execute_tool
-from core import downloader
+from core.tools import execute_tool, tools_for
+from core import context, profile, store
 
 client = anthropic.Anthropic()
 memory = Memory()
 
-OWNER_ID = "1481202270"
 
 OWNER_PROMPT = """You are my Personal Strategic Operating System.
 
@@ -72,11 +71,14 @@ Always search before answering anything involving current events, news, scores, 
 TOOLS
 
 web_search: search for anything current or factual
-save_note: save tasks, ideas, research, strategy
-get_notes: retrieve saved notes by tag
+read_url: read any link I send (articles, PDFs, YouTube transcripts); use it whenever I share a link
+download_video: download a video from an X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link; the file is sent to me automatically after your reply
+remember / forget: my long-term memory; save durable facts about me, my projects, people and deadlines without being asked when they clearly matter
+set_reminder / list_reminders / cancel_reminder: Telegram reminders in my timezone
+save_note / get_notes / delete_note: tasks, ideas, research, strategy
+generate_image: thumbnails, mockups, concept art
 calculate: math, financial modeling, projections
 get_datetime: current date and time
-download_video: download a video from an X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link; the file is sent to me automatically after your reply
 
 OUTPUT STYLE
 
@@ -95,7 +97,11 @@ Be warm, patient, and helpful with everyone by default. Answer all questions ful
 
 Only switch your tone when someone is genuinely disrespectful or abusive. If they are rude, clap back hard. If they troll you, roast them without mercy. If they are dismissive, be dismissive back. You are sharp, witty, and ruthless when provoked. You do not explain yourself to rude people. You put them in their place and move on. But normal people asking many questions deserve full, helpful, patient answers every single time.
 
-You can search the web for current information, download videos from social media links (they are sent automatically), save notes, do calculations, and remember the conversation. Answer questions directly. If you need current information, search first before answering.
+You can search the web, read links (articles, PDFs, YouTube transcripts), download videos from social media links (they are sent automatically), set reminders, remember things about the user, save notes, do calculations, and remember the conversation. Answer questions directly. If you need current information, search first before answering.
+
+You personalise answers using what you know about the user (shown below when available). When someone shares something durable about themselves (projects, goals, preferences), use the remember tool. If someone asks what you know about them, tell them, and mention /profile to see it and /forget to erase it.
+
+Commands users can use: /news for their personalised news now, /interests to change news topics, /newsoff and /newson, /profile, /forget, /clear, /help.
 
 Never use markdown formatting. Write in plain text only. No bullet points, no headers, no bold text."""
 
@@ -126,28 +132,35 @@ DEEP_HINTS = (
 )
 
 
-def pick_model(user_id: str, message: str) -> tuple:
+def pick_model(is_owner: bool, message: str) -> tuple:
     """Return (model, cleaned_message). Prefix a message with /deep or /quick to force a model."""
     text = message.strip()
     low = text.lower()
     if low.startswith("/deep"):
-        return SMART_MODEL, text[5:].strip() or text
+        text = text[5:].strip() or text
+        return (SMART_MODEL if is_owner else FAST_MODEL), text
     if low.startswith("/quick"):
         return FAST_MODEL, text[6:].strip() or text
-    if user_id != OWNER_ID:
+    if not is_owner:
         return FAST_MODEL, text
     if len(text) > 280 or "file content:" in low or any(h in low for h in DEEP_HINTS):
         return SMART_MODEL, text
     return FAST_MODEL, text
 
 
-def build_system(user_id: str, platform: str) -> list:
-    """Big static prompt is cached (cheap after the first call); time/platform sit after it."""
-    base = OWNER_PROMPT if user_id == OWNER_ID else PUBLIC_PROMPT
-    now = datetime.now().strftime("%A, %B %d %Y, %I:%M %p")
+def build_system(uid: str, is_owner: bool, platform: str) -> list:
+    """Big static prompt is cached (cheap after the first call); time, platform and the
+    user's learned profile sit after it."""
+    base = OWNER_PROMPT if is_owner else PUBLIC_PROMPT
+    tz = store.user_tz(store.get_user(uid) or {})
+    now = datetime.now(tz).strftime("%A, %B %d %Y, %I:%M %p")
+    dynamic = f"Current time: {now} ({tz.key})\nPlatform: {platform}"
+    known = profile.profile_block(uid)
+    if known:
+        dynamic += "\n\n" + known
     return [
         {"type": "text", "text": base, "cache_control": {"type": "ephemeral"}},
-        {"type": "text", "text": f"Current time: {now}\nPlatform: {platform}"},
+        {"type": "text", "text": dynamic},
     ]
 
 
@@ -167,15 +180,25 @@ def friendly_error(e: Exception) -> str:
     return f"Something went wrong: {str(e)[:200]}"
 
 
-def chat(user_id: str, platform: str, message: str) -> str:
-    model, message = pick_model(user_id, message)
-    history = memory.get(user_id, platform)
+def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
+         name: str = "", username: str = "", chat_id: str = "") -> str:
+    """Run one turn. user_id is the platform's raw id; pass a context.Ctx to receive files
+    queued by tools (ctx.outbox)."""
+    is_owner = store.is_owner(platform, user_id)
+    uid = store.uid_for(platform, user_id)
+    store.ensure_user(uid, platform, chat_id or (user_id if platform == "telegram" else ""), name, username)
+    if ctx is None:
+        ctx = context.Ctx()
+    ctx.uid, ctx.platform, ctx.is_owner = uid, platform, is_owner
+    ctx.chat_id = chat_id or str(user_id)
+    context.set_ctx(ctx)
+
+    model, message = pick_model(is_owner, message)
+    history = memory.get(uid, platform)
     history.append({"role": "user", "content": message})
 
-    downloader.CURRENT["platform"] = platform
-    downloader.CURRENT["user_id"] = user_id
-
-    system = build_system(user_id, platform)
+    system = build_system(uid, is_owner, platform)
+    tools = tools_for(is_owner)
     messages = history.copy()
 
     try:
@@ -185,7 +208,7 @@ def chat(user_id: str, platform: str, message: str) -> str:
                 model=model,
                 max_tokens=2048,
                 system=system,
-                tools=TOOLS,
+                tools=tools,
                 tool_choice={"type": "none"} if last_round else {"type": "auto"},
                 messages=messages,
             )
@@ -212,7 +235,8 @@ def chat(user_id: str, platform: str, message: str) -> str:
             ).strip() or "No response."
             final_text = strip_markdown(final_text)
             history.append({"role": "assistant", "content": final_text})
-            memory.save(user_id, platform, history)
+            memory.save(uid, platform, history)
+            profile.note_message(uid, history)
             return final_text
     except anthropic.APIError as e:
         return friendly_error(e)

@@ -29,10 +29,6 @@ URL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Files waiting to be sent, keyed by (platform, user_id). Filled by the agent tool.
-OUTBOX: dict = {}
-# Set by core.agent.chat() before each run so the tool knows who asked.
-CURRENT = {"platform": None, "user_id": None}
 
 
 def find_url(text: str):
@@ -127,14 +123,15 @@ def download_video(url: str) -> dict:
 
 def tool_download_video(url: str) -> str:
     """Agent tool entry point: downloads and queues the file for the current chat."""
-    key = (CURRENT["platform"], CURRENT["user_id"])
-    if CURRENT["platform"] != "telegram":
+    from core import context
+    ctx = context.get()
+    if ctx.platform != "telegram":
         return "Video downloading only works on Telegram right now. Tell the user to send the link there."
     try:
         result = download_video(url)
     except DownloadFailed as e:
         return str(e)
-    OUTBOX.setdefault(key, []).append(result)
+    ctx.outbox.append({"kind": "video", **result})
     parts = [
         f"Downloaded ({result['size_mb']} MB, {result['duration']}s). "
         "It will be sent to the user automatically right after your reply; do not say you cannot send files.",
@@ -146,10 +143,6 @@ def tool_download_video(url: str) -> str:
     if result["description"]:
         parts.append(f"Caption/description: {result['description']}")
     return "\n".join(parts)
-
-
-def take_outbox(platform: str, user_id: str) -> list:
-    return OUTBOX.pop((platform, user_id), [])
 
 
 def cleanup(result: dict):
