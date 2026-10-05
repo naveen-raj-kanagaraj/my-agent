@@ -1,6 +1,7 @@
 import json
 import os
 import requests
+from core.downloader import tool_download_video
 from datetime import datetime
 
 NOTES_FILE = "notes.json"
@@ -141,6 +142,17 @@ TOOLS = [
         }
     },
     {
+        "name": "download_video",
+        "description": "Download a video from a Twitter/X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link and send the video file to the user in this chat. Also returns the post's title and caption so you can describe it. Use whenever the user wants a video saved, downloaded, sent, or asks about a video link.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "The full video post URL."}
+            },
+            "required": ["url"]
+        }
+    },
+    {
         "name": "calculate",
         "description": "Perform math calculations.",
         "input_schema": {
@@ -168,4 +180,6 @@ def execute_tool(name: str, inputs: dict) -> str:
         return get_datetime()
     elif name == "calculate":
         return calculate(inputs["expression"])
+    elif name == "download_video":
+        return tool_download_video(inputs["url"])
     return "Unknown tool."
