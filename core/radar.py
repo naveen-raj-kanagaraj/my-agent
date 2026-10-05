@@ -1,19 +1,27 @@
-"""Daily content radar for the owner's Indian gaming media brand."""
+"""Daily content radar for the owner's media ecosystem: media brand, talent agency,
+content house and production studio. Topics are configurable (RADAR_TOPICS), and the
+owner's learned interests are added automatically."""
 import os
 from datetime import datetime
 
 import anthropic
 import requests
 
-from core import store
-from core.news import google_news
+from core import profile, sources, store
 
 client = anthropic.Anthropic()
 RADAR_MODEL = "claude-sonnet-5-5"
 
-SUBREDDITS = [s.strip() for s in os.getenv("RADAR_SUBREDDITS", "IndianGaming,BGMI,esports").split(",") if s.strip()]
+DEFAULT_TOPICS = (
+    "Indian creator economy, influencer marketing India, talent management and creator agencies, "
+    "YouTube and Instagram platform changes, Indian entertainment and OTT, brand partnerships and sponsorships, "
+    "Indian gaming and esports, Indian media and startup funding"
+)
+TOPICS = [t.strip() for t in os.getenv("RADAR_TOPICS", DEFAULT_TOPICS).split(",") if t.strip()][:10]
+SUBREDDITS = [s.strip() for s in os.getenv(
+    "RADAR_SUBREDDITS", "NewTubers,CreatorsAdvice,socialmedia,marketing,IndianGaming,bollywood,StartUpIndia"
+).split(",") if s.strip()]
 COMPETITORS = [c.strip() for c in os.getenv("RADAR_COMPETITORS", "").split(",") if c.strip()][:6]
-NEWS_QUERIES = ["India gaming esports", "BGMI", "Indian gaming creators YouTube", "gaming industry India investment"]
 
 
 def _serper(endpoint: str, q: str, num: int = 8) -> list:
@@ -44,13 +52,28 @@ def _reddit_top(sub: str) -> list:
         return []
 
 
+def _topic_keywords(topics: list) -> dict:
+    """Keywords per radar topic, expanded once and kept in the database."""
+    saved = store.kv_get("radar_keywords", {})
+    missing = [t for t in topics if t not in saved]
+    if missing:
+        try:
+            saved.update(profile.expand_keywords(missing, "Indian media, creators, entertainment and business"))
+            store.kv_set("radar_keywords", saved)
+        except Exception as e:
+            print(f"Radar keyword expansion failed: {e}")
+    return saved
+
+
 def build_radar() -> str:
+    from core.news import _fmt
+    owner = store.get_user("owner") or {}
+    topics = list(dict.fromkeys(TOPICS + store.interests(owner)[:3]))
+    kw = _topic_keywords(topics)
     lines = []
-    for q in NEWS_QUERIES:
-        for i in google_news(q, "in", 5):
-            lines.append(f"NEWS [{q}]: {i['title']} ({i['source']}, {i['date']})")
-    for v in _serper("videos", "India gaming", 10):
-        lines.append(f"VIDEO: {v.get('title')} by {v.get('channel', '')} ({v.get('date', '')})")
+    for t in topics:
+        items = sources.gather(t, kw.get(t, []), "in", limit=5)
+        lines += [f"[{t}] " + _fmt(i)[2:] for i in items]
     for sub in SUBREDDITS:
         lines += _reddit_top(sub)
     for c in COMPETITORS:
@@ -64,17 +87,21 @@ def build_radar() -> str:
         model=RADAR_MODEL,
         max_tokens=2000,
         messages=[{"role": "user", "content": (
-            "You are the content strategist for an Indian gaming and esports digital media brand. Its founder is also "
-            "building a talent agency, content house and production studio.\n"
+            "You are the content and business strategist for an Indian media founder. He runs a digital media brand "
+            "(rooted in the Indian gaming ecosystem but growing beyond it) and is building a talent management "
+            "agency, a content house and a production studio. Opportunities can come from any category: creators "
+            "and influencers, entertainment, culture, brands and sponsorships, platforms, business, gaming.\n"
             f"What we know about the founder: {owner.get('profile') or 'n/a'}\n\n"
             "From today's signals below, write a content radar. Plain text only, no markdown or asterisks.\n"
             "Section 1, 'What's moving': the 5 strongest trends, one or two sentences each, with why they're rising now.\n"
-            "Section 2, 'Content to make': 5 ideas built to scale into a series. For each give: Hook (first 3 seconds or "
+            "Section 2, 'Content to make': 5 ideas built to scale into a series, spread across categories (not all gaming). For each give: Hook (first 3 seconds or "
             "headline), Core idea, Format (short, long, series, live), Distribution angle (platform-specific edge), and "
             "Why now. Prefer angles competitors are missing.\n"
-            "Section 3, 'Competitor watch': what competitors posted that worked and the gap it leaves (skip if no data).\n"
+            "Section 3, 'Business moves': 2-3 opportunities for the talent agency, content house or production studio "
+            "(creators to sign, brand categories spending, formats to produce).\n"
+            "Section 4, 'Competitor watch': what competitors posted that worked and the gap it leaves (skip if no data).\n"
             "Be specific to India. No generic advice.\n\n"
-            "SIGNALS:\n" + "\n".join(lines[:120])
+            "SIGNALS:\n" + "\n".join(lines[:150])
         )}],
     )
     return f"CONTENT RADAR, {datetime.now().strftime('%a %b %d')}\n\n" + resp.content[0].text.strip().replace("**", "")
