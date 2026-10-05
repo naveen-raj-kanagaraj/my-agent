@@ -18,6 +18,8 @@ def whatsapp():
     resp = MessagingResponse()
 
     user_id = from_number.replace("whatsapp:", "")
+    if user_id != os.getenv("MY_WHATSAPP_NUMBER", "").replace("whatsapp:", ""):
+        return str(resp)
 
     if not body:
         return str(resp)
@@ -39,4 +41,4 @@ def index():
 
 def run_whatsapp():
     print("WhatsApp: running on port 5001")
-    app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False)
+    app.run(host="127.0.0.1", port=5001, debug=False, use_reloader=False)
