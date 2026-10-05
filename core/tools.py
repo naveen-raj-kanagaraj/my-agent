@@ -222,7 +222,7 @@ ALL_TOOLS = [
     _schema("scan_sources", "Find what news sites, Reddit, Hacker News, X, Instagram, Threads and YouTube are saying "
             "in the last day about a topic, matched by keywords and ranked by relevance, recency and engagement. Use for "
             "'what's the buzz about', 'what is Reddit/X saying', trend checks. Pass comma-separated keywords, main one first.",
-            {"query": {**S, "description": "e.g. 'BGMI, Battlegrounds Mobile India, BMPS'"}}, ["query"]),
+            {"query": {**S, "description": "e.g. 'Zepto, Blinkit, quick commerce'"}}, ["query"]),
     _schema("read_url", "Open a link and read it: articles, blog posts, PDFs, and YouTube video transcripts. Use this "
             "whenever the user shares a link (other than a short video they want downloaded) or asks about a page.",
             {"url": S}, ["url"]),
