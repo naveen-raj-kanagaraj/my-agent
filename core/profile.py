@@ -42,7 +42,7 @@ def _clean_interests(items) -> list:
 
 
 def extract_onboarding(text: str) -> dict:
-    """Turn a free-text answer ('BGMI, startups, F1. I'm in Chennai') into structured fields."""
+    """Turn a free-text answer ('AI startups, cricket, F1. I'm in Chennai') into structured fields."""
     resp = client.messages.create(
         model=LEARN_MODEL,
         max_tokens=400,
@@ -50,7 +50,7 @@ def extract_onboarding(text: str) -> dict:
             "A new user of a personal assistant bot answered: 'What are you interested in, and which city are you in?'\n"
             f"Their answer:\n<<<\n{text[:2000]}\n>>>\n\n"
             "Return only JSON with keys:\n"
-            '"interests": list of 2-8 specific news/learning topics they care about (short phrases, keep their specifics, e.g. "BGMI esports", "Indian startup funding"),\n'
+            '"interests": list of 2-8 specific news/learning topics they care about (short phrases, keep their specifics, e.g. "Indian startup funding", "Formula 1", "BGMI esports"),\n'
             '"city": city or country if mentioned else "",\n'
             '"timezone": IANA timezone for that place (e.g. "Asia/Kolkata") or "" if unknown,\n'
             '"name": their name if they said it else "",\n'
@@ -159,7 +159,7 @@ def expand_keywords(topics: list, context_hint: str = "") -> dict:
         messages=[{"role": "user", "content": (
             "For each news interest below, give 3-6 keywords that news headlines and social posts about it would "
             "literally contain: official names, common abbreviations, key companies, leagues, people or products. "
-            "Specific beats generic (for 'BGMI esports': BGMI, Battlegrounds Mobile India, BMPS, Krafton India). "
+            "Specific beats generic (for 'Indian quick commerce': Zepto, Blinkit, Swiggy Instamart, quick commerce; for 'Formula 1': F1, Formula 1, Grand Prix, FIA). "
             "No generic words like 'news' or 'update'.\n"
             f"Reader context: {context_hint[:300] or 'n/a'}\n"
             f"Interests: {topics}\n"

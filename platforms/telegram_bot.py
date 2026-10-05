@@ -39,7 +39,7 @@ WELCOME = (
     "and TikTok, read your files and images, understand voice notes, set reminders, and send you a personalised "
     "news brief every morning and evening.\n\n"
     "To set that up: what are you interested in, and which city are you in?\n"
-    "For example: \"BGMI esports, startups and F1. I'm in Chennai.\"\n\n"
+    "For example: \"AI startups, cricket, Bollywood and personal finance. I'm in Chennai.\"\n\n"
     "I learn from our chats to personalise answers and news. See what I know with /profile, erase it with /forget."
 )
 
@@ -58,7 +58,7 @@ HELP = (
 OWNER_HELP = HELP + (
     "\nOwner only:\n"
     "/brief - full strategic briefing now\n"
-    "/radar - Indian gaming content radar now\n"
+    "/radar - content and business radar now\n"
     "/users - who is using the bot today\n"
     "/block <id>, /unblock <id> - moderate users\n"
 )
@@ -157,7 +157,7 @@ async def finish_onboarding(update: Update, user: dict, text: str):
         return
     if not info["interests"]:
         await update.message.reply_text(
-            "I didn't catch any topics. What do you like to follow? For example: cricket, AI, startups, BGMI.")
+            "I didn't catch any topics. What do you like to follow? For example: cricket, AI, startups, fashion, stock markets.")
         return
     await asyncio.to_thread(profile.apply_onboarding, user["uid"], info)
     tz = info["timezone"] or store.OWNER_TZ
@@ -253,7 +253,7 @@ async def cmd_keywords(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append("Your own keywords: " + ", ".join(custom))
     await update.message.reply_text(
         ("Keywords I match in your news:\n\n" + "\n".join(lines) if lines else "No topics yet. Use /interests first.")
-        + "\n\nAdd your own: /keywords Krafton, BMPS, Jonathan Gaming")
+        + "\n\nAdd your own: /keywords Zepto, IPL auction, Nothing Phone")
 
 
 async def cmd_news_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -293,7 +293,7 @@ async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_radar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update):
         return
-    await update.message.reply_text("Scanning gaming news, YouTube and Reddit. About a minute...")
+    await update.message.reply_text("Scanning news, Reddit, X, Instagram and YouTube across your radar topics. About a minute...")
     from core.radar import build_radar
     try:
         text = await asyncio.to_thread(build_radar)

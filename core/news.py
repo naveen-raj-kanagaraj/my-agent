@@ -113,7 +113,7 @@ def build_user_brief(uid: str) -> str:
             "to the reader's keywords and ranked. Format: a one-line greeting, then for each topic with real news, "
             "the topic name on its own line, then the 1-3 most important stories in 2-3 sentences each: what "
             "happened, then why it matters to this person. Say where it's buzzing when that's informative (for "
-            "example 'big thread on r/IndianGaming' or 'trending on X'). Treat social posts as claims, not confirmed "
+            "example 'big thread on r/india' or 'trending on X'). Treat social posts as claims, not confirmed "
             "facts, unless a news outlet also reports them. Put the single best link after each story. Skip "
             "duplicates and filler. End with one line starting 'Worth watching:'. Under 450 words.\n\n"
             f"ITEMS FROM THE LAST DAY:\n{chr(10).join(sections)}"

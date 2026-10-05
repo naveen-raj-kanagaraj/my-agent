@@ -11,7 +11,7 @@ What it does:
 - Voice notes, transcribed on the machine with faster-whisper (free)
 - Reminders (one-off, daily, weekdays, weekly), notes, calculator, web search
 - Image generation (owner by default)
-- Daily content radar for an Indian gaming media brand (news, YouTube, Reddit, competitors)
+- Daily content and business radar across the owner's topics (creator economy, talent, entertainment, brands, gaming and more), from news, Reddit, X, Instagram, YouTube and competitors
 
 ## Run on a Mac
 
@@ -30,7 +30,7 @@ Then send `/start` to the bot on Telegram. The bot runs only while this terminal
 
 Everyone: `/start`, `/news`, `/interests <topics>`, `/newsoff`, `/newson`, `/profile`, `/forget`, `/clear`, `/help`, `/quick <q>`
 
-Owner: `/deep <q>` (Sonnet 5.5), `/brief` (full briefing), `/radar` (content radar), `/users`, `/block <id>`, `/unblock <id>`
+Owner: `/deep <q>` (Sonnet 5.5), `/brief` (full briefing), `/radar` (content and business radar), `/users`, `/block <id>`, `/unblock <id>`
 
 Non-owners get `DAILY_LIMIT` requests a day (default 20) and always use Haiku 4.5. The owner has no limit; quick
 questions go to Haiku and strategy, writing and long messages to Sonnet 5.5.
