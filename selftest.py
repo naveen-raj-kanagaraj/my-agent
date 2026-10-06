@@ -204,6 +204,11 @@ def scheduler():
 
 if __name__ == "__main__":
     print("Agent self-test\n")
+    here = os.path.dirname(os.path.abspath(__file__))
+    if os.path.isdir(os.path.join(here, "venv")) and sys.prefix == sys.base_prefix:
+        print("STOP  You're not in the agent's virtual environment, so its libraries won't be found.")
+        print("      Run:  source venv/bin/activate   then:  python selftest.py\n")
+        sys.exit(2)
     check(".env keys", env_keys, "copy missing keys from .env.example into .env")
     check("Anthropic (Haiku)", anthropic_call, "run python check_keys.py; top up at console.anthropic.com")
     check("Anthropic (Sonnet 5.5)", sonnet_call, "your account may not have this model yet; tell Claude")
