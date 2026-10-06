@@ -24,7 +24,7 @@ from telegram.ext import (ApplicationBuilder, CallbackQueryHandler, ChatMemberHa
                           ContextTypes, MessageHandler, filters)
 
 from core import context as agent_context
-from core import alerts, downloader, llm, models, profile, store, voice
+from core import alerts, downloader, llm, models, profile, store, topics, voice
 from core.agent import chat
 chat_fn = chat
 from core.memory import Memory
@@ -46,9 +46,7 @@ WELCOME = (
     "I can answer questions, search the web, read links and YouTube videos, download videos from X, Instagram "
     "and TikTok, read your files and images, understand voice notes, set reminders, and send you a personalised "
     "news brief every morning and evening.\n\n"
-    "Just ask me anything to get started.\n\n"
-    "Want a daily news brief? Send /interests with your topics and city, for example:\n"
-    "/interests AI startups, cricket, Bollywood, personal finance. I'm in Chennai.\n\n"
+    "Just ask me anything to get started. Below you can pick topics you want updates on.\n\n"
     "I learn from our chats to personalise answers and news. Chats are saved on the bot owner's hard disk, and the "
     "owner can read them to improve the bot. See what I know with /profile, erase it all with /forget."
 )
@@ -60,10 +58,11 @@ HELP = (
     "and I'll read them. Send an X, Instagram, TikTok or YouTube Shorts link to download the video.\n\n"
     "/new - start a fresh conversation\n"
     "/search <question> - web answer with sources\n"
+    "/interests - pick topics you want updates on (or type your own)\n"
+    "/updates - how often: live, twice a day, mornings, or off\n"
     "/news - your personalised news now\n"
-    "/interests <topics> - change your news topics\n"
     "/keywords <words> - track exact keywords across news, Reddit, X, Instagram, YouTube\n"
-    "/newsoff, /newson - stop or restart daily news\n"
+    "/newsoff, /newson - stop or restart updates\n"
     "/alert <keyword> - instant alerts when something new appears\n"
     "/alerts - your alerts, /unalert <id> to remove\n"
     "/profile - what I know about you\n"
@@ -272,6 +271,10 @@ async def execute_chat(update, context, text: str, model_key: str, status_msg=No
         if ctx.model_label and model_key not in ("auto", "") else ""
     await send_long(update, reply + footer, rich=ctx.rich)
     await send_outbox(update, ctx)
+    if uid != "owner" and not store.interests(user) and not store.kv_get(f"topics_offered:{uid}") \
+            and getattr(update.effective_chat, "type", "private") == "private":
+        await send_topic_picker(update.message, uid,
+                                "By the way, want updates on things you follow? " + TOPICS_PROMPT)
 
 
 async def on_model_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -446,12 +449,188 @@ async def cmd_picker(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Picker off. I'll use your default model ({user.get('default_model') or 'auto'}); change it with /model.")
 
 
+# ---------- topic picker ----------
+
+TOPICS_PROMPT = ("What are you interested in? Tap as many as you like, or tap \"Type my own\" and send anything "
+                 "(e.g. Kabaddi, K-pop, Tesla). I'll match keywords and send you related updates.")
+
+
+def _topics_keyboard(uid: str) -> InlineKeyboardMarkup:
+    chosen = {t.lower() for t in store.interests(store.get_user(uid) or {})}
+    names = list(topics.PRESETS)
+    rows, row = [], []
+    for i, name in enumerate(names):
+        row.append(InlineKeyboardButton(("✓ " if name.lower() in chosen else "") + name, callback_data=f"t:{i}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    for i, t in enumerate(store.interests(store.get_user(uid) or {})):
+        if not topics.preset_for(t):
+            rows.append([InlineKeyboardButton(f"✓ {t} (tap to remove)", callback_data=f"tx:{i}")])
+    rows.append([InlineKeyboardButton("Type my own", callback_data="t:own"),
+                 InlineKeyboardButton("Done", callback_data="t:done")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _modes_keyboard(current: str = "") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton(("✓ " if k == current else "") + label, callback_data=f"f:{k}")]
+                                 for k, label in topics.MODES.items()])
+
+
+def _tz_keyboard() -> InlineKeyboardMarkup:
+    rows, row = [], []
+    for i, (label, _) in enumerate(topics.TIMEZONES):
+        row.append(InlineKeyboardButton(label, callback_data=f"z:{i}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton("Somewhere else (type your city)", callback_data="z:own")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _summary(u: dict) -> str:
+    mode = u.get("news_mode") or "both"
+    if not u.get("news_on"):
+        mode = "off"
+    when = {"live": "as stories break (7 AM to 11 PM, max 8 a day) plus a brief at 8 AM",
+            "both": "at 8 AM and 7 PM", "morning": "at 8 AM", "off": ""}[mode]
+    ints = ", ".join(store.interests(u)) or "nothing yet"
+    if mode == "off":
+        return f"Topics: {ints}. Updates are off; turn them on with /updates."
+    return f"Topics: {ints}.\nUpdates {when}, your time ({u.get('timezone')}).\nChange anytime: /interests, /updates"
+
+
+async def send_topic_picker(message, uid: str, intro: str = TOPICS_PROMPT):
+    store.kv_set(f"topics_offered:{uid}", True)
+    await message.reply_text(intro, reply_markup=_topics_keyboard(uid))
+
+
+async def _finish_setup(q, uid: str):
+    u = store.get_user(uid) or {}
+    await q.edit_message_text("All set.\n\n" + _summary(u))
+    if u.get("news_on") and store.interests(u):
+        preview = await asyncio.to_thread(topics.latest_now, uid)
+        if preview:
+            try:
+                await q.message.reply_text(preview, parse_mode="HTML", disable_web_page_preview=True)
+            except Exception:
+                pass
+
+
+async def on_topic_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    uid = store.uid_for("telegram", str(update.effective_user.id))
+    user = store.get_user(uid)
+    if not user or user.get("blocked"):
+        await q.answer()
+        return
+    data = q.data
+    kind, _, val = data.partition(":")
+    if kind == "t" and val.isdigit():
+        names = list(topics.PRESETS)
+        if int(val) < len(names):
+            ints = store.interests(user)
+            name = names[int(val)]
+            if name.lower() not in [i.lower() for i in ints] and len(ints) >= 12:
+                await q.answer("You can follow up to 12 topics. Remove one first.", show_alert=True)
+                return
+            topics.toggle(uid, name)
+        await q.answer()
+        await q.edit_message_reply_markup(reply_markup=_topics_keyboard(uid))
+    elif kind == "tx":
+        ints = store.interests(user)
+        if val.isdigit() and int(val) < len(ints):
+            topics.toggle(uid, ints[int(val)])
+        await q.answer("Removed")
+        await q.edit_message_reply_markup(reply_markup=_topics_keyboard(uid))
+    elif data == "t:own":
+        store.update_user(uid, state="awaiting_topics")
+        await q.answer()
+        await q.message.reply_text("Send your topics in one message, separated by commas. For example: "
+                                   "Kabaddi, K-pop, Tesla, Chennai Super Kings")
+    elif data == "t:done":
+        await q.answer()
+        if not store.interests(user):
+            await q.edit_message_text("No topics picked, so no updates for now. Pick some anytime with /interests.")
+            return
+        await q.edit_message_text("Topics: " + ", ".join(store.interests(user)) + "\n\nHow often do you want updates?",
+                                  reply_markup=_modes_keyboard(user.get("news_mode") or ""))
+    elif kind == "f" and val in topics.MODES:
+        store.update_user(uid, news_mode=val, news_on=0 if val == "off" else 1)
+        await q.answer()
+        if val != "off" and not store.kv_get(f"tz_chosen:{uid}"):
+            await q.edit_message_text("Where are you? So updates arrive at the right local time.",
+                                      reply_markup=_tz_keyboard())
+        else:
+            await _finish_setup(q, uid)
+    elif kind == "z":
+        await q.answer()
+        if val == "own":
+            store.update_user(uid, state="awaiting_city")
+            await q.edit_message_text("Send me your city (for example: Toronto, Berlin, Nairobi).")
+            return
+        if val.isdigit() and int(val) < len(topics.TIMEZONES):
+            store.update_user(uid, timezone=topics.TIMEZONES[int(val)][1])
+            store.kv_set(f"tz_chosen:{uid}", True)
+        await _finish_setup(q, uid)
+    else:
+        await q.answer()
+
+
+async def receive_typed_topics(update: Update, user: dict, text: str) -> bool:
+    """Handles the message after 'Type my own' / 'type your city'. Returns True if consumed."""
+    state = user.get("state")
+    if state not in ("awaiting_topics", "awaiting_city"):
+        return False
+    uid = user["uid"]
+    store.update_user(uid, state="active")
+    if "?" in text or len(text) > 120:
+        return False  # looks like a question, not a topic list: just answer it
+    if state == "awaiting_city":
+        try:
+            info = await asyncio.to_thread(profile.extract_onboarding, f"I'm in {text}", uid)
+        except Exception:
+            info = {}
+        if info.get("timezone"):
+            store.update_user(uid, timezone=info["timezone"])
+            store.kv_set(f"tz_chosen:{uid}", True)
+            store.add_fact(uid, f"Based in {text.strip()[:60]}")
+        msg = await update.message.reply_text("Saved." if info.get("timezone") else
+                                              "I couldn't place that city, so I'll keep " + (user.get("timezone") or "")
+                                              + ". Try /interests again anytime.")
+        u = store.get_user(uid) or {}
+        await update.message.reply_text(_summary(u))
+        if u.get("news_on") and store.interests(u):
+            preview = await asyncio.to_thread(topics.latest_now, uid)
+            if preview:
+                await update.message.reply_text(preview, parse_mode="HTML", disable_web_page_preview=True)
+        return True
+    ints = topics.add_custom(uid, text)
+    await update.message.reply_text("Added. Tap more or press Done.\n\nYour topics: " + ", ".join(ints),
+                                    reply_markup=_topics_keyboard(uid))
+    return True
+
+
+async def cmd_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if not user:
+        return
+    current = (user.get("news_mode") or "both") if user.get("news_on") else "off"
+    await update.message.reply_text(_summary(user) + "\n\nHow often do you want updates?",
+                                    reply_markup=_modes_keyboard(current))
+
+
 # ---------- onboarding ----------
 
 async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE, user: dict):
     store.update_user(user["uid"], state="active")
     first = update.effective_user.first_name
     await update.message.reply_text(WELCOME.format(name=f" {first}" if first else ""))
+    await send_topic_picker(update.message, user["uid"])
     if user.get("state") == "new":
         uname = f"@{user['username']}" if user.get("username") else user["uid"]
         await notify_owner(context, f"New user started the bot: {first or ''} {uname} ({user['uid']})")
@@ -468,11 +647,13 @@ async def finish_onboarding(update: Update, user: dict, text: str):
             "I didn't catch any topics. What do you like to follow? For example: cricket, AI, startups, fashion, stock markets.")
         return
     await asyncio.to_thread(profile.apply_onboarding, user["uid"], info)
-    tz = info["timezone"] or store.OWNER_TZ
-    await update.message.reply_text(
-        "Got it. I'll follow: " + ", ".join(info["interests"]) + ".\n\n"
-        f"You'll get a news brief at 8 AM and 7 PM your time ({tz}). Get one now with /news, "
-        "change topics with /interests, or stop with /newsoff.\n\nNow, ask me anything.")
+    topics.attach_presets(user["uid"])
+    if info.get("timezone"):
+        store.kv_set(f"tz_chosen:{user['uid']}", True)
+    u = store.get_user(user["uid"]) or {}
+    await update.message.reply_text("Got it. I'll follow: " + ", ".join(store.interests(u))
+                                    + ".\n\nHow often do you want updates?",
+                                    reply_markup=_modes_keyboard(u.get("news_mode") or ""))
 
 
 # ---------- commands ----------
@@ -530,10 +711,7 @@ async def cmd_interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     text = " ".join(context.args)
     if not text:
-        current = store.interests(user)
-        await update.message.reply_text(
-            ("Your topics: " + ", ".join(current) if current else "You have no topics yet.")
-            + "\n\nChange them like this: /interests AI, cricket, Indian startups")
+        await send_topic_picker(update.message, user["uid"])
         return
     await finish_onboarding(update, user, text)
 
@@ -786,7 +964,7 @@ async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------- messages ----------
 
 async def process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, user: dict, text: str):
-    if user["uid"] != "owner" and user.get("state") in ("new", "awaiting_interests"):
+    if user["uid"] != "owner" and user.get("state") in ("new", "awaiting_interests", None, ""):
         # Like ChatGPT: answer straight away. Daily news is optional (/interests).
         store.update_user(user["uid"], state="active")
         if user.get("state") == "new":
@@ -795,6 +973,8 @@ async def process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, user:
             uname = f"@{user['username']}" if user.get("username") else user["uid"]
             await notify_owner(context, f"New user: {first or ''} {uname} ({user['uid']})")
 
+    if await receive_typed_topics(update, user, text):
+        return
     if downloader.is_bare_link(text):
         await download_link(update, context, downloader.find_url(text))
         return
@@ -1235,6 +1415,8 @@ def run_telegram():
     app.add_handler(CommandHandler("think", cmd_think, filters=PRIVATE))
     app.add_handler(CommandHandler("activity", cmd_activity, filters=PRIVATE))
     app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
+    app.add_handler(CallbackQueryHandler(on_topic_pick, pattern=r"^(t|tx|f|z):"))
+    app.add_handler(CommandHandler("updates", cmd_updates, filters=PRIVATE))
     app.add_handler(MessageHandler(PRIVATE & filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(PRIVATE & (filters.VOICE | filters.AUDIO), handle_voice))
     app.add_handler(MessageHandler(PRIVATE & filters.PHOTO, handle_photo))
