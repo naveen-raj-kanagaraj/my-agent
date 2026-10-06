@@ -5,6 +5,7 @@ DAILY_LIMIT requests per day, an onboarding chat, and personalised news.
 """
 import asyncio
 import base64
+import re
 import logging
 import os
 import secrets
@@ -19,11 +20,13 @@ from dotenv import load_dotenv
 from pptx import Presentation
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
-from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (ApplicationBuilder, CallbackQueryHandler, ChatMemberHandler, CommandHandler,
+                          ContextTypes, MessageHandler, filters)
 
 from core import context as agent_context
 from core import alerts, downloader, llm, models, profile, store, voice
 from core.agent import chat
+chat_fn = chat
 from core.memory import Memory
 
 load_dotenv()
@@ -74,6 +77,13 @@ OWNER_HELP = HELP + (
     "/usage - what the bot cost today and this week\n"
     "/credits <amount> - track your Anthropic balance\n"
     "/dashboard - link to the web dashboard\n"
+    "/scout @channel - creator numbers + fit, saved to tracker\n"
+    "/script <topic> - video script in your brand voice\n"
+    "/shorts <YouTube link> - 5 clip moments with timestamps\n"
+    "/captions <topic> - caption pack for every platform\n"
+    "/brandvoice add <sample> - teach it your writing style\n"
+    "/groups, /leave <id> - groups I'm in\n"
+    "/backup - back up the database now\n"
     "/pipeline - talent agency pipeline\n"
     "/activity [user id] - what people asked and searched\n"
     "/thinking off|low|medium|high - how hard models think\n"
@@ -102,6 +112,8 @@ async def send_long(update: Update, text: str):
 async def gate(update: Update, count: bool = True):
     """Register the user, enforce blocks and the daily limit. Returns the user row or None."""
     raw, chat_id, name, username = ids(update)
+    if getattr(update.effective_chat, "type", "private") != "private":
+        chat_id = raw  # a user's private chat id is their user id; never store a group as their address
     uid = store.uid_for("telegram", raw)
     user = store.ensure_user(uid, "telegram", chat_id, name, username)
     if user.get("blocked"):
@@ -939,43 +951,272 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.unlink(path)
 
 
+# ---------- group chats (Meta AI style: mention me or reply to me) ----------
+
+GROUPS_ENABLED = os.getenv("GROUPS_ENABLED", "true").lower() == "true"
+GROUP_INTRO = ("Hi everyone! I'm an AI assistant built by Naveen Raj. Mention me (@{bot}) or reply to one of my "
+               "messages and I'll answer: questions, research, news, links, summaries, video downloads.\n"
+               "Messages sent to me are saved on the bot owner's hard disk, and the owner can read them.")
+
+
+def _addressed_to_bot(msg, bot) -> tuple:
+    """(is_for_me, text_without_mention)."""
+    text = msg.text or msg.caption or ""
+    entities = (msg.entities or []) + (msg.caption_entities or [])
+    mentioned = False
+    for e in entities:
+        if e.type == "mention" and text[e.offset:e.offset + e.length].lower() == f"@{bot.username}".lower():
+            mentioned = True
+        elif e.type == "text_mention" and e.user and e.user.id == bot.id:
+            mentioned = True
+    replied = bool(msg.reply_to_message and msg.reply_to_message.from_user
+                   and msg.reply_to_message.from_user.id == bot.id)
+    clean = re.sub(rf"@{re.escape(bot.username)}\b", "", text, flags=re.I).strip() if bot.username else text
+    return (mentioned or replied), clean
+
+
+async def handle_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not GROUPS_ENABLED or not msg:
+        return
+    for_me, text = _addressed_to_bot(msg, context.bot)
+    if not for_me:
+        return
+    if not text:
+        await msg.reply_text("Yes? Ask me anything: mention me with your question, or reply to my message.")
+        return
+    user = await gate(update)
+    if not user:
+        return
+    if downloader.is_bare_link(text):
+        await download_link(update, context, downloader.find_url(text))
+        return
+    quoted = msg.reply_to_message
+    if quoted and quoted.from_user and quoted.from_user.id != context.bot.id and (quoted.text or quoted.caption):
+        who = quoted.from_user.first_name or "someone"
+        text = f"[Replying to {who}'s message: \"{(quoted.text or quoted.caption)[:1500]}\"]\n{text}"
+    raw, _, name, username = ids(update)
+    chat = update.effective_chat
+    await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
+    ctx = agent_context.Ctx()
+    reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None,
+                                    {"id": chat.id, "title": chat.title})
+    await send_long(update, reply)
+    await send_outbox(update, ctx)
+
+
+async def cmd_help_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(GROUP_INTRO.format(bot=context.bot.username) + "\n\nOr use /ask <question>.")
+
+
+async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/ask <question> works in groups too (handy when the bot's privacy mode hides normal messages)."""
+    text = " ".join(context.args).strip()
+    if not text:
+        await update.message.reply_text("Usage: /ask <your question>")
+        return
+    user = await gate(update)
+    if not user:
+        return
+    raw, _, name, username = ids(update)
+    chat = update.effective_chat
+    group = {"id": chat.id, "title": chat.title} if getattr(chat, "type", "private") != "private" else None
+    ctx = agent_context.Ctx()
+    reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None, group)
+    await send_long(update, reply)
+    await send_outbox(update, ctx)
+
+
+async def on_my_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Bot added to or removed from a group."""
+    cm = update.my_chat_member
+    chat = cm.chat
+    if chat.type == "private":
+        return
+    groups = store.kv_get("groups", {})
+    status = cm.new_chat_member.status
+    who = cm.from_user
+    by = f"@{who.username}" if who and who.username else (who.first_name if who else "someone")
+    if status in ("member", "administrator"):
+        groups[str(chat.id)] = {"title": chat.title, "added_by": by, "added_at": store.iso(store.now_utc())}
+        store.kv_set("groups", groups)
+        await notify_owner(context, f"I was added to the group '{chat.title}' ({chat.id}) by {by}. "
+                                    f"Remove me with /leave {chat.id}")
+        if GROUPS_ENABLED:
+            try:
+                await context.bot.send_message(chat_id=chat.id, text=GROUP_INTRO.format(bot=context.bot.username))
+            except Exception:
+                pass
+    elif status in ("left", "kicked"):
+        groups.pop(str(chat.id), None)
+        store.kv_set("groups", groups)
+        await notify_owner(context, f"I was removed from the group '{chat.title}' ({chat.id}).")
+
+
+async def cmd_groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    groups = store.kv_get("groups", {})
+    if not groups:
+        await update.message.reply_text("I'm not in any groups. Add me to one from the group's member list.")
+        return
+    await send_long(update, "Groups I'm in:\n\n" + "\n".join(
+        f"{g['title']} ({gid}), added by {g.get('added_by')}" for gid, g in groups.items())
+        + "\n\nLeave one with /leave <id>")
+
+
+async def cmd_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update) or not context.args:
+        return
+    gid = context.args[0]
+    try:
+        await context.bot.leave_chat(int(gid))
+        groups = store.kv_get("groups", {})
+        groups.pop(gid, None)
+        store.kv_set("groups", groups)
+        await update.message.reply_text(f"Left group {gid}.")
+    except Exception as e:
+        await update.message.reply_text(f"Couldn't leave: {str(e)[:150]}")
+
+
+# ---------- content studio and backup (owner) ----------
+
+async def _owner_prompt(update, context, prompt: str):
+    user = await gate(update)
+    if user:
+        await execute_chat(update, context, prompt, session_model(user) or "sonnet")
+
+
+async def cmd_script(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    topic = " ".join(context.args).strip()
+    if not topic:
+        await update.message.reply_text("Usage: /script <topic or idea>. Add your style first with /brandvoice add <sample>.")
+        return
+    await _owner_prompt(update, context, (
+        f"Write a video script about: {topic}\n\nFirst call get_brand_voice and match it. Give: 3 hook options for the "
+        "first 3 seconds; the full script with retention beats (pattern interrupts every 20-30 seconds) and on-screen "
+        "text cues; a call to action; 5 title options; 3 thumbnail concepts (text overlay + visual). Say which format "
+        "fits best (Short, Reel or long-form) and why. Plain text, no markdown."))
+
+
+async def cmd_shorts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    url = " ".join(context.args).strip()
+    if not url:
+        await update.message.reply_text("Usage: /shorts <YouTube link>. I'll find 5 clip moments with timestamps.")
+        return
+    await _owner_prompt(update, context, (
+        f"Turn this long video into Shorts/Reels: {url}\n\nCall video_transcript, then get_brand_voice. Give 5 clips, "
+        "each with: start and end timestamps (30-60 seconds), the hook as on-screen text, why it will hold attention, a "
+        "caption, and 5 hashtags. Rank them by viral potential. Plain text, no markdown."))
+
+
+async def cmd_captions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    topic = " ".join(context.args).strip()
+    if not topic:
+        await update.message.reply_text("Usage: /captions <what the post is about>")
+        return
+    await _owner_prompt(update, context, (
+        f"Write a caption pack for a post about: {topic}\n\nCall get_brand_voice first. Give one caption each for "
+        "Instagram (with 10 relevant hashtags, mixing big and niche), YouTube Shorts (title + description), X (under "
+        "280 characters) and LinkedIn (professional angle). Plain text, no markdown."))
+
+
+async def cmd_brandvoice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    from core import scout
+    args = " ".join(context.args).strip()
+    if args.lower().startswith("add "):
+        await update.message.reply_text(scout.save_brand_voice(args[4:]))
+    elif args.lower() == "clear":
+        store.kv_set("brand_voice", [])
+        await update.message.reply_text("Brand voice samples cleared.")
+    else:
+        n = len(store.kv_get("brand_voice", []))
+        await update.message.reply_text(
+            f"I have {n} brand voice sample(s).\n\nAdd one: /brandvoice add <paste a script, caption or post you wrote>\n"
+            "The more you add (up to 10), the more scripts and captions sound like you. Clear: /brandvoice clear")
+
+
+async def cmd_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    from core import backup
+    try:
+        path = await asyncio.to_thread(backup.run_backup)
+        await update.message.reply_text(f"Backed up to {path}\n(Last {backup.KEEP} copies are kept; nightly at 3 AM.)")
+    except Exception as e:
+        await update.message.reply_text(f"Backup failed: {str(e)[:200]}")
+
+
+async def cmd_scout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    handle = " ".join(context.args).strip()
+    if not handle:
+        await update.message.reply_text("Usage: /scout @channel or a YouTube/Instagram link")
+        return
+    await _owner_prompt(update, context, f"Scout this creator with scout_creator and give me a fit assessment for my "
+                                         f"talent agency (strengths, risks, rate range to expect, brand categories): {handle}")
+
+
 def run_telegram():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     app = ApplicationBuilder().token(token).concurrent_updates(True).build()
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("clear", cmd_clear))
-    app.add_handler(CommandHandler("profile", cmd_profile))
-    app.add_handler(CommandHandler("forget", cmd_forget))
-    app.add_handler(CommandHandler("interests", cmd_interests))
-    app.add_handler(CommandHandler(["newson", "newsoff"], cmd_news_toggle))
-    app.add_handler(CommandHandler("keywords", cmd_keywords))
-    app.add_handler(CommandHandler("news", cmd_news))
-    app.add_handler(CommandHandler("brief", cmd_brief))
-    app.add_handler(CommandHandler("radar", cmd_radar))
-    app.add_handler(CommandHandler("users", cmd_users))
-    app.add_handler(CommandHandler("status", cmd_status))
-    app.add_handler(CommandHandler("usage", cmd_usage))
-    app.add_handler(CommandHandler("credits", cmd_credits))
-    app.add_handler(CommandHandler("dashboard", cmd_dashboard))
-    app.add_handler(CommandHandler("pipeline", cmd_pipeline))
-    app.add_handler(CommandHandler("alert", cmd_alert))
-    app.add_handler(CommandHandler("alerts", cmd_alerts))
-    app.add_handler(CommandHandler("unalert", cmd_unalert))
-    app.add_handler(CommandHandler(["block", "unblock"], cmd_block))
-    app.add_handler(CommandHandler(["deep", "quick"], cmd_model))
-    app.add_handler(CommandHandler("model", cmd_model_default))
-    app.add_handler(CommandHandler("picker", cmd_picker))
-    app.add_handler(CommandHandler("switch", cmd_switch))
-    app.add_handler(CommandHandler("style", cmd_style))
-    app.add_handler(CommandHandler("thinking", cmd_thinking))
-    app.add_handler(CommandHandler("think", cmd_think))
-    app.add_handler(CommandHandler("activity", cmd_activity))
+    PRIVATE = filters.ChatType.PRIVATE
+    GROUPS = filters.ChatType.GROUPS
+    app.add_handler(CommandHandler("start", cmd_start, filters=PRIVATE))
+    app.add_handler(CommandHandler("help", cmd_help, filters=PRIVATE))
+    app.add_handler(CommandHandler("clear", cmd_clear, filters=PRIVATE))
+    app.add_handler(CommandHandler("profile", cmd_profile, filters=PRIVATE))
+    app.add_handler(CommandHandler("forget", cmd_forget, filters=PRIVATE))
+    app.add_handler(CommandHandler("interests", cmd_interests, filters=PRIVATE))
+    app.add_handler(CommandHandler(["newson", "newsoff"], cmd_news_toggle, filters=PRIVATE))
+    app.add_handler(CommandHandler("keywords", cmd_keywords, filters=PRIVATE))
+    app.add_handler(CommandHandler("news", cmd_news, filters=PRIVATE))
+    app.add_handler(CommandHandler("brief", cmd_brief, filters=PRIVATE))
+    app.add_handler(CommandHandler("radar", cmd_radar, filters=PRIVATE))
+    app.add_handler(CommandHandler("users", cmd_users, filters=PRIVATE))
+    app.add_handler(CommandHandler("status", cmd_status, filters=PRIVATE))
+    app.add_handler(CommandHandler("usage", cmd_usage, filters=PRIVATE))
+    app.add_handler(CommandHandler("credits", cmd_credits, filters=PRIVATE))
+    app.add_handler(CommandHandler("dashboard", cmd_dashboard, filters=PRIVATE))
+    app.add_handler(CommandHandler("pipeline", cmd_pipeline, filters=PRIVATE))
+    app.add_handler(CommandHandler("alert", cmd_alert, filters=PRIVATE))
+    app.add_handler(CommandHandler("alerts", cmd_alerts, filters=PRIVATE))
+    app.add_handler(CommandHandler("unalert", cmd_unalert, filters=PRIVATE))
+    app.add_handler(CommandHandler(["block", "unblock"], cmd_block, filters=PRIVATE))
+    app.add_handler(CommandHandler(["deep", "quick"], cmd_model, filters=PRIVATE))
+    app.add_handler(CommandHandler("model", cmd_model_default, filters=PRIVATE))
+    app.add_handler(CommandHandler("picker", cmd_picker, filters=PRIVATE))
+    app.add_handler(CommandHandler("switch", cmd_switch, filters=PRIVATE))
+    app.add_handler(CommandHandler("style", cmd_style, filters=PRIVATE))
+    app.add_handler(CommandHandler("thinking", cmd_thinking, filters=PRIVATE))
+    app.add_handler(CommandHandler("think", cmd_think, filters=PRIVATE))
+    app.add_handler(CommandHandler("activity", cmd_activity, filters=PRIVATE))
     app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    app.add_handler(MessageHandler(PRIVATE & filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(PRIVATE & (filters.VOICE | filters.AUDIO), handle_voice))
+    app.add_handler(MessageHandler(PRIVATE & filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(PRIVATE & filters.Document.ALL, handle_document))
+    app.add_handler(CommandHandler("help", cmd_help_group, filters=GROUPS))
+    app.add_handler(CommandHandler("ask", cmd_ask))
+    app.add_handler(CommandHandler("groups", cmd_groups, filters=PRIVATE))
+    app.add_handler(CommandHandler("leave", cmd_leave, filters=PRIVATE))
+    app.add_handler(CommandHandler("script", cmd_script, filters=PRIVATE))
+    app.add_handler(CommandHandler("shorts", cmd_shorts, filters=PRIVATE))
+    app.add_handler(CommandHandler("captions", cmd_captions, filters=PRIVATE))
+    app.add_handler(CommandHandler("brandvoice", cmd_brandvoice, filters=PRIVATE))
+    app.add_handler(CommandHandler("backup", cmd_backup, filters=PRIVATE))
+    app.add_handler(CommandHandler("scout", cmd_scout, filters=PRIVATE))
+    app.add_handler(MessageHandler(GROUPS & (filters.TEXT | filters.CAPTION) & ~filters.COMMAND, handle_group))
+    app.add_handler(ChatMemberHandler(on_my_membership, ChatMemberHandler.MY_CHAT_MEMBER))
     app.add_error_handler(on_error)
     print(f"Telegram: running (open to everyone, {DAILY_LIMIT} requests/day for non-owners)")
-    app.run_polling()
+    app.run_polling(allowed_updates=Update.ALL_TYPES)

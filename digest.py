@@ -321,6 +321,8 @@ def start_digest_scheduler():
     if watch.ALERT_EVERY_MIN > 0:
         schedule.every(watch.ALERT_EVERY_MIN).minutes.do(watch.run_watches, send_telegram)
     schedule.every().monday.at(talent.WEEKLY_TIME).do(talent.send_weekly, send_telegram)
+    from core import backup
+    schedule.every().day.at(os.getenv("BACKUP_TIME", "03:00")).do(backup.nightly)
     schedule.every().day.at("03:30").do(store.prune_seen)
     schedule.every().day.at("03:35").do(store.prune_activity)
     while True:

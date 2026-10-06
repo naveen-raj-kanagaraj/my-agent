@@ -83,21 +83,28 @@ def pick_model(is_owner: bool, message: str) -> tuple:
     return FAST_MODEL, text
 
 
-def build_system(uid: str, is_owner: bool, platform: str) -> list:
+def build_system(uid: str, is_owner: bool, platform: str, group: dict = None, speaker: str = "") -> list:
     """Big static prompt is cached (cheap after the first call); time, platform and the
     user's learned profile sit after it."""
     base = load_prompt("owner" if is_owner else "public")
     tz = store.user_tz(store.get_user(uid) or {})
     now = datetime.now(tz).strftime("%A, %B %d %Y, %I:%M %p")
     dynamic = f"Current time: {now} ({tz.key})\nPlatform: {platform}"
-    style = (store.get_user(uid) or {}).get("style")
-    if style:
-        dynamic += f"\n\nHOW THIS USER WANTS REPLIES (follow this): {style}"
-    known = profile.profile_block(uid)
-    if known:
-        dynamic += "\n\n" + known
+    if group:
+        dynamic += (f"\n\nYou are in a Telegram group chat called '{group.get('title') or 'a group'}'. Several people talk "
+                    f"here and you only see messages where someone mentions you or replies to you. The person asking now "
+                    f"is {speaker or 'a group member'}. Keep replies short and conversational, address them by name when "
+                    "natural, and never share anyone's private information in the group.")
+    else:
+        style = (store.get_user(uid) or {}).get("style")
+        if style:
+            dynamic += f"\n\nHOW THIS USER WANTS REPLIES (follow this): {style}"
+        known = profile.profile_block(uid)
+        if known:
+            dynamic += "\n\n" + known
+    from core import safety
     return [
-        {"type": "text", "text": base, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": base + "\n\n" + safety.RULES, "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": dynamic},
     ]
 
@@ -131,10 +138,11 @@ def _summarise_args(args: dict) -> str:
 
 
 def _exec_tool(name: str, args: dict) -> str:
+    from core import safety
     c = context.get()
     store.log_activity(c.uid, c.platform, f"tool:{name}", _summarise_args(args or {}), c.model_label)
     try:
-        return execute_tool(name, args)
+        return safety.wrap(name, execute_tool(name, args))
     except Exception as e:
         return f"Tool error: {str(e)[:200]}"
 
@@ -247,11 +255,12 @@ def provider_error(e: Exception, provider: str) -> str:
 
 def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
          name: str = "", username: str = "", chat_id: str = "", model_key: str = None,
-         think: str = None) -> str:
+         think: str = None, group: dict = None) -> str:
     """Run one turn. user_id is the platform's raw id; pass a context.Ctx to receive files
     queued by tools (ctx.outbox). model_key picks a model from core.models ('auto' or None = routing)."""
     from core import models
-    is_owner = store.is_owner(platform, user_id)
+    real_owner = store.is_owner(platform, user_id)
+    is_owner = real_owner and not group  # groups always get the public persona and tools
     uid = store.uid_for(platform, user_id)
     store.ensure_user(uid, platform, chat_id or (user_id if platform == "telegram" else ""), name, username)
     if ctx is None:
@@ -268,11 +277,14 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
     ctx.model_label = (chosen or models.registry().get(models.key_for_id(model)) or {}).get("label", model)
 
     level = (think or thinking_level()) if is_owner else "off"
-    store.log_activity(uid, platform, "message", message, ctx.model_label)
+    speaker = name or (f"@{username}" if username else "someone")
+    store.log_activity(uid, "telegram_group" if group else platform,
+                       "message", (f"[{group.get('title')}] " if group else "") + message, ctx.model_label)
 
-    history = memory.get(uid, platform)
-    history.append({"role": "user", "content": message})
-    system = build_system(uid, is_owner, platform)
+    mem_key = f"group:{group['id']}" if group else uid
+    history = memory.get(mem_key, platform)
+    history.append({"role": "user", "content": f"{speaker}: {message}" if group else message})
+    system = build_system(uid, is_owner, platform, group, speaker)
     tools = tools_for(is_owner)
 
     try:
@@ -282,8 +294,9 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
             final_text = _run_openai_compat(uid, provider, model, system, tools, history, level)
         final_text = strip_markdown(final_text)
         history.append({"role": "assistant", "content": final_text})
-        memory.save(uid, platform, history)
-        profile.note_message(uid, history)
+        memory.save(mem_key, platform, history)
+        if not group:
+            profile.note_message(uid, history)
         store.update_user(uid, last_model=ctx.model_label)
         return final_text
     except llm.BudgetExceeded:
