@@ -185,10 +185,100 @@ def friendly_error(e: Exception) -> str:
     return f"Something went wrong: {str(e)[:200]}"
 
 
+def _openai_tools(tools: list) -> list:
+    return [{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                              "parameters": t["input_schema"]}} for t in tools]
+
+
+def _run_anthropic(uid, model, system, tools, messages) -> str:
+    for _ in range(MAX_TOOL_ROUNDS + 1):
+        last_round = _ == MAX_TOOL_ROUNDS
+        response = client.messages.create(
+            _uid=uid,
+            model=model,
+            max_tokens=2048,
+            system=system,
+            tools=tools,
+            tool_choice={"type": "none"} if last_round else {"type": "auto"},
+            messages=messages,
+        )
+        if response.stop_reason == "tool_use" and not last_round:
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    try:
+                        result = execute_tool(block.name, block.input)
+                    except Exception as e:
+                        result = f"Tool error: {str(e)[:200]}"
+                    tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": tool_results})
+            continue
+        return "\n".join(
+            block.text for block in response.content if getattr(block, "type", "") == "text"
+        ).strip() or "No response."
+    return "I got stuck in a loop of tool calls. Try rephrasing."
+
+
+def _run_openai_compat(uid, provider, model, system, tools, history) -> str:
+    """ChatGPT and Gemini: same tools, OpenAI-style function calling."""
+    import json as _json
+    oc = llm.OpenAICompatClient(provider, "chat")
+    sys_text = "\n\n".join(b["text"] for b in system)
+    messages = [{"role": "system", "content": sys_text}] + [
+        {"role": m["role"], "content": m["content"] if isinstance(m["content"], str) else str(m["content"])}
+        for m in history
+    ]
+    otools = _openai_tools(tools)
+    limit_key = "max_completion_tokens" if provider == "openai" else "max_tokens"
+    for _ in range(MAX_TOOL_ROUNDS + 1):
+        last_round = _ == MAX_TOOL_ROUNDS
+        kwargs = {"model": model, "messages": messages, limit_key: 2048}
+        if not last_round:
+            kwargs.update(tools=otools, tool_choice="auto")
+        resp = oc.create(_uid=uid, **kwargs)
+        msg = resp.choices[0].message
+        calls = getattr(msg, "tool_calls", None) or []
+        if calls and not last_round:
+            messages.append({"role": "assistant", "content": msg.content or "",
+                             "tool_calls": [{"id": c.id or f"call_{i}", "type": "function",
+                                             "function": {"name": c.function.name,
+                                                          "arguments": c.function.arguments or "{}"}}
+                                            for i, c in enumerate(calls)]})
+            for i, c in enumerate(calls):
+                try:
+                    args = _json.loads(c.function.arguments or "{}")
+                    result = execute_tool(c.function.name, args)
+                except Exception as e:
+                    result = f"Tool error: {str(e)[:200]}"
+                messages.append({"role": "tool", "tool_call_id": c.id or f"call_{i}", "content": str(result)})
+            continue
+        return (msg.content or "").strip() or "No response."
+    return "I got stuck in a loop of tool calls. Try rephrasing."
+
+
+def provider_error(e: Exception, provider: str) -> str:
+    from core import alerts
+    name = {"openai": "OpenAI (ChatGPT)", "gemini": "Google (Gemini)"}.get(provider, provider)
+    msg = str(e).lower()
+    status = getattr(e, "status_code", None)
+    if status in (401, 403) or "api key" in msg or "unauthorized" in msg:
+        alerts.notify(f"{provider}_auth", f"{name} rejected the API key. Check it in .env.", 240)
+        return f"{name} rejected my API key, so that model isn't working right now. Pick another model."
+    if status == 429 or "quota" in msg or "insufficient" in msg or "billing" in msg:
+        alerts.notify(f"{provider}_quota", f"{name} says quota or billing is exhausted: {str(e)[:150]}", 240)
+        return f"{name} is out of quota or rate limited right now. Pick another model."
+    if status == 404 or "model" in msg and "not" in msg:
+        alerts.notify(f"{provider}_model", f"{name} doesn't recognise the model name in .env: {str(e)[:150]}", 240)
+        return f"That {name} model isn't available. Pick another model."
+    return f"{name} had a problem: {str(e)[:150]}. Pick another model or try again."
+
+
 def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
-         name: str = "", username: str = "", chat_id: str = "") -> str:
+         name: str = "", username: str = "", chat_id: str = "", model_key: str = None) -> str:
     """Run one turn. user_id is the platform's raw id; pass a context.Ctx to receive files
-    queued by tools (ctx.outbox)."""
+    queued by tools (ctx.outbox). model_key picks a model from core.models ('auto' or None = routing)."""
+    from core import models
     is_owner = store.is_owner(platform, user_id)
     uid = store.uid_for(platform, user_id)
     store.ensure_user(uid, platform, chat_id or (user_id if platform == "telegram" else ""), name, username)
@@ -199,51 +289,28 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
     context.set_ctx(ctx)
 
     model, message = pick_model(is_owner, message)
+    provider = "anthropic"
+    chosen = models.available().get(model_key or "")
+    if chosen:
+        model, provider = chosen["id"], chosen["provider"]
+    ctx.model_label = (chosen or models.registry().get(models.key_for_id(model)) or {}).get("label", model)
+
     history = memory.get(uid, platform)
     history.append({"role": "user", "content": message})
-
     system = build_system(uid, is_owner, platform)
     tools = tools_for(is_owner)
-    messages = history.copy()
 
     try:
-        for _ in range(MAX_TOOL_ROUNDS + 1):
-            last_round = _ == MAX_TOOL_ROUNDS
-            response = client.messages.create(
-                _uid=uid,
-                model=model,
-                max_tokens=2048,
-                system=system,
-                tools=tools,
-                tool_choice={"type": "none"} if last_round else {"type": "auto"},
-                messages=messages,
-            )
-
-            if response.stop_reason == "tool_use" and not last_round:
-                tool_results = []
-                for block in response.content:
-                    if block.type == "tool_use":
-                        try:
-                            result = execute_tool(block.name, block.input)
-                        except Exception as e:
-                            result = f"Tool error: {str(e)[:200]}"
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
-                        })
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append({"role": "user", "content": tool_results})
-                continue
-
-            final_text = "\n".join(
-                block.text for block in response.content if getattr(block, "type", "") == "text"
-            ).strip() or "No response."
-            final_text = strip_markdown(final_text)
-            history.append({"role": "assistant", "content": final_text})
-            memory.save(uid, platform, history)
-            profile.note_message(uid, history)
-            return final_text
+        if provider == "anthropic":
+            final_text = _run_anthropic(uid, model, system, tools, history.copy())
+        else:
+            final_text = _run_openai_compat(uid, provider, model, system, tools, history)
+        final_text = strip_markdown(final_text)
+        history.append({"role": "assistant", "content": final_text})
+        memory.save(uid, platform, history)
+        profile.note_message(uid, history)
+        store.update_user(uid, last_model=ctx.model_label)
+        return final_text
     except llm.BudgetExceeded:
         return ("I've reached my usage limit for today, so I'm taking a break. Try again tomorrow!"
                 if not is_owner else "You've hit your own daily budget (OWNER_DAILY_BUDGET_USD). Raise it in .env if needed.")
@@ -256,6 +323,6 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
             alerts.notify("anthropic_auth", "Anthropic rejected the API key. Check ANTHROPIC_API_KEY.", 120)
         return friendly_error(e)
     except Exception as e:
+        if provider != "anthropic":
+            return provider_error(e, provider)
         return f"Something went wrong: {str(e)[:200]}"
-
-    return "I got stuck in a loop of tool calls. Try rephrasing."

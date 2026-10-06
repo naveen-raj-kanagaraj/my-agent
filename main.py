@@ -15,6 +15,11 @@ def start_discord():
     run_discord()
 
 
+def start_dashboard():
+    from platforms.dashboard import run_dashboard
+    run_dashboard()
+
+
 def clear_legacy_data():
     """One-time wipe of the old JSON data files (replaced by data/agent.db)."""
     from core import store
@@ -36,6 +41,9 @@ if __name__ == "__main__":
         print("Starting WhatsApp...")
         w = threading.Thread(target=start_whatsapp, daemon=True)
         w.start()
+
+    if os.getenv("DASHBOARD_ENABLED", "true").lower() == "true":
+        threading.Thread(target=start_dashboard, daemon=True).start()
 
     if os.getenv("DISCORD_BOT_TOKEN"):
         print("Starting Discord...")
