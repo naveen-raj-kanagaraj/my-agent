@@ -108,7 +108,8 @@ def _init(c):
     for col, ddl in (("keywords", "TEXT DEFAULT '{}'"), ("custom_keywords", "TEXT DEFAULT '[]'"),
                      ("last_model", "TEXT DEFAULT ''"), ("default_model", "TEXT DEFAULT 'auto'"),
                      ("picker_on", "INTEGER DEFAULT 1"), ("session_model", "TEXT DEFAULT ''"),
-                     ("session_at", "REAL DEFAULT 0"), ("style", "TEXT DEFAULT ''")):
+                     ("session_at", "REAL DEFAULT 0"), ("style", "TEXT DEFAULT ''"),
+                     ("news_mode", "TEXT DEFAULT 'both'")):
         if col not in cols:
             c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
     c.commit()
@@ -229,6 +230,9 @@ def forget_user(uid: str):
         c.execute("DELETE FROM conversations WHERE key LIKE ?", (f"%|{uid}",))
         c.execute("DELETE FROM activity WHERE uid=?", (uid,))
         c.execute("DELETE FROM watches WHERE uid=?", (uid,))
+        c.execute("DELETE FROM alert_seen WHERE uid=?", (uid,))
+        for k in ("topics_pinned", "topics_offered", "tz_chosen", "live_seeded"):
+            c.execute("DELETE FROM kv WHERE key=?", (f"{k}:{uid}",))
         c.execute(
             "UPDATE users SET interests='[]', profile='', language='', msg_count=0, keywords='{}', custom_keywords='[]', style='', "
             "state=CASE WHEN uid='owner' THEN 'active' ELSE 'awaiting_interests' END WHERE uid=?",

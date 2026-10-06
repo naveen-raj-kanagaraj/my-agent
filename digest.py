@@ -65,7 +65,7 @@ def send_discord(message: str):
         print(f"Discord send error: {e}")
 
 
-def send_telegram(message: str, chat_id: str = None) -> bool:
+def send_telegram(message: str, chat_id: str = None, html: bool = False) -> bool:
     """Send via the Bot API. Returns False if the chat can't be reached (e.g. user blocked the bot)."""
     chat_id = chat_id or OWNER_TELEGRAM_ID
     if not (TELEGRAM_BOT_TOKEN and chat_id):
@@ -75,7 +75,10 @@ def send_telegram(message: str, chat_id: str = None) -> bool:
     ok = True
     for i in range(0, len(message), 4096):
         try:
-            r = requests.post(url, json={"chat_id": chat_id, "text": message[i:i + 4096]}, timeout=20)
+            body = {"chat_id": chat_id, "text": message[i:i + 4096]}
+            if html:
+                body.update(parse_mode="HTML", disable_web_page_preview=True)
+            r = requests.post(url, json=body, timeout=20)
             if not r.ok:
                 print(f"Telegram send error to {chat_id}: {r.status_code} {r.text[:200]}")
                 if r.status_code in (400, 403):
@@ -287,7 +290,8 @@ def send_user_news():
         if not store.interests(u):
             continue
         now = datetime.now(store.user_tz(u))
-        for slot in NEWS_TIMES:
+        from core.topics import slots_for
+        for slot in slots_for(u.get("news_mode") or "both", NEWS_TIMES):
             try:
                 hh, mm = map(int, slot.split(":"))
             except ValueError:
@@ -320,6 +324,10 @@ def start_digest_scheduler():
     from core import alerts, talent, watch
     if watch.ALERT_EVERY_MIN > 0:
         schedule.every(watch.ALERT_EVERY_MIN).minutes.do(watch.run_watches, send_telegram)
+    from core import topics
+    if topics.LIVE_EVERY_MIN > 0:
+        schedule.every(topics.LIVE_EVERY_MIN).minutes.do(
+            lambda: _pool.submit(topics.run_live, lambda text, cid: send_telegram(text, cid, html=True)))
     schedule.every().monday.at(talent.WEEKLY_TIME).do(talent.send_weekly, send_telegram)
     from core import backup
     schedule.every().day.at(os.getenv("BACKUP_TIME", "03:00")).do(backup.nightly)
