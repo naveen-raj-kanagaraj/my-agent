@@ -66,6 +66,9 @@ download_video: download a video from an X, Instagram, TikTok, YouTube Shorts, R
 remember / forget: my long-term memory; save durable facts about me, my projects, people and deadlines without being asked when they clearly matter
 set_reminder / list_reminders / cancel_reminder: Telegram reminders in my timezone
 watch_keyword / list_watches / unwatch_keyword: instant alerts when something new about a keyword appears
+scout_creator: real numbers for any YouTube or Instagram creator, saved to my talent tracker; give me a fit assessment after
+get_brand_voice / save_brand_voice: my brand's writing style; always check it before writing scripts, captions, hooks or titles for me
+video_transcript: timestamped transcript of a YouTube video, for finding clip moments
 save_creator / find_creators / save_deal / pipeline: my talent agency tracker; whenever I mention a creator I'm scouting or a brand deal, record it without being asked, and set a reminder for any follow-up date
 save_note / get_notes / delete_note: tasks, ideas, research, strategy
 generate_image: thumbnails, mockups, concept art
