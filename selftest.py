@@ -126,10 +126,29 @@ def voice_ready():
     from core import voice
     if not voice.available():
         raise RuntimeError("faster-whisper not installed")
+    # Make a 1-second Telegram-style voice note (Opus in Ogg) and decode it.
+    import tempfile, av, numpy as np
+    path = tempfile.mktemp(suffix=".ogg")
+    out = av.open(path, "w", format="ogg")
+    st = out.add_stream("libopus", rate=48000)
+    st.layout = "mono"
+    pcm = (0.3 * np.sin(2 * np.pi * 440 * np.arange(48000) / 48000) * 32767).astype(np.int16).reshape(1, -1)
+    for i in range(0, pcm.shape[1], 960):
+        fr = av.AudioFrame.from_ndarray(pcm[:, i:i + 960], format="s16", layout="mono")
+        fr.sample_rate = 48000
+        for p in st.encode(fr):
+            out.mux(p)
+    for p in st.encode(None):
+        out.mux(p)
+    out.close()
+    audio = voice.decode_audio(path)
+    os.unlink(path)
+    if audio.size < 15000:
+        raise RuntimeError(f"decoded only {audio.size} samples")
     if "--voice" in sys.argv:
         voice._get_model()
-        return f"model '{voice.WHISPER_MODEL}' loaded"
-    return "installed (run with --voice to load the model)"
+        return f"decoding works, model '{voice.WHISPER_MODEL}' loaded"
+    return "decoding works (run with --voice to also load the model)"
 
 
 def database():
