@@ -17,6 +17,7 @@ An Oracle Cloud "Always Free" server keeps it running all the time at no cost.
 ```
 chmod 400 ~/Downloads/ssh-key-*.key
 cd ~
+ssh -i ~/Downloads/ssh-key-*.key ubuntu@YOUR_IP 'mkdir -p ~/my-agent'
 scp -i ~/Downloads/ssh-key-*.key -r my-agent/core my-agent/platforms my-agent/*.py my-agent/requirements.txt my-agent/setup_server.sh my-agent/.env ubuntu@YOUR_IP:~/my-agent/
 scp -i ~/Downloads/ssh-key-*.key -r my-agent/data ubuntu@YOUR_IP:~/my-agent/
 ```
@@ -32,7 +33,7 @@ ssh -i ~/Downloads/ssh-key-*.key ubuntu@YOUR_IP
 cd ~/my-agent && bash setup_server.sh
 ```
 
-When it shows `active (running)`, message the bot on Telegram.
+When it shows `active (running)`, run `./venv/bin/python selftest.py` to check every service from the server, then message the bot on Telegram and send `/status`.
 
 ## Managing it
 

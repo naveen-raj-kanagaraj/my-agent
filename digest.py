@@ -9,7 +9,7 @@ from core import store
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from dotenv import load_dotenv
-import anthropic
+from core import llm
 import re
 import discord
 import asyncio
@@ -27,7 +27,7 @@ DIGEST_TO = os.getenv("DIGEST_TO", "telegram").lower()
 # Local times for the two daily briefs, and minutes between breaking-news checks
 DIGEST_TIMES = [t.strip() for t in os.getenv("DIGEST_TIMES", "08:00,19:00").split(",") if t.strip()]
 BREAKING_EVERY_MIN = int(os.getenv("BREAKING_EVERY_MIN", "60"))
-client = anthropic.Anthropic()
+client = llm.Client("digest")
 
 NEWS_TIMES = [t.strip() for t in os.getenv("NEWS_TIMES", "08:00,19:00").split(",") if t.strip()]
 RADAR_TIME = os.getenv("RADAR_TIME", "10:00")  # owner's local time; empty disables
@@ -146,6 +146,7 @@ def build_digest():
         combined += f"\n{category}:\n{data}\n"
 
     response = client.messages.create(
+        _uid="owner",
         model="claude-haiku-4-5-20251001",
         max_tokens=4000,
         messages=[{
@@ -204,6 +205,7 @@ def check_and_send_breaking():
     covered_str = " ".join(covered[-30:]).lower()
 
     response = client.messages.create(
+        _uid="owner",
         model="claude-haiku-4-5-20251001",
         max_tokens=500,
         messages=[{
@@ -234,6 +236,8 @@ def send_digest():
         print(f"Digest sent to {DIGEST_TO}.")
     except Exception as e:
         print(f"Digest error: {e}")
+        from core import alerts
+        alerts.notify("digest", f"Your scheduled briefing failed: {str(e)[:200]}", 120)
 
 
 def _next_repeat(due_utc: str, repeat: str, tzname: str):
@@ -300,6 +304,8 @@ def send_radar():
         send_telegram(build_radar())
     except Exception as e:
         print(f"Radar error: {e}")
+        from core import alerts
+        alerts.notify("radar", f"The daily radar failed: {str(e)[:200]}", 360)
 
 
 def start_digest_scheduler():
@@ -311,12 +317,20 @@ def start_digest_scheduler():
         schedule.every().day.at(RADAR_TIME).do(send_radar)
     print(f"Scheduler: owner briefs at {', '.join(DIGEST_TIMES)} to {DIGEST_TO}; breaking every {BREAKING_EVERY_MIN} min; "
           f"radar at {RADAR_TIME or 'off'}; user news at {', '.join(NEWS_TIMES)} local; reminders every 30 s")
+    from core import alerts, talent, watch
+    if watch.ALERT_EVERY_MIN > 0:
+        schedule.every(watch.ALERT_EVERY_MIN).minutes.do(watch.run_watches, send_telegram)
+    schedule.every().monday.at(talent.WEEKLY_TIME).do(talent.send_weekly, send_telegram)
+    schedule.every().day.at("03:30").do(store.prune_seen)
     while True:
+        store.kv_set("scheduler_tick", time.time())
         for job in (schedule.run_pending, send_due_reminders, send_user_news):
             try:
                 job()
             except Exception as e:
-                print(f"Scheduler error in {getattr(job, '__name__', job)}: {e}")
+                name = getattr(job, "__name__", str(job))
+                print(f"Scheduler error in {name}: {e}")
+                alerts.notify(f"sched:{name}", f"Scheduled job '{name}' failed: {str(e)[:200]}", 120)
         time.sleep(30)
 
 

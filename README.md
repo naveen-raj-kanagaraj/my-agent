@@ -11,6 +11,9 @@ What it does:
 - Voice notes, transcribed on the machine with faster-whisper (free)
 - Reminders (one-off, daily, weekdays, weekly), notes, calculator, web search
 - Image generation (owner by default)
+- Instant keyword alerts every 30 minutes from news sites, Reddit and Hacker News (free, no AI call)
+- Talent agency tracker for the owner: creators, brand deals, stages, due dates, stale-deal follow-ups, weekly Monday summary
+- Spend tracking per user and feature, a daily budget for other users, and Telegram alerts to the owner when anything breaks
 - Daily content and business radar across the owner's topics (creator economy, talent, entertainment, brands, gaming and more), from news, Reddit, X, Instagram, YouTube and competitors
 
 ## Run on a Mac
@@ -28,9 +31,9 @@ Then send `/start` to the bot on Telegram. The bot runs only while this terminal
 
 ## Telegram commands
 
-Everyone: `/start`, `/news`, `/interests <topics>`, `/newsoff`, `/newson`, `/profile`, `/forget`, `/clear`, `/help`, `/quick <q>`
+Everyone: `/start`, `/news`, `/alert <keyword>`, `/alerts`, `/unalert <id>`, `/interests <topics>`, `/keywords`, `/newsoff`, `/newson`, `/profile`, `/forget`, `/clear`, `/help`, `/quick <q>`
 
-Owner: `/deep <q>` (Sonnet 5.5), `/brief` (full briefing), `/radar` (content and business radar), `/users`, `/block <id>`, `/unblock <id>`
+Owner: `/deep <q>` (Sonnet 5.5), `/brief` (full briefing), `/radar` (content and business radar), `/pipeline` (talent tracker), `/status` (health), `/usage` (spend), `/users`, `/block <id>`, `/unblock <id>`
 
 Non-owners get `DAILY_LIMIT` requests a day (default 20) and always use Haiku 4.5. The owner has no limit; quick
 questions go to Haiku and strategy, writing and long messages to Sonnet 5.5.
@@ -39,6 +42,10 @@ questions go to Haiku and strategy, writing and long messages to Sonnet 5.5.
 
 Everything is in `data/agent.db` (SQLite): users, learned profiles, facts, notes, reminders, conversations, usage.
 Users can see their data with `/profile` and erase it with `/forget`. Never commit `data/`.
+
+## Health check
+
+`python selftest.py` checks every live service (Anthropic, Telegram, Serper, Google News, Reddit, Hacker News, links, YouTube transcripts, yt-dlp, voice, database, scheduler) and prints a fix for anything broken.
 
 ## Run 24/7
 
@@ -50,6 +57,11 @@ See DEPLOY.md (free Oracle Cloud server).
 - `core/agent.py`: system prompt and Claude tool loop
 - `core/tools.py`: web search, notes, calculator, date/time
 - `core/store.py`: SQLite storage
+- `core/llm.py`: every Claude call, with cost tracking and budgets
+- `core/alerts.py`: Telegram alerts to the owner
+- `core/watch.py`: keyword alerts
+- `core/talent.py`: talent agency tracker
+- `selftest.py`: live health check
 - `core/profile.py`: onboarding and learning about users
 - `core/news.py`: personalised news
 - `core/radar.py`: content radar
