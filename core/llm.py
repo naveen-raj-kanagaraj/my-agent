@@ -32,6 +32,10 @@ class BudgetExceeded(Exception):
 
 
 def price_for(model: str) -> tuple:
+    from core import models
+    p = models.price_for_id(model)
+    if p:
+        return p
     for prefix, p in PRICES.items():
         if model.startswith(prefix):
             return p
@@ -89,3 +93,34 @@ class Client:
         self.feature = feature
         self._client = anthropic.Anthropic()
         self.messages = _Messages(self)
+
+
+class OpenAICompatClient:
+    """ChatGPT (OpenAI) or Gemini (Google's OpenAI-compatible endpoint), with the same cost
+    tracking and budgets as Claude."""
+
+    def __init__(self, provider: str, feature: str = "chat"):
+        import openai
+        from core import models
+        self.provider = provider
+        self.feature = feature
+        if provider == "gemini":
+            self._client = openai.OpenAI(api_key=os.getenv("GEMINI_API_KEY"), base_url=models.GEMINI_BASE_URL)
+        else:
+            self._client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    def create(self, _uid: str = None, **kwargs):
+        uid = _uid or context.get().uid or "owner"
+        check_budget(uid)
+        resp = self._client.chat.completions.create(**kwargs)
+        try:
+            u = resp.usage
+            cached = getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
+            usage = {"input": (u.prompt_tokens or 0) - cached, "output": u.completion_tokens or 0,
+                     "cache_read": cached, "cache_write": 0}
+            pin, pout = price_for(kwargs.get("model", ""))
+            cost = (usage["input"] * pin + usage["output"] * pout + cached * pin * 0.1) / 1_000_000
+            store.record_spend(uid, self.feature, kwargs.get("model", ""), usage, cost)
+        except Exception as e:
+            print(f"Spend tracking failed: {e}")
+        return resp

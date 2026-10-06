@@ -10,6 +10,8 @@ What it does:
 - Reads files (PDF, DOCX, PPTX, XLSX, CSV, TXT) and images; remembers images for follow-up questions
 - Voice notes, transcribed on the machine with faster-whisper (free)
 - Reminders (one-off, daily, weekdays, weekly), notes, calculator, web search
+- Choice of model per message: Claude Haiku, Sonnet, Opus, ChatGPT and Gemini (pricier models use more of a user's daily requests)
+- Web dashboard at http://localhost:8090: active sessions, requests and spend per user, spend by model, day and feature, source health
 - Image generation (owner by default)
 - Instant keyword alerts every 30 minutes from news sites, Reddit and Hacker News (free, no AI call)
 - Talent agency tracker for the owner: creators, brand deals, stages, due dates, stale-deal follow-ups, weekly Monday summary
@@ -33,7 +35,9 @@ Then send `/start` to the bot on Telegram. The bot runs only while this terminal
 
 Everyone: `/start`, `/news`, `/alert <keyword>`, `/alerts`, `/unalert <id>`, `/interests <topics>`, `/keywords`, `/newsoff`, `/newson`, `/profile`, `/forget`, `/clear`, `/help`, `/quick <q>`
 
-Owner: `/deep <q>` (Sonnet 5.5), `/brief` (full briefing), `/radar` (content and business radar), `/pipeline` (talent tracker), `/status` (health), `/usage` (spend), `/users`, `/block <id>`, `/unblock <id>`
+Everyone also: `/model` (models and default), `/picker on|off` (choose a model before each message)
+
+Owner: `/deep <q>` (Sonnet 5.5), `/dashboard`, `/credits <balance>`, `/brief` (full briefing), `/radar` (content and business radar), `/pipeline` (talent tracker), `/status` (health), `/usage` (spend), `/users`, `/block <id>`, `/unblock <id>`
 
 Non-owners get `DAILY_LIMIT` requests a day (default 20) and always use Haiku 4.5. The owner has no limit; quick
 questions go to Haiku and strategy, writing and long messages to Sonnet 5.5.
@@ -57,7 +61,9 @@ See DEPLOY.md (free Oracle Cloud server).
 - `core/agent.py`: system prompt and Claude tool loop
 - `core/tools.py`: web search, notes, calculator, date/time
 - `core/store.py`: SQLite storage
-- `core/llm.py`: every Claude call, with cost tracking and budgets
+- `core/llm.py`: every AI call (Claude, ChatGPT, Gemini), with cost tracking and budgets
+- `core/models.py`: the models users can pick
+- `platforms/dashboard.py`: web dashboard
 - `core/alerts.py`: Telegram alerts to the owner
 - `core/watch.py`: keyword alerts
 - `core/talent.py`: talent agency tracker

@@ -53,6 +53,40 @@ def sonnet_call():
     return f"Sonnet 5.5 replied '{r.content[0].text.strip()}'"
 
 
+def _compat(provider):
+    from core import llm, models
+    m = next(m for m in models.registry().values() if m["provider"] == provider)
+    c = llm.OpenAICompatClient(provider, "selftest")
+    kw = {"model": m["id"], "messages": [{"role": "user", "content": "Reply with OK"}]}
+    kw["max_completion_tokens" if provider == "openai" else "max_tokens"] = 20
+    r = c.create(_uid="owner", **kw)
+    return f"{m['id']} replied '{(r.choices[0].message.content or '').strip()[:20]}'"
+
+
+def chatgpt():
+    if not os.getenv("OPENAI_API_KEY"):
+        return "skipped (no OPENAI_API_KEY)"
+    return _compat("openai")
+
+
+def gemini():
+    if not os.getenv("GEMINI_API_KEY"):
+        return "skipped (no GEMINI_API_KEY)"
+    return _compat("gemini")
+
+
+def dashboard():
+    import requests
+    from platforms import dashboard as d
+    try:
+        r = requests.get(f"http://127.0.0.1:{d.PORT}/api/stats", timeout=5)
+    except Exception:
+        raise RuntimeError(f"not reachable on port {d.PORT} (is the agent running?)")
+    if not r.ok:
+        raise RuntimeError(f"HTTP {r.status_code}")
+    return f"http://localhost:{d.PORT} ({r.json()['kpis']['users_total']} users)"
+
+
 def telegram():
     import requests
     r = requests.get(f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/getMe", timeout=15).json()
@@ -173,6 +207,8 @@ if __name__ == "__main__":
     check(".env keys", env_keys, "copy missing keys from .env.example into .env")
     check("Anthropic (Haiku)", anthropic_call, "run python check_keys.py; top up at console.anthropic.com")
     check("Anthropic (Sonnet 5.5)", sonnet_call, "your account may not have this model yet; tell Claude")
+    check("ChatGPT", chatgpt, "check OPENAI_API_KEY, billing at platform.openai.com, and OPENAI_MODEL", warn_only=True)
+    check("Gemini", gemini, "check GEMINI_API_KEY (aistudio.google.com) and GEMINI_MODEL", warn_only=True)
     check("Telegram bot", telegram, "get a new token from @BotFather (/mybots > API Token)")
     check("Serper web search", serper, "check credits at serper.dev")
     check("Google News", gnews, "check your internet connection")
@@ -184,6 +220,7 @@ if __name__ == "__main__":
     check("Video downloads (yt-dlp)", ytdlp, "pip install -U yt-dlp")
     check("Voice notes", voice_ready, "pip install faster-whisper", warn_only=True)
     check("Database", database, "check the data/ folder is writable")
+    check("Dashboard", dashboard, "start the agent with python main.py, then rerun", warn_only=True)
     check("Scheduler", scheduler, "start the agent with python main.py, then rerun", warn_only=True)
 
     bad = [r for r in results if r[0] == "FAIL"]
