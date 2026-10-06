@@ -25,6 +25,11 @@ DEFAULT_PRICE = (2.0, 10.0)
 PUBLIC_DAILY_BUDGET = float(os.getenv("PUBLIC_DAILY_BUDGET_USD", "0.50"))
 # Hard stop for the owner too, as a safety net against runaway loops. 0 disables.
 OWNER_DAILY_BUDGET = float(os.getenv("OWNER_DAILY_BUDGET_USD", "3.00"))
+# One person can't use more than this per day, so nobody can burn everyone else's share.
+PER_USER_DAILY = float(os.getenv("PER_USER_DAILY_USD", "0.10"))
+# When the estimated Anthropic balance (/credits) drops below this, other users pause so the owner keeps working.
+CREDIT_RESERVE = float(os.getenv("CREDIT_RESERVE_USD", "1.00"))
+LOW_BALANCE_ALERT = float(os.getenv("LOW_BALANCE_ALERT_USD", "3.00"))
 
 
 class BudgetExceeded(Exception):
@@ -63,6 +68,17 @@ def check_budget(uid: str):
                           "Raise OWNER_DAILY_BUDGET_USD in .env if that was expected.", 360)
             raise BudgetExceeded("owner")
         return
+    est = store.credit_estimate()
+    if est is not None:
+        if est["left"] < LOW_BALANCE_ALERT:
+            alerts.notify("low_balance", f"Anthropic balance is about ${est['left']:.2f}. Top up at console.anthropic.com "
+                          "> Billing, then send /credits <new balance>.", 720)
+        if est["left"] < CREDIT_RESERVE:
+            alerts.notify("reserve", f"Balance is under ${CREDIT_RESERVE:.2f}, so other users are paused and the rest "
+                          "is kept for you. Top up, then send /credits <new balance>.", 360)
+            raise BudgetExceeded("reserve")
+    if PER_USER_DAILY and store.spend_today_user(uid) >= PER_USER_DAILY:
+        raise BudgetExceeded("user")
     spent = store.spend_today(owner=False)
     if spent >= PUBLIC_DAILY_BUDGET:
         alerts.notify("public_budget", f"Other users hit today's ${PUBLIC_DAILY_BUDGET:.2f} budget. They're paused "

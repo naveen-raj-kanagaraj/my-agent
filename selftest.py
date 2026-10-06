@@ -116,7 +116,8 @@ def reddit():
     items = sources._reddit_get("/search", {"q": "India", "sort": "new", "t": "day", "limit": 5})
     if not items:
         raise RuntimeError("no posts returned")
-    return f"{len(items)} posts ({'official API' if os.getenv('REDDIT_CLIENT_ID') else 'public access'})"
+    route = {"json": "public JSON", "rss": "RSS feed (no vote counts)", "old": "old.reddit"}[sources._REDDIT_MODE["value"]]
+    return f"{len(items)} posts via {'official API' if os.getenv('REDDIT_CLIENT_ID') else route}"
 
 
 def hn():
@@ -217,7 +218,8 @@ if __name__ == "__main__":
     check("Telegram bot", telegram, "get a new token from @BotFather (/mybots > API Token)")
     check("Serper web search", serper, "check credits at serper.dev")
     check("Google News", gnews, "check your internet connection")
-    check("Reddit", reddit, "add REDDIT_CLIENT_ID/SECRET (reddit.com/prefs/apps, 'script' app)", warn_only=True)
+    check("Reddit", reddit, "every free route is blocked on this network; add REDDIT_CLIENT_ID/SECRET "
+          "(reddit.com/prefs/apps, 'script' app)", warn_only=True)
     check("Hacker News", hn, "", warn_only=True)
     check("X/Instagram/Threads", social, "needs Serper credits; or set NEWS_SOCIAL=false", warn_only=True)
     check("Read links", read_link, "check your internet connection")
