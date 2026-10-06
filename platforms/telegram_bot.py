@@ -778,6 +778,14 @@ async def cmd_pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_long(update, talent.pipeline_text())
 
 
+def _downtime_line() -> str:
+    week = [d for d in store.kv_get("downtime_log", []) if d["to"] > time.time() - 7 * 86400]
+    if not week:
+        return "Offline in the last 7 days: none recorded"
+    mins = int(sum(d["to"] - d["from"] for d in week) // 60)
+    return f"Offline in the last 7 days: {len(week)} times, {mins // 60}h {mins % 60}m total"
+
+
 def _ago(ts) -> str:
     import time as _t
     if not ts:
@@ -796,6 +804,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [
         f"Running for {up // 3600}h {up % 3600 // 60}m",
         f"Scheduler: last ran {_ago(tick)}" + ("  << STUCK?" if tick and _t.time() - tick > 300 else ""),
+        _downtime_line(),
         "",
         f"Spend today: ${store.spend_today():.3f} (you ${store.spend_today(owner=True):.3f}, others "
         f"${store.spend_today(owner=False):.3f} of ${llm.PUBLIC_DAILY_BUDGET:.2f} budget)",

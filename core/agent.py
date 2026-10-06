@@ -1,5 +1,7 @@
 import os
 import re
+import time
+
 import anthropic
 
 from core import llm
@@ -236,6 +238,29 @@ def _run_openai_compat(uid, provider, model, system, tools, history, level="off"
     return "I got stuck in a loop of tool calls. Try rephrasing."
 
 
+CLAUDE_OUT_MINUTES = 30   # after a credit error, skip Claude for this long, then try it again
+
+
+def _is_credit_error(e: Exception) -> bool:
+    m = str(e).lower()
+    return "credit balance" in m or ("billing" in m and "anthropic" in m)
+
+
+def _claude_out() -> bool:
+    at = store.kv_get("claude_out_at") or 0
+    return time.time() - at < CLAUDE_OUT_MINUTES * 60
+
+
+def _fallback_model():
+    """Cheapest ready non-Claude model, used when Anthropic credits run out."""
+    from core import models
+    ready = models.available()
+    for key in ("gemini-lite", "gemini", "gpt-luna", "gpt"):
+        if key in ready and ready[key]["provider"] != "anthropic":
+            return ready[key]
+    return None
+
+
 def provider_error(e: Exception, provider: str) -> str:
     from core import alerts
     name = {"openai": "OpenAI (ChatGPT)", "gemini": "Google (Gemini)"}.get(provider, provider)
@@ -287,10 +312,26 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
     system = build_system(uid, is_owner, platform, group, speaker)
     tools = tools_for(is_owner)
 
+    fallback = _fallback_model() if provider == "anthropic" and _claude_out() else None
+    if fallback:  # Claude credits ran out recently: go straight to the backup model
+        model, provider = fallback["id"], fallback["provider"]
+        ctx.model_label = fallback["label"]
     try:
-        if provider == "anthropic":
-            final_text = _run_anthropic(uid, model, system, tools, history.copy(), level)
-        else:
+        try:
+            if provider == "anthropic":
+                final_text = _run_anthropic(uid, model, system, tools, history.copy(), level)
+            else:
+                final_text = _run_openai_compat(uid, provider, model, system, tools, history, level)
+        except anthropic.APIError as e:
+            backup = _fallback_model()
+            if not (_is_credit_error(e) and backup):
+                raise
+            store.kv_set("claude_out_at", time.time())
+            from core import alerts
+            alerts.notify("anthropic_credits", "Anthropic credits are used up. I've switched everyone to "
+                          f"{backup['label']} until you top up at console.anthropic.com > Billing.", 120)
+            model, provider = backup["id"], backup["provider"]
+            ctx.model_label = backup["label"]
             final_text = _run_openai_compat(uid, provider, model, system, tools, history, level)
         if is_owner:
             final_text = strip_markdown(final_text)  # your prompt asks for plain text
@@ -301,16 +342,22 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
             profile.note_message(uid, history)
         store.update_user(uid, last_model=ctx.model_label)
         return final_text
-    except llm.BudgetExceeded:
-        return ("I've reached my usage limit for today, so I'm taking a break. Try again tomorrow!"
-                if not is_owner else "You've hit your own daily budget (OWNER_DAILY_BUDGET_USD). Raise it in .env if needed.")
+    except llm.BudgetExceeded as e:
+        if is_owner:
+            return "You've hit your own daily budget (OWNER_DAILY_BUDGET_USD). Raise it in .env if needed."
+        if str(e) == "user":
+            return "You've used today's free allowance. It resets at midnight. See you tomorrow!"
+        return "I'm taking a short break right now. Please try again later."
     except anthropic.APIError as e:
         from core import alerts
-        if "credit balance" in str(e).lower():
+        if _is_credit_error(e):
+            store.kv_set("claude_out_at", time.time())
             alerts.notify("anthropic_credits", "Anthropic API credits are used up. The agent can't answer anyone. "
                           "Top up at console.anthropic.com > Billing.", 120)
         elif isinstance(e, anthropic.AuthenticationError):
             alerts.notify("anthropic_auth", "Anthropic rejected the API key. Check ANTHROPIC_API_KEY.", 120)
+        if not is_owner and _is_credit_error(e):
+            return "I'm temporarily unavailable. Please try again later."
         return friendly_error(e)
     except Exception as e:
         if provider != "anthropic":
