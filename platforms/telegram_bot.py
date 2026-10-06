@@ -7,19 +7,22 @@ import asyncio
 import base64
 import logging
 import os
+import secrets
 import tempfile
+import time
+import types
 
 import fitz
 import openpyxl
 from docx import Document
 from dotenv import load_dotenv
 from pptx import Presentation
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from core import context as agent_context
-from core import alerts, downloader, llm, profile, store, voice
+from core import alerts, downloader, llm, models, profile, store, voice
 from core.agent import chat
 from core.memory import Memory
 
@@ -52,6 +55,8 @@ HELP = (
     "/alerts - your alerts, /unalert <id> to remove\n"
     "/profile - what I know about you\n"
     "/forget - erase what I know about you\n"
+    "/model - see models, set your default\n"
+    "/picker on|off - ask which model before each message\n"
     "/clear - reset this conversation\n"
     "/deep <question> - strongest model (owner)\n"
     "/quick <question> - fastest model\n"
@@ -63,6 +68,8 @@ OWNER_HELP = HELP + (
     "/users - who is using the bot today\n"
     "/status - health check: sources, spend, scheduler\n"
     "/usage - what the bot cost today and this week\n"
+    "/credits <amount> - track your Anthropic balance\n"
+    "/dashboard - link to the web dashboard\n"
     "/pipeline - talent agency pipeline\n"
     "/block <id>, /unblock <id> - moderate users\n"
 )
@@ -133,13 +140,128 @@ async def send_outbox(update: Update, ctx: agent_context.Ctx):
     ctx.outbox.clear()
 
 
-async def run_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+# ---------- model choice ----------
+
+PENDING = {}            # picker id -> waiting message
+PENDING_TTL = 30 * 60   # buttons expire after 30 minutes
+
+
+def _model_keyboard(pid: str, is_owner_: bool) -> InlineKeyboardMarkup:
+    avail = models.available()
+    buttons = [InlineKeyboardButton("Auto", callback_data=f"m:{pid}:auto")]
+    for key, m in avail.items():
+        label = m["short"] if is_owner_ else f"{m['short']} · {models.weight(key)}"
+        buttons.append(InlineKeyboardButton(label, callback_data=f"m:{pid}:{key}"))
+    rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
+    rows.append([InlineKeyboardButton("Always Auto, stop asking", callback_data=f"m:{pid}:noask")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def run_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, ask: bool = True):
+    """Answer a message. If the user has the picker on and several models exist, ask first."""
     raw, chat_id, name, username = ids(update)
+    user = store.get_user(store.uid_for("telegram", raw)) or {}
+    if ask and user.get("picker_on", 1) and len(models.available()) > 1:
+        now = time.time()
+        for k in [k for k, v in PENDING.items() if now - v["ts"] > PENDING_TTL]:
+            PENDING.pop(k, None)
+        pid = secrets.token_urlsafe(6)
+        PENDING[pid] = {"text": text, "update": update, "raw": raw, "ts": now}
+        note = "" if user.get("uid") == "owner" else f"\n(numbers = requests used; you have {max(0, DAILY_LIMIT - store.usage_today(user['uid']))} left today)"
+        await update.message.reply_text("Which model should answer?" + note,
+                                        reply_markup=_model_keyboard(pid, user.get("uid") == "owner"))
+        return
+    await execute_chat(update, context, text, user.get("default_model") or "auto")
+
+
+async def execute_chat(update, context, text: str, model_key: str, status_msg=None):
+    raw, chat_id, name, username = ids(update)
+    uid = store.uid_for("telegram", raw)
+    if model_key not in ("auto", "") and model_key not in models.available():
+        model_key = "auto"
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     ctx = agent_context.Ctx()
-    reply = await asyncio.to_thread(chat, raw, "telegram", text, ctx, name, username, chat_id)
-    await send_long(update, reply)
+    reply = await asyncio.to_thread(chat, raw, "telegram", text, ctx, name, username, chat_id, model_key)
+    if status_msg is not None:
+        try:
+            await status_msg.edit_text(f"Answered by {ctx.model_label}")
+        except Exception:
+            pass
+    footer = f"\n\n({ctx.model_label})" if ctx.model_label and model_key not in ("auto", "") else ""
+    await send_long(update, reply + footer)
     await send_outbox(update, ctx)
+
+
+async def on_model_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    try:
+        _, pid, key = q.data.split(":", 2)
+    except ValueError:
+        await q.answer()
+        return
+    pending = PENDING.get(pid)
+    if not pending:
+        await q.answer("That choice expired. Send your message again.", show_alert=True)
+        return
+    if str(q.from_user.id) != pending["raw"]:
+        await q.answer("This isn't your message.", show_alert=True)
+        return
+    uid = store.uid_for("telegram", pending["raw"])
+    if key == "noask":
+        store.update_user(uid, picker_on=0, default_model="auto")
+        key = "auto"
+    if key != "auto" and key not in models.available():
+        await q.answer("That model isn't set up right now.", show_alert=True)
+        return
+    if uid != "owner" and key != "auto":
+        extra = models.weight(key) - 1
+        if extra and store.usage_today(uid) + extra > DAILY_LIMIT:
+            await q.answer(f"Not enough requests left today for {models.registry()[key]['short']}. "
+                           "Pick Auto or a cheaper model.", show_alert=True)
+            return
+        for _ in range(extra):
+            store.use_one(uid)
+    PENDING.pop(pid, None)
+    label = "Auto" if key == "auto" else models.registry()[key]["label"]
+    await q.answer()
+    try:
+        await q.edit_message_text(f"{label} is thinking..." + ("\n(Stopped asking. Turn it back on with /picker on)" if q.data.endswith(":noask") else ""))
+    except Exception:
+        pass
+    await execute_chat(pending["update"], context, pending["text"], key, q.message)
+
+
+async def cmd_model_default(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if not user:
+        return
+    avail = models.available()
+    arg = (" ".join(context.args) or "").lower().strip()
+    if arg:
+        key = next((k for k, m in avail.items() if arg in (k, m["short"].lower())), "auto" if arg == "auto" else None)
+        if not key:
+            await update.message.reply_text("Choose one of: auto, " + ", ".join(avail))
+            return
+        store.update_user(user["uid"], default_model=key)
+        await update.message.reply_text(f"Default model: {key}. It's used when the picker is off (/picker off).")
+        return
+    lines = [f"{k}: {m['label']}" + ("" if user["uid"] == "owner" else f" (uses {models.weight(k)} request{'s' if models.weight(k) > 1 else ''})")
+             for k, m in avail.items()]
+    await update.message.reply_text(
+        "Models available:\n" + "\n".join(lines) +
+        f"\n\nDefault: {user.get('default_model') or 'auto'}. Picker before each message: "
+        f"{'on' if user.get('picker_on', 1) else 'off'}.\nSet default: /model sonnet   Toggle picker: /picker on|off")
+
+
+async def cmd_picker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if not user:
+        return
+    on = (" ".join(context.args) or "on").lower().startswith("on")
+    store.update_user(user["uid"], picker_on=1 if on else 0)
+    await update.message.reply_text(
+        "I'll ask which model to use before each message." if on else
+        f"Picker off. I'll use your default model ({user.get('default_model') or 'auto'}); change it with /model.")
 
 
 # ---------- onboarding ----------
@@ -317,6 +439,9 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Spend today: ${store.spend_today():.3f} (you ${store.spend_today(owner=True):.3f}, others "
         f"${store.spend_today(owner=False):.3f} of ${llm.PUBLIC_DAILY_BUDGET:.2f} budget)",
         f"Serper searches today: {store.counter('serper')}",
+        (f"Anthropic credits left (estimate): ${store.credit_estimate()['left']:.2f}" if store.credit_estimate()
+         else "Anthropic credits: unknown (send /credits <balance>)"),
+        "Models: " + ", ".join(m["short"] for m in models.available().values()),
         "",
     ]
     users = store.all_users()
@@ -352,6 +477,35 @@ async def cmd_usage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     week = store.spend_breakdown(7)["total"]
     out.append(f"At this rate: about ${week / 7 * 30:.2f} a month.")
     await send_long(update, "\n".join(out))
+
+
+async def cmd_credits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    arg = " ".join(context.args).replace("$", "").strip()
+    if arg:
+        try:
+            amount = float(arg)
+        except ValueError:
+            await update.message.reply_text("Usage: /credits 6.54 (your current balance at console.anthropic.com > Billing)")
+            return
+        store.kv_set("credit_baseline", {"amount": amount, "set_at": store.iso(store.now_utc())})
+        await update.message.reply_text(f"Got it: ${amount:.2f}. I'll subtract Claude spend from here on. "
+                                        "Update it whenever you top up.")
+        return
+    est = store.credit_estimate()
+    await update.message.reply_text(
+        f"Estimated Anthropic credits left: ${est['left']:.2f} (from ${est['entered']:.2f} entered)." if est else
+        "Tell me your balance first: /credits 6.54 (from console.anthropic.com > Billing).")
+
+
+async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    from platforms import dashboard
+    await update.message.reply_text(
+        f"Dashboard: http://localhost:{dashboard.PORT}\nOpen it in a browser on the computer running the agent. "
+        "It shows active sessions, each user's requests and spend, spend by model and day, and source health.")
 
 
 async def on_error(update, context: ContextTypes.DEFAULT_TYPE):
@@ -440,10 +594,10 @@ async def cmd_block(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/deep and /quick: pass the whole text (with the prefix) to the agent."""
+    """/deep and /quick: skip the picker and pass the whole text (with the prefix) to the agent."""
     user = await gate(update)
     if user:
-        await run_chat(update, context, update.message.text)
+        await execute_chat(update, context, update.message.text, "auto")
 
 
 # ---------- messages ----------
@@ -665,12 +819,17 @@ def run_telegram():
     app.add_handler(CommandHandler("users", cmd_users))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("usage", cmd_usage))
+    app.add_handler(CommandHandler("credits", cmd_credits))
+    app.add_handler(CommandHandler("dashboard", cmd_dashboard))
     app.add_handler(CommandHandler("pipeline", cmd_pipeline))
     app.add_handler(CommandHandler("alert", cmd_alert))
     app.add_handler(CommandHandler("alerts", cmd_alerts))
     app.add_handler(CommandHandler("unalert", cmd_unalert))
     app.add_handler(CommandHandler(["block", "unblock"], cmd_block))
     app.add_handler(CommandHandler(["deep", "quick"], cmd_model))
+    app.add_handler(CommandHandler("model", cmd_model_default))
+    app.add_handler(CommandHandler("picker", cmd_picker))
+    app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
