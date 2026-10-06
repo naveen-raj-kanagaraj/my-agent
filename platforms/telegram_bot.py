@@ -56,7 +56,8 @@ HELP = (
     "/profile - what I know about you\n"
     "/forget - erase what I know about you\n"
     "/model - see models, set your default\n"
-    "/picker on|off - ask which model before each message\n"
+    "/switch - pick a different model\n"
+    "/picker on|off - ask which model at the start of each conversation\n"
     "/clear - reset this conversation\n"
     "/deep <question> - strongest model (owner)\n"
     "/quick <question> - fastest model\n"
@@ -144,15 +145,43 @@ async def send_outbox(update: Update, ctx: agent_context.Ctx):
 
 PENDING = {}            # picker id -> waiting message
 PENDING_TTL = 30 * 60   # buttons expire after 30 minutes
+# After picking a model, keep using it until the user is quiet this long (then ask again).
+SESSION_HOURS = float(os.getenv("PICKER_SESSION_HOURS", "2"))
+
+
+def session_model(user: dict) -> str:
+    """The model chosen earlier in this conversation, if the user hasn't gone quiet since."""
+    key = user.get("session_model") or ""
+    if key and time.time() - (user.get("session_at") or 0) < SESSION_HOURS * 3600:
+        if key == "auto" or key in models.available():
+            return key
+    return ""
+
+
+def _charge_extra(uid: str, key: str) -> bool:
+    """Pricier models use more daily requests (the first one was counted on arrival)."""
+    if uid == "owner" or key in ("auto", ""):
+        return True
+    extra = models.weight(key) - 1
+    if extra and store.usage_today(uid) + extra > DAILY_LIMIT:
+        return False
+    for _ in range(extra):
+        store.use_one(uid)
+    return True
 
 
 def _model_keyboard(pid: str, is_owner_: bool) -> InlineKeyboardMarkup:
-    avail = models.available()
-    buttons = [InlineKeyboardButton("Auto", callback_data=f"m:{pid}:auto")]
-    for key, m in avail.items():
-        label = m["short"] if is_owner_ else f"{m['short']} · {models.weight(key)}"
+    """Every model, with its version. Ones that aren't connected yet say so."""
+    rows = [[InlineKeyboardButton("Auto (picks for you)", callback_data=f"m:{pid}:auto")]]
+    buttons = []
+    for key, m in models.registry().items():
+        label = m["label"]
+        if not is_owner_:
+            label += f" · {models.weight(key)}"
+        if not models.is_ready(key):
+            label += " (not set up)"
         buttons.append(InlineKeyboardButton(label, callback_data=f"m:{pid}:{key}"))
-    rows = [buttons[i:i + 3] for i in range(0, len(buttons), 3)]
+    rows += [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
     rows.append([InlineKeyboardButton("Always Auto, stop asking", callback_data=f"m:{pid}:noask")])
     return InlineKeyboardMarkup(rows)
 
@@ -160,8 +189,15 @@ def _model_keyboard(pid: str, is_owner_: bool) -> InlineKeyboardMarkup:
 async def run_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, ask: bool = True):
     """Answer a message. If the user has the picker on and several models exist, ask first."""
     raw, chat_id, name, username = ids(update)
-    user = store.get_user(store.uid_for("telegram", raw)) or {}
-    if ask and user.get("picker_on", 1) and len(models.available()) > 1:
+    uid = store.uid_for("telegram", raw)
+    user = store.get_user(uid) or {}
+    if ask and user.get("picker_on", 1):
+        current = session_model(user)
+        if current:
+            if _charge_extra(uid, current):
+                await execute_chat(update, context, text, current)
+                return
+            store.update_user(uid, session_model="")  # can't afford it any more: ask again
         now = time.time()
         for k in [k for k, v in PENDING.items() if now - v["ts"] > PENDING_TTL]:
             PENDING.pop(k, None)
@@ -171,7 +207,10 @@ async def run_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str
         await update.message.reply_text("Which model should answer?" + note,
                                         reply_markup=_model_keyboard(pid, user.get("uid") == "owner"))
         return
-    await execute_chat(update, context, text, user.get("default_model") or "auto")
+    key = user.get("default_model") or "auto"
+    if not _charge_extra(uid, key):
+        key = "auto"
+    await execute_chat(update, context, text, key)
 
 
 async def execute_chat(update, context, text: str, model_key: str, status_msg=None):
@@ -179,6 +218,9 @@ async def execute_chat(update, context, text: str, model_key: str, status_msg=No
     uid = store.uid_for("telegram", raw)
     if model_key not in ("auto", "") and model_key not in models.available():
         model_key = "auto"
+    user = store.get_user(uid) or {}
+    if user.get("session_model"):
+        store.update_user(uid, session_at=time.time())  # keep the conversation's model alive
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     ctx = agent_context.Ctx()
     reply = await asyncio.to_thread(chat, raw, "telegram", text, ctx, name, username, chat_id, model_key)
@@ -187,7 +229,8 @@ async def execute_chat(update, context, text: str, model_key: str, status_msg=No
             await status_msg.edit_text(f"Answered by {ctx.model_label}")
         except Exception:
             pass
-    footer = f"\n\n({ctx.model_label})" if ctx.model_label and model_key not in ("auto", "") else ""
+    footer = (f"\n\n({ctx.model_label} · /switch to change)"
+              if ctx.model_label and model_key not in ("auto", "") else "")
     await send_long(update, reply + footer)
     await send_outbox(update, ctx)
 
@@ -210,22 +253,24 @@ async def on_model_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if key == "noask":
         store.update_user(uid, picker_on=0, default_model="auto")
         key = "auto"
-    if key != "auto" and key not in models.available():
-        await q.answer("That model isn't set up right now.", show_alert=True)
+    if key != "auto" and key not in models.registry():
+        await q.answer("Unknown model.", show_alert=True)
         return
-    if uid != "owner" and key != "auto":
-        extra = models.weight(key) - 1
-        if extra and store.usage_today(uid) + extra > DAILY_LIMIT:
-            await q.answer(f"Not enough requests left today for {models.registry()[key]['short']}. "
-                           "Pick Auto or a cheaper model.", show_alert=True)
-            return
-        for _ in range(extra):
-            store.use_one(uid)
+    if key != "auto" and not models.is_ready(key):
+        await q.answer(models.setup_hint(key), show_alert=True)
+        return
+    if not _charge_extra(uid, key):
+        await q.answer(f"Not enough requests left today for {models.registry()[key]['short']}. "
+                       "Pick Auto or a cheaper model.", show_alert=True)
+        return
+    store.update_user(uid, session_model=key, session_at=time.time())
     PENDING.pop(pid, None)
     label = "Auto" if key == "auto" else models.registry()[key]["label"]
     await q.answer()
     try:
-        await q.edit_message_text(f"{label} is thinking..." + ("\n(Stopped asking. Turn it back on with /picker on)" if q.data.endswith(":noask") else ""))
+        await q.edit_message_text(
+            f"{label} is thinking..." + ("\n(Stopped asking. Turn it back on with /picker on)" if q.data.endswith(":noask")
+                                         else f"\nI'll keep using it for this conversation. /switch to change."))
     except Exception:
         pass
     await execute_chat(pending["update"], context, pending["text"], key, q.message)
@@ -240,17 +285,34 @@ async def cmd_model_default(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if arg:
         key = next((k for k, m in avail.items() if arg in (k, m["short"].lower())), "auto" if arg == "auto" else None)
         if not key:
+            if arg in models.registry():
+                await update.message.reply_text(models.setup_hint(arg))
+                return
             await update.message.reply_text("Choose one of: auto, " + ", ".join(avail))
             return
         store.update_user(user["uid"], default_model=key)
         await update.message.reply_text(f"Default model: {key}. It's used when the picker is off (/picker off).")
         return
     lines = [f"{k}: {m['label']}" + ("" if user["uid"] == "owner" else f" (uses {models.weight(k)} request{'s' if models.weight(k) > 1 else ''})")
-             for k, m in avail.items()]
+             + ("" if models.is_ready(k) else " - not set up") for k, m in models.registry().items()]
     await update.message.reply_text(
-        "Models available:\n" + "\n".join(lines) +
+        "Models:\n" + "\n".join(lines) +
         f"\n\nDefault: {user.get('default_model') or 'auto'}. Picker before each message: "
         f"{'on' if user.get('picker_on', 1) else 'off'}.\nSet default: /model sonnet   Toggle picker: /picker on|off")
+
+
+async def cmd_switch(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if not user:
+        return
+    store.update_user(user["uid"], session_model="", picker_on=1)
+    text = " ".join(context.args).strip()
+    if text:
+        user = await gate(update)
+        if user:
+            await run_chat(update, context, text)
+        return
+    await update.message.reply_text("OK. I'll ask which model to use on your next message.")
 
 
 async def cmd_picker(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -260,7 +322,7 @@ async def cmd_picker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     on = (" ".join(context.args) or "on").lower().startswith("on")
     store.update_user(user["uid"], picker_on=1 if on else 0)
     await update.message.reply_text(
-        "I'll ask which model to use before each message." if on else
+        f"I'll ask which model to use when a conversation starts (after {SESSION_HOURS:g}h of quiet)." if on else
         f"Picker off. I'll use your default model ({user.get('default_model') or 'auto'}); change it with /model.")
 
 
@@ -671,7 +733,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         await update.message.reply_text("I couldn't hear anything in that voice note.")
         return
-    await update.message.reply_text(f"You said: {text}")
     await process_text(update, context, user, text)
 
 
@@ -829,6 +890,7 @@ def run_telegram():
     app.add_handler(CommandHandler(["deep", "quick"], cmd_model))
     app.add_handler(CommandHandler("model", cmd_model_default))
     app.add_handler(CommandHandler("picker", cmd_picker))
+    app.add_handler(CommandHandler("switch", cmd_switch))
     app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
