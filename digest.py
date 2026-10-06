@@ -31,7 +31,29 @@ client = llm.Client("digest")
 
 NEWS_TIMES = [t.strip() for t in os.getenv("NEWS_TIMES", "08:00,19:00").split(",") if t.strip()]
 RADAR_TIME = os.getenv("RADAR_TIME", "10:00")  # owner's local time; empty disables
-NEWS_WINDOW_MIN = 90  # if the Mac was asleep at 8:00, still send until 9:30
+NEWS_WINDOW_MIN = int(os.getenv("NEWS_CATCHUP_MIN", "180"))  # if the bot was down at 8:00, still send until 11:00
+OFFLINE_ALERT_MIN = 10
+
+
+def report_downtime(now: float = None):
+    """On start-up, tell the owner how long the bot was offline (Mac asleep, Wi-Fi down, crash)."""
+    now = now or time.time()
+    last = store.kv_get("scheduler_tick")
+    if not last or now - last < OFFLINE_ALERT_MIN * 60:
+        return None
+    mins = int((now - last) // 60)
+    tz = store.user_tz({"timezone": store.OWNER_TZ})
+    frm = datetime.fromtimestamp(last, tz).strftime("%a %I:%M %p")
+    to = datetime.fromtimestamp(now, tz).strftime("%I:%M %p")
+    dur = f"{mins // 60}h {mins % 60}m" if mins >= 60 else f"{mins} min"
+    log = (store.kv_get("downtime_log", []) + [{"from": last, "to": now}])[-20:]
+    store.kv_set("downtime_log", log)
+    text = (f"I was offline for {dur} ({frm} to {to}). Reminders that came due are being sent now, and news "
+            f"briefs missed in the last {NEWS_WINDOW_MIN // 60}h will catch up. Live updates and messages sent to me "
+            "while I was down were not answered.")
+    from core import alerts
+    alerts.send_owner(text)
+    return text
 
 
 def load_covered_news() -> list:
@@ -313,6 +335,10 @@ def send_radar():
 
 
 def start_digest_scheduler():
+    try:
+        report_downtime()
+    except Exception as e:
+        print(f"Downtime report failed: {e}")
     for t in DIGEST_TIMES:
         schedule.every().day.at(t).do(send_digest)
     if BREAKING_EVERY_MIN > 0:

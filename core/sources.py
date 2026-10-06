@@ -41,6 +41,8 @@ SOCIAL = os.getenv("NEWS_SOCIAL", "true").lower() == "true"      # X/IG/Threads 
 YOUTUBE = os.getenv("NEWS_YOUTUBE", "true").lower() == "true"
 FEEDS = [f.strip() for f in os.getenv("NEWS_FEEDS", "").split(",") if f.strip()]
 
+BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 "
+              "(KHTML, like Gecko) Version/17.0 Safari/605.1.15")
 _cache = {}
 _lock = threading.Lock()
 # Per-source health for /status: {kind: {"ok": ts, "fail": ts, "err": str, "fails": consecutive}}
@@ -73,7 +75,7 @@ def _cached(key, fn):
             from core import alerts
             hint = ""
             if kind in ("reddit", "subreddit") and ("403" in err or "429" in err):
-                hint = " Reddit may be blocking this network; add REDDIT_CLIENT_ID/SECRET to .env."
+                hint = " Reddit is blocking this network on every free route; add REDDIT_CLIENT_ID/SECRET to .env."
             alerts.notify(f"source:{kind}", f"{SOURCE_NAMES.get(kind, kind)} has failed {fails} times in a row "
                           f"({err[:120]}). News still works from the other sources.{hint}", 360)
     with _lock:
@@ -163,16 +165,19 @@ def _reddit_oauth():
     return _reddit_token["value"]
 
 
-def _reddit_get(path: str, params: dict) -> list:
-    token = _reddit_oauth()
-    if token:
-        r = requests.get(f"https://oauth.reddit.com{path}", params=params,
-                         headers={"User-Agent": UA, "Authorization": f"bearer {token}"}, timeout=15)
-    else:
-        r = requests.get(f"https://www.reddit.com{path}.json", params=params, headers={"User-Agent": UA}, timeout=15)
+_REDDIT_MODE = {"value": "json"}   # json -> rss -> old: remembers the first route that works on this network
+ATOM = "{http://www.w3.org/2005/Atom}"
+
+
+def _reddit_json(host: str, path: str, params: dict) -> list:
+    r = requests.get(f"https://{host}{path}.json", params=params, headers={"User-Agent": UA}, timeout=15)
     r.raise_for_status()
+    return _reddit_posts(r.json())
+
+
+def _reddit_posts(data: dict) -> list:
     out = []
-    for c in r.json().get("data", {}).get("children", []):
+    for c in data.get("data", {}).get("children", []):
         p = c["data"]
         if p.get("over_18") or p.get("stickied"):
             continue
@@ -181,6 +186,48 @@ def _reddit_get(path: str, params: dict) -> list:
             "Reddit", datetime.fromtimestamp(p.get("created_utc", 0), timezone.utc),
             p.get("selftext", ""), p.get("score", 0) + 2 * p.get("num_comments", 0)))
     return out
+
+
+def _reddit_rss(path: str, params: dict) -> list:
+    """Reddit's RSS feeds are often allowed where the JSON API is blocked. No scores, so engagement is 0."""
+    r = requests.get(f"https://www.reddit.com{path}.rss", params=params,
+                     headers={"User-Agent": BROWSER_UA}, timeout=15)
+    r.raise_for_status()
+    out = []
+    for e in ET.fromstring(r.content).iter(ATOM + "entry"):
+        link = e.find(ATOM + "link")
+        cat = e.find(ATOM + "category")
+        sub = (cat.get("label") or "r/" + cat.get("term", "")) if cat is not None else "Reddit"
+        out.append(_item(e.findtext(ATOM + "title"), link.get("href") if link is not None else "",
+                         sub, "Reddit", _parse_date(e.findtext(ATOM + "published") or e.findtext(ATOM + "updated")),
+                         e.findtext(ATOM + "content") or ""))
+    return out
+
+
+def _reddit_get(path: str, params: dict) -> list:
+    token = _reddit_oauth()
+    if token:
+        r = requests.get(f"https://oauth.reddit.com{path}", params=params,
+                         headers={"User-Agent": UA, "Authorization": f"bearer {token}"}, timeout=15)
+        r.raise_for_status()
+        return _reddit_posts(r.json())
+    routes = {"json": lambda: _reddit_json("www.reddit.com", path, params),
+              "rss": lambda: _reddit_rss(path, params),
+              "old": lambda: _reddit_json("old.reddit.com", path, params)}
+    order = [_REDDIT_MODE["value"]] + [m for m in routes if m != _REDDIT_MODE["value"]]
+    last = None
+    for mode in order:
+        try:
+            out = routes[mode]()
+            if mode != _REDDIT_MODE["value"]:
+                print(f"Reddit: switched to the {mode} route")
+                _REDDIT_MODE["value"] = mode
+            return out
+        except requests.HTTPError as e:
+            last = e
+            if e.response is None or e.response.status_code not in (403, 429):
+                raise
+    raise last
 
 
 def reddit(query: str) -> list:

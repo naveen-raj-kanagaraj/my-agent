@@ -406,6 +406,12 @@ def spend_today(owner: bool = None) -> float:
         return conn().execute(q, (owner_today(),)).fetchone()["c"]
 
 
+def spend_today_user(uid: str) -> float:
+    with _lock:
+        return conn().execute("SELECT COALESCE(SUM(cost),0) AS c FROM spend WHERE day=? AND uid=?",
+                              (owner_today(), uid)).fetchone()["c"]
+
+
 def spend_breakdown(days: int = 1) -> dict:
     from datetime import timedelta as _td
     start = (datetime.now(ZoneInfo(OWNER_TZ)) - _td(days=days - 1)).strftime("%Y-%m-%d")
