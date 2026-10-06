@@ -29,7 +29,7 @@ def _serper(endpoint: str, q: str, num: int = 8) -> list:
         r = requests.post(
             f"https://google.serper.dev/{endpoint}",
             headers={"X-API-KEY": os.getenv("SERPER_API_KEY", ""), "Content-Type": "application/json"},
-            json={"q": q, "num": num, "gl": "in", "tbs": "qdr:w"},
+            json={"q": q, "num": num, "gl": "in", "tbs": "qdr:d"},
             timeout=15,
         )
         return r.json().get(endpoint, []) if r.ok else []
@@ -37,19 +37,15 @@ def _serper(endpoint: str, q: str, num: int = 8) -> list:
         return []
 
 
-def _reddit_top(sub: str) -> list:
-    try:
-        r = requests.get(
-            f"https://www.reddit.com/r/{sub}/top.json?t=day&limit=8",
-            headers={"User-Agent": "pesagent-radar/1.0"}, timeout=15)
-        if not r.ok:
-            return []
-        return [
-            f"r/{sub}: {p['data']['title']} ({p['data']['score']} upvotes, {p['data']['num_comments']} comments)"
-            for p in r.json()["data"]["children"]
-        ]
-    except Exception:
-        return []
+def _reddit_latest(sub: str) -> list:
+    out = []
+    for it in sources.subreddit_latest(sub):
+        age = ""
+        if it.get("published"):
+            mins = int((datetime.now(it["published"].tzinfo) - it["published"]).total_seconds() // 60)
+            age = f"{mins // 60}h ago" if mins >= 60 else f"{mins}m ago"
+        out.append(f"{it['source']} ({age}, {it['engagement']} engagement): {it['title']}")
+    return out
 
 
 def _topic_keywords(topics: list) -> dict:
@@ -75,7 +71,7 @@ def build_radar() -> str:
         items = sources.gather(t, kw.get(t, []), "in", limit=5)
         lines += [f"[{t}] " + _fmt(i)[2:] for i in items]
     for sub in SUBREDDITS:
-        lines += _reddit_top(sub)
+        lines += _reddit_latest(sub)
     for c in COMPETITORS:
         for v in _serper("videos", c, 4):
             lines.append(f"COMPETITOR {c}: {v.get('title')} ({v.get('date', '')})")
@@ -93,7 +89,7 @@ def build_radar() -> str:
             "and influencers, entertainment, culture, brands and sponsorships, platforms, business, gaming.\n"
             f"What we know about the founder: {owner.get('profile') or 'n/a'}\n\n"
             "From today's signals below, write a content radar. Plain text only, no markdown or asterisks.\n"
-            "Section 1, 'What's moving': the 5 strongest trends, one or two sentences each, with why they're rising now.\n"
+            "Section 1, 'What's moving': the 5 strongest trends, favouring what surfaced in the last few hours, one or two sentences each, with why they're rising now.\n"
             "Section 2, 'Content to make': 5 ideas built to scale into a series, spread across categories (not all gaming). For each give: Hook (first 3 seconds or "
             "headline), Core idea, Format (short, long, series, live), Distribution angle (platform-specific edge), and "
             "Why now. Prefer angles competitors are missing.\n"
