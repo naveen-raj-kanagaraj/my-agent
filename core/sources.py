@@ -8,8 +8,8 @@ Sources (free unless noted):
   YouTube          - recent videos (Serper, 1 credit per query)
   Your own RSS feeds - NEWS_FEEDS in .env (comma-separated URLs)
 
-Every item is scored against the user's keywords: title hits count most, then snippet hits,
-then recency and engagement. Near-duplicate stories across sources are merged.
+Every item is scored against the user's keywords: title hits count most, then how recent it is
+(newest first), then snippet hits and engagement. Near-duplicate stories across sources are merged.
 """
 import html
 import math
@@ -25,8 +25,9 @@ from urllib.parse import quote_plus, urlparse
 import requests
 
 UA = "pesagent-news/1.0 (personal news assistant)"
-CACHE_SECONDS = 2 * 3600
-MAX_AGE_HOURS = 36
+# How far back to look, and how long to reuse a search before checking again.
+MAX_AGE_HOURS = int(os.getenv("NEWS_WINDOW_HOURS", "24"))
+CACHE_SECONDS = int(os.getenv("NEWS_CACHE_MINUTES", "30")) * 60
 
 SOCIAL = os.getenv("NEWS_SOCIAL", "true").lower() == "true"      # X/IG/Threads via Google index
 YOUTUBE = os.getenv("NEWS_YOUTUBE", "true").lower() == "true"
@@ -101,7 +102,8 @@ def google_news(query: str, region: str = "us") -> list:
     hl, gl, ceid = GN_LOCALE.get(region, GN_LOCALE["us"])
 
     def fetch():
-        url = (f"https://news.google.com/rss/search?q={quote_plus(query + ' when:1d')}"
+        window = f"{MAX_AGE_HOURS}h" if MAX_AGE_HOURS <= 24 else f"{math.ceil(MAX_AGE_HOURS / 24)}d"
+        url = (f"https://news.google.com/rss/search?q={quote_plus(query + ' when:' + window)}"
                f"&hl={hl}&gl={gl}&ceid={ceid}")
         r = requests.get(url, headers={"User-Agent": UA}, timeout=15)
         r.raise_for_status()
@@ -114,7 +116,8 @@ def google_news(query: str, region: str = "us") -> list:
                 title = title[: -len(source) - 3]
             out.append(_item(title, it.findtext("link"), source, "News",
                              _parse_date(it.findtext("pubDate")), it.findtext("description") or ""))
-        return out[:15]
+        out.sort(key=lambda i: i["published"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        return out[:20]  # newest first
     return _cached(("gnews", query, region), fetch)
 
 
@@ -132,34 +135,55 @@ def _reddit_oauth():
     return _reddit_token["value"]
 
 
+def _reddit_get(path: str, params: dict) -> list:
+    token = _reddit_oauth()
+    if token:
+        r = requests.get(f"https://oauth.reddit.com{path}", params=params,
+                         headers={"User-Agent": UA, "Authorization": f"bearer {token}"}, timeout=15)
+    else:
+        r = requests.get(f"https://www.reddit.com{path}.json", params=params, headers={"User-Agent": UA}, timeout=15)
+    r.raise_for_status()
+    out = []
+    for c in r.json().get("data", {}).get("children", []):
+        p = c["data"]
+        if p.get("over_18") or p.get("stickied"):
+            continue
+        out.append(_item(
+            p.get("title"), "https://www.reddit.com" + p.get("permalink", ""), f"r/{p.get('subreddit')}",
+            "Reddit", datetime.fromtimestamp(p.get("created_utc", 0), timezone.utc),
+            p.get("selftext", ""), p.get("score", 0) + 2 * p.get("num_comments", 0)))
+    return out
+
+
 def reddit(query: str) -> list:
+    """Newest matching posts across all of Reddit, plus what's rising today."""
     def fetch():
-        token = _reddit_oauth()
-        params = {"q": query, "sort": "top", "t": "day", "limit": 15, "type": "link"}
-        if token:
-            r = requests.get("https://oauth.reddit.com/search", params=params,
-                             headers={"User-Agent": UA, "Authorization": f"bearer {token}"}, timeout=15)
-        else:
-            r = requests.get("https://www.reddit.com/search.json", params=params,
-                             headers={"User-Agent": UA}, timeout=15)
-        r.raise_for_status()
-        out = []
-        for c in r.json().get("data", {}).get("children", []):
-            p = c["data"]
-            if p.get("over_18"):
-                continue
-            out.append(_item(
-                p.get("title"), "https://www.reddit.com" + p.get("permalink", ""), f"r/{p.get('subreddit')}",
-                "Reddit", datetime.fromtimestamp(p.get("created_utc", 0), timezone.utc),
-                p.get("selftext", ""), p.get("score", 0) + 2 * p.get("num_comments", 0)))
-        return out
+        base = {"q": query, "t": "day", "limit": 20, "type": "link"}
+        newest = _reddit_get("/search", {**base, "sort": "new"})
+        try:
+            rising = _reddit_get("/search", {**base, "sort": "hot", "limit": 10})
+        except Exception:
+            rising = []
+        return newest + rising
     return _cached(("reddit", query, ""), fetch)
+
+
+def subreddit_latest(sub: str, limit: int = 15) -> list:
+    """Newest posts in one subreddit, plus its current hot posts."""
+    def fetch():
+        newest = _reddit_get(f"/r/{sub}/new", {"limit": limit})
+        try:
+            hot = _reddit_get(f"/r/{sub}/hot", {"limit": 8})
+        except Exception:
+            hot = []
+        return newest + hot
+    return _cached(("subreddit", sub, ""), fetch)
 
 
 def hacker_news(query: str) -> list:
     def fetch():
         since = int(time.time() - MAX_AGE_HOURS * 3600)
-        r = requests.get("https://hn.algolia.com/api/v1/search",
+        r = requests.get("https://hn.algolia.com/api/v1/search_by_date",  # newest first
                          params={"query": query, "tags": "story", "numericFilters": f"created_at_i>{since}",
                                  "hitsPerPage": 10}, timeout=15)
         r.raise_for_status()
@@ -262,7 +286,7 @@ def score(item: dict, keywords: list) -> float:
         age_h = (datetime.now(timezone.utc) - item["published"]).total_seconds() / 3600
         if age_h > MAX_AGE_HOURS:
             return 0.0
-        s += max(0.0, 2.0 - age_h / 12)          # up to +2 for very fresh
+        s += 4.0 * max(0.0, 1.0 - age_h / MAX_AGE_HOURS)  # up to +4: newest posts rank first
     s += min(2.0, math.log10(1 + item.get("engagement", 0)) / 2)  # up to +2 for buzz
     return s
 
