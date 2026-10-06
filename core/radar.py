@@ -4,12 +4,11 @@ owner's learned interests are added automatically."""
 import os
 from datetime import datetime
 
-import anthropic
 import requests
 
-from core import profile, sources, store
+from core import llm, profile, sources, store
 
-client = anthropic.Anthropic()
+client = llm.Client("radar")
 RADAR_MODEL = "claude-sonnet-5-5"
 
 DEFAULT_TOPICS = (
@@ -32,6 +31,7 @@ def _serper(endpoint: str, q: str, num: int = 8) -> list:
             json={"q": q, "num": num, "gl": "in", "tbs": "qdr:d"},
             timeout=15,
         )
+        store.bump("serper")
         return r.json().get(endpoint, []) if r.ok else []
     except Exception:
         return []
@@ -54,7 +54,7 @@ def _topic_keywords(topics: list) -> dict:
     missing = [t for t in topics if t not in saved]
     if missing:
         try:
-            saved.update(profile.expand_keywords(missing, "Indian media, creators, entertainment and business"))
+            saved.update(profile.expand_keywords(missing, "Indian media, creators, entertainment and business", "owner"))
             store.kv_set("radar_keywords", saved)
         except Exception as e:
             print(f"Radar keyword expansion failed: {e}")
@@ -80,6 +80,7 @@ def build_radar() -> str:
 
     owner = store.get_user("owner") or {}
     resp = client.messages.create(
+        _uid="owner",
         model=RADAR_MODEL,
         max_tokens=2000,
         messages=[{"role": "user", "content": (

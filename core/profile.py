@@ -4,11 +4,9 @@ import re
 import threading
 from zoneinfo import ZoneInfo
 
-import anthropic
+from core import llm, store
 
-from core import store
-
-client = anthropic.Anthropic()
+client = llm.Client("learning")
 LEARN_MODEL = "claude-haiku-4-5-20251001"
 LEARN_EVERY = 5          # update the profile after every N user messages
 MAX_INTERESTS = 8
@@ -41,9 +39,10 @@ def _clean_interests(items) -> list:
     return out[:MAX_INTERESTS]
 
 
-def extract_onboarding(text: str) -> dict:
+def extract_onboarding(text: str, uid: str = None) -> dict:
     """Turn a free-text answer ('AI startups, cricket, F1. I'm in Chennai') into structured fields."""
     resp = client.messages.create(
+        _uid=uid,
         model=LEARN_MODEL,
         max_tokens=400,
         messages=[{"role": "user", "content": (
@@ -96,6 +95,7 @@ def _learn(uid: str, recent_user_msgs: list):
     convo = "\n---\n".join(m[:1500] for m in recent_user_msgs[-12:])
     try:
         resp = client.messages.create(
+            _uid=uid,
             model=LEARN_MODEL,
             max_tokens=700,
             messages=[{"role": "user", "content": (
@@ -149,11 +149,12 @@ def note_message(uid: str, history: list):
         threading.Thread(target=_learn, args=(uid, msgs), daemon=True).start()
 
 
-def expand_keywords(topics: list, context_hint: str = "") -> dict:
+def expand_keywords(topics: list, context_hint: str = "", uid: str = None) -> dict:
     """Turn each interest into 3-6 search keywords (names, abbreviations, key people/brands)."""
     if not topics:
         return {}
     resp = client.messages.create(
+        _uid=uid,
         model=LEARN_MODEL,
         max_tokens=800,
         messages=[{"role": "user", "content": (
@@ -182,7 +183,7 @@ def ensure_keywords(uid: str) -> dict:
     missing = [t for t in topics if not kw.get(t)]
     if missing:
         try:
-            kw.update(expand_keywords(missing, u.get("profile") or ""))
+            kw.update(expand_keywords(missing, u.get("profile") or "", uid))
         except Exception as e:
             print(f"Keyword expansion failed for {uid}: {e}")
         store.update_user(uid, keywords=kw)

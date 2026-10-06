@@ -71,6 +71,33 @@ def _init(c):
     CREATE TABLE IF NOT EXISTS kv (
         key TEXT PRIMARY KEY, value TEXT
     );
+    CREATE TABLE IF NOT EXISTS spend (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        day TEXT, uid TEXT, feature TEXT, model TEXT,
+        input_tokens INTEGER, output_tokens INTEGER, cache_read INTEGER, cache_write INTEGER,
+        cost REAL, created_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS spend_day ON spend(day);
+    CREATE TABLE IF NOT EXISTS counters (
+        day TEXT, name TEXT, count INTEGER DEFAULT 0, PRIMARY KEY (day, name)
+    );
+    CREATE TABLE IF NOT EXISTS watches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uid TEXT, chat_id TEXT, keyword TEXT, seeded INTEGER DEFAULT 0, created_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS alert_seen (
+        uid TEXT, item_key TEXT, seen_at TEXT, PRIMARY KEY (uid, item_key)
+    );
+    CREATE TABLE IF NOT EXISTS creators (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT, platform TEXT, handle TEXT, followers TEXT, niche TEXT, rate TEXT,
+        contact TEXT, status TEXT DEFAULT 'prospect', notes TEXT, created_at TEXT, updated_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS deals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        creator TEXT, brand TEXT, value TEXT, stage TEXT DEFAULT 'lead', due TEXT, notes TEXT,
+        created_at TEXT, updated_at TEXT
+    );
     """)
     cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
     for col, ddl in (("keywords", "TEXT DEFAULT '{}'"), ("custom_keywords", "TEXT DEFAULT '[]'")):
@@ -341,3 +368,188 @@ def kv_set(key: str, value):
         conn().execute("INSERT INTO kv (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                        (key, json.dumps(value)))
         conn().commit()
+
+
+# ---------- spend and counters ----------
+
+def record_spend(uid: str, feature: str, model: str, usage: dict, cost: float):
+    with _lock:
+        conn().execute(
+            "INSERT INTO spend (day, uid, feature, model, input_tokens, output_tokens, cache_read, cache_write, cost, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (owner_today(), uid, feature, model, usage.get("input", 0), usage.get("output", 0),
+             usage.get("cache_read", 0), usage.get("cache_write", 0), cost, iso(now_utc())))
+        conn().commit()
+
+
+def spend_today(owner: bool = None) -> float:
+    q = "SELECT COALESCE(SUM(cost),0) AS c FROM spend WHERE day=?"
+    if owner is True:
+        q += " AND uid='owner'"
+    elif owner is False:
+        q += " AND uid!='owner'"
+    with _lock:
+        return conn().execute(q, (owner_today(),)).fetchone()["c"]
+
+
+def spend_breakdown(days: int = 1) -> dict:
+    from datetime import timedelta as _td
+    start = (datetime.now(ZoneInfo(OWNER_TZ)) - _td(days=days - 1)).strftime("%Y-%m-%d")
+    with _lock:
+        c = conn()
+        by_feature = [dict(r) for r in c.execute(
+            "SELECT feature, ROUND(SUM(cost),4) AS cost, COUNT(*) AS calls FROM spend WHERE day>=? "
+            "GROUP BY feature ORDER BY cost DESC", (start,))]
+        by_user = [dict(r) for r in c.execute(
+            "SELECT uid, ROUND(SUM(cost),4) AS cost, COUNT(*) AS calls FROM spend WHERE day>=? "
+            "GROUP BY uid ORDER BY cost DESC LIMIT 10", (start,))]
+        total = c.execute("SELECT COALESCE(SUM(cost),0) AS c FROM spend WHERE day>=?", (start,)).fetchone()["c"]
+    return {"total": total, "by_feature": by_feature, "by_user": by_user}
+
+
+def bump(name: str, n: int = 1) -> int:
+    with _lock:
+        day = owner_today()
+        conn().execute("INSERT INTO counters (day, name, count) VALUES (?,?,?) "
+                       "ON CONFLICT(day, name) DO UPDATE SET count=count+?", (day, name, n, n))
+        conn().commit()
+        return conn().execute("SELECT count FROM counters WHERE day=? AND name=?", (day, name)).fetchone()["count"]
+
+
+def counter(name: str, days: int = 1) -> int:
+    from datetime import timedelta as _td
+    start = (datetime.now(ZoneInfo(OWNER_TZ)) - _td(days=days - 1)).strftime("%Y-%m-%d")
+    with _lock:
+        return conn().execute("SELECT COALESCE(SUM(count),0) AS c FROM counters WHERE name=? AND day>=?",
+                              (name, start)).fetchone()["c"]
+
+
+# ---------- keyword watches ----------
+
+def add_watch(uid: str, chat_id: str, keyword: str) -> int:
+    with _lock:
+        cur = conn().execute("INSERT INTO watches (uid, chat_id, keyword, created_at) VALUES (?,?,?,?)",
+                             (uid, str(chat_id), keyword.strip()[:80], iso(now_utc())))
+        conn().commit()
+        return cur.lastrowid
+
+
+def list_watches(uid: str = None) -> list:
+    with _lock:
+        if uid:
+            rows = conn().execute("SELECT * FROM watches WHERE uid=? ORDER BY id", (uid,))
+        else:
+            rows = conn().execute("SELECT * FROM watches ORDER BY uid, id")
+        return [dict(r) for r in rows]
+
+
+def remove_watch(uid: str, what: str) -> int:
+    with _lock:
+        if str(what).isdigit():
+            cur = conn().execute("DELETE FROM watches WHERE uid=? AND id=?", (uid, int(what)))
+        else:
+            cur = conn().execute("DELETE FROM watches WHERE uid=? AND lower(keyword)=?", (uid, what.lower().strip()))
+        conn().commit()
+        return cur.rowcount
+
+
+def mark_watch_seeded(wid: int):
+    with _lock:
+        conn().execute("UPDATE watches SET seeded=1 WHERE id=?", (wid,))
+        conn().commit()
+
+
+def seen_before(uid: str, key: str) -> bool:
+    with _lock:
+        return conn().execute("SELECT 1 FROM alert_seen WHERE uid=? AND item_key=?", (uid, key)).fetchone() is not None
+
+
+def mark_seen(uid: str, keys: list):
+    with _lock:
+        stamp = iso(now_utc())
+        conn().executemany("INSERT OR IGNORE INTO alert_seen (uid, item_key, seen_at) VALUES (?,?,?)",
+                           [(uid, k, stamp) for k in keys])
+        conn().commit()
+
+
+def prune_seen(days: int = 4):
+    from datetime import timedelta as _td
+    with _lock:
+        conn().execute("DELETE FROM alert_seen WHERE seen_at < ?", (iso(now_utc() - _td(days=days)),))
+        conn().commit()
+
+
+# ---------- talent tracker ----------
+
+CREATOR_FIELDS = ("platform", "handle", "followers", "niche", "rate", "contact", "status", "notes")
+DEAL_FIELDS = ("value", "stage", "due", "notes")
+
+
+def upsert_creator(name: str, **fields) -> tuple:
+    fields = {k: str(v).strip() for k, v in fields.items() if k in CREATOR_FIELDS and v not in (None, "")}
+    with _lock:
+        c = conn()
+        row = c.execute("SELECT * FROM creators WHERE lower(name)=?", (name.lower().strip(),)).fetchone()
+        stamp = iso(now_utc())
+        if row:
+            if "notes" in fields and row["notes"]:
+                fields["notes"] = (row["notes"] + " | " + fields["notes"])[-2000:]
+            if fields:
+                cols = ", ".join(f"{k}=?" for k in fields)
+                c.execute(f"UPDATE creators SET {cols}, updated_at=? WHERE id=?", (*fields.values(), stamp, row["id"]))
+            c.commit()
+            return row["id"], False
+        cols = ["name"] + list(fields) + ["created_at", "updated_at"]
+        cur = c.execute(f"INSERT INTO creators ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                        (name.strip(), *fields.values(), stamp, stamp))
+        c.commit()
+        return cur.lastrowid, True
+
+
+def find_creators(query: str = "", status: str = "") -> list:
+    q, args = "SELECT * FROM creators WHERE 1=1", []
+    if query:
+        q += " AND (lower(name) LIKE ? OR lower(niche) LIKE ? OR lower(handle) LIKE ? OR lower(platform) LIKE ? OR lower(notes) LIKE ?)"
+        args += [f"%{query.lower()}%"] * 5
+    if status:
+        q += " AND lower(status)=?"
+        args.append(status.lower())
+    with _lock:
+        return [dict(r) for r in conn().execute(q + " ORDER BY updated_at DESC LIMIT 30", args)]
+
+
+def upsert_deal(creator: str, brand: str, deal_id: int = None, **fields) -> tuple:
+    fields = {k: str(v).strip() for k, v in fields.items() if k in DEAL_FIELDS and v not in (None, "")}
+    with _lock:
+        c = conn()
+        stamp = iso(now_utc())
+        row = None
+        if deal_id:
+            row = c.execute("SELECT * FROM deals WHERE id=?", (int(deal_id),)).fetchone()
+        if not row and creator and brand:
+            row = c.execute("SELECT * FROM deals WHERE lower(creator)=? AND lower(brand)=? AND stage NOT IN ('paid','lost')",
+                            (creator.lower().strip(), brand.lower().strip())).fetchone()
+        if row:
+            if "notes" in fields and row["notes"]:
+                fields["notes"] = (row["notes"] + " | " + fields["notes"])[-2000:]
+            if fields:
+                cols = ", ".join(f"{k}=?" for k in fields)
+                c.execute(f"UPDATE deals SET {cols}, updated_at=? WHERE id=?", (*fields.values(), stamp, row["id"]))
+            c.commit()
+            return row["id"], False
+        cols = ["creator", "brand"] + list(fields) + ["created_at", "updated_at"]
+        cur = c.execute(f"INSERT INTO deals ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                        (creator.strip(), brand.strip(), *fields.values(), stamp, stamp))
+        c.commit()
+        return cur.lastrowid, True
+
+
+def all_deals(include_closed: bool = False) -> list:
+    q = "SELECT * FROM deals" + ("" if include_closed else " WHERE stage NOT IN ('paid','lost')") + " ORDER BY updated_at DESC"
+    with _lock:
+        return [dict(r) for r in conn().execute(q)]
+
+
+def all_creators() -> list:
+    with _lock:
+        return [dict(r) for r in conn().execute("SELECT * FROM creators ORDER BY updated_at DESC")]
