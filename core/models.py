@@ -1,58 +1,86 @@
 """The models users can pick from.
 
-Claude models use ANTHROPIC_API_KEY. ChatGPT uses OPENAI_API_KEY and Gemini uses
-GEMINI_API_KEY (through Google's OpenAI-compatible endpoint); each only appears once its
-key is in .env. Model IDs and prices for ChatGPT and Gemini are settings, because those
-providers rename models often:
+Claude models use ANTHROPIC_API_KEY. ChatGPT models use OPENAI_API_KEY and Gemini models use
+GEMINI_API_KEY (through Google's OpenAI-compatible endpoint). Every model is always shown in
+the picker; ones whose key isn't set explain what's needed when tapped.
 
-    OPENAI_MODEL=gpt-5.6-terra      OPENAI_PRICE=2,12        (USD per 1M input,output tokens)
-    GEMINI_MODEL=gemini-3.7-flash   GEMINI_PRICE=0.75,3.75
+Each model's ID and price can be changed in .env, because providers rename models often:
+    <KEY>_MODEL_ID=...      e.g. GPT_SOL_MODEL_ID=gpt-5.6-sol
+    <KEY>_PRICE=in,out      USD per 1M tokens, e.g. GPT_SOL_PRICE=4,20
+(KEY is the model key below in capitals with '-' as '_'.) OPENAI_MODEL / GEMINI_MODEL still
+override the default ChatGPT / Gemini entries.
 """
 import math
 import os
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 HAIKU_OUT_PRICE = 5.0  # cost weights are relative to Haiku's output price
+PROVIDER_KEYS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}
+PROVIDER_NAMES = {"anthropic": "Claude", "openai": "ChatGPT", "gemini": "Gemini"}
+
+# key, button label (with version), provider, default model ID, default price (in, out)
+_MODELS = [
+    ("haiku", "Haiku 4.5", "anthropic", "claude-haiku-4-5-20251001", (1.0, 5.0)),
+    ("sonnet", "Sonnet 5.5", "anthropic", "claude-sonnet-5-5", (2.0, 10.0)),
+    ("opus", "Opus 5.5", "anthropic", "claude-opus-5-5", (4.0, 20.0)),
+    ("fable", "Fable 5.1", "anthropic", "claude-fable-5-1", (10.0, 50.0)),
+    ("gpt-luna", "GPT-5.6 Luna", "openai", "gpt-5.6-luna", (0.2, 1.2)),
+    ("gpt", "GPT-5.6 Terra", "openai", "gpt-5.6-terra", (2.0, 12.0)),
+    ("gpt-sol", "GPT-5.6 Sol", "openai", "gpt-5.6-sol", (4.0, 20.0)),
+    ("gemini-lite", "Gemini 3.1 Flash-Lite", "gemini", "gemini-3.1-flash-lite", (0.25, 1.5)),
+    ("gemini", "Gemini 3.7 Flash", "gemini", "gemini-3.7-flash", (0.75, 3.75)),
+    ("gemini-pro", "Gemini 3.1 Pro", "gemini", "gemini-3.1-pro-preview", (2.0, 12.0)),
+]
 
 
-def _price(env: str, default: str) -> tuple:
-    try:
-        a, b = (float(x) for x in os.getenv(env, default).split(","))
-        return a, b
-    except ValueError:
-        return tuple(float(x) for x in default.split(","))
+def _env_name(key: str, suffix: str) -> str:
+    return f"{key.upper().replace('-', '_')}_{suffix}"
+
+
+def _price(key: str, default: tuple) -> tuple:
+    raw = os.getenv(_env_name(key, "PRICE")) or {"gpt": os.getenv("OPENAI_PRICE"),
+                                                "gemini": os.getenv("GEMINI_PRICE")}.get(key)
+    if raw:
+        try:
+            a, b = (float(x) for x in raw.split(","))
+            return a, b
+        except ValueError:
+            pass
+    return default
 
 
 def registry() -> dict:
-    return {
-        "haiku": {"label": "Claude Haiku 4.5", "short": "Haiku", "provider": "anthropic",
-                  "id": "claude-haiku-4-5-20251001", "price": (1.0, 5.0)},
-        "sonnet": {"label": "Claude Sonnet 5.5", "short": "Sonnet", "provider": "anthropic",
-                   "id": "claude-sonnet-5-5", "price": (2.0, 10.0)},
-        "opus": {"label": "Claude Opus 5.5", "short": "Opus", "provider": "anthropic",
-                 "id": "claude-opus-5-5", "price": (4.0, 20.0)},
-        "gpt": {"label": f"ChatGPT ({os.getenv('OPENAI_MODEL', 'gpt-5.6-terra')})", "short": "ChatGPT",
-                "provider": "openai", "id": os.getenv("OPENAI_MODEL", "gpt-5.6-terra"),
-                "price": _price("OPENAI_PRICE", "2,12")},
-        "gemini": {"label": f"Gemini ({os.getenv('GEMINI_MODEL', 'gemini-3.7-flash')})", "short": "Gemini",
-                   "provider": "gemini", "id": os.getenv("GEMINI_MODEL", "gemini-3.7-flash"),
-                   "price": _price("GEMINI_PRICE", "0.75,3.75")},
-    }
+    out = {}
+    for key, label, provider, default_id, price in _MODELS:
+        mid = os.getenv(_env_name(key, "MODEL_ID")) or {"gpt": os.getenv("OPENAI_MODEL"),
+                                                       "gemini": os.getenv("GEMINI_MODEL")}.get(key) or default_id
+        out[key] = {"key": key, "short": label, "label": f"Claude {label}" if provider == "anthropic" else label,
+                    "provider": provider, "id": mid, "price": _price(key, price)}
+    return out
+
+
+def is_ready(key: str) -> bool:
+    m = registry().get(key)
+    if not m or not os.getenv(PROVIDER_KEYS[m["provider"]]):
+        return False
+    if m["provider"] != "anthropic":
+        try:
+            import openai  # noqa: F401
+        except ImportError:
+            return False
+    return True
 
 
 def available() -> dict:
-    """Models whose provider key is configured, in display order."""
-    keys = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}
-    out = {}
-    for k, m in registry().items():
-        if os.getenv(keys[m["provider"]]):
-            if m["provider"] != "anthropic":
-                try:
-                    import openai  # noqa: F401
-                except ImportError:
-                    continue
-            out[k] = m
-    return out
+    """Models that can answer right now (their provider's key is set)."""
+    return {k: m for k, m in registry().items() if is_ready(k)}
+
+
+def setup_hint(key: str) -> str:
+    m = registry()[key]
+    env = PROVIDER_KEYS[m["provider"]]
+    where = {"openai": "platform.openai.com > API keys", "gemini": "aistudio.google.com > Get API key"}.get(m["provider"], "")
+    return f"{m['short']} isn't connected yet. The bot owner needs to add {env} to .env ({where}) and restart."
 
 
 def weight(key: str) -> int:
@@ -65,7 +93,7 @@ def weight(key: str) -> int:
 
 def price_for_id(model_id: str):
     for m in registry().values():
-        if model_id == m["id"] or model_id.startswith(m["id"]):
+        if model_id == m["id"]:
             return m["price"]
     return None
 
