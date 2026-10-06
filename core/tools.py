@@ -270,6 +270,16 @@ ALL_TOOLS = [
             {"creator": S, "brand": S, "deal_id": I, "value": {**S, "description": "e.g. '₹1.2L'"},
              "stage": S, "due": {**S, "description": "YYYY-MM-DD"}, "notes": S}),
     _schema("pipeline", "The owner's talent pipeline: open deals by stage, due soon, stale deals, creator counts."),
+    _schema("scout_creator", "Talent scouting: pull a creator's real numbers (YouTube: subscribers, median recent views, "
+            "engagement rate, upload cadence, momentum; Instagram: follower estimate) and save them to the talent tracker. "
+            "Accepts a handle like @name or a channel/profile URL. After it returns, give a short fit assessment.",
+            {"handle": S, "platform": {**S, "description": "youtube (default) or instagram"}}, ["handle"]),
+    _schema("get_brand_voice", "Get the owner's brand voice samples. ALWAYS call this before writing scripts, captions, "
+            "hooks, titles or posts for the owner's brand."),
+    _schema("save_brand_voice", "Save a sample of the owner's writing (script, caption, post) as a brand voice reference.",
+            {"sample": S}, ["sample"]),
+    _schema("video_transcript", "Timestamped transcript of a YouTube video ([m:ss] chunks). Use to find clip moments "
+            "for Shorts/Reels, quote the video, or summarise it with timestamps.", {"url": S}, ["url"]),
     _schema("save_note", "Save a note, task or idea.",
             {"content": S, "tag": {**S, "description": "task, idea, research, meeting, general"}}, ["content"]),
     _schema("get_notes", "Show the user's saved notes, optionally filtered by tag.", {"tag": S}),
@@ -281,7 +291,8 @@ ALL_TOOLS = [
             "concept art). Write a detailed visual prompt.", {"prompt": S}, ["prompt"]),
 ]
 
-TALENT_TOOLS = {"save_creator", "find_creators", "save_deal", "pipeline"}
+TALENT_TOOLS = {"save_creator", "find_creators", "save_deal", "pipeline", "scout_creator",
+                "get_brand_voice", "save_brand_voice"}
 OWNER_ONLY = TALENT_TOOLS | ({"generate_image"} if not PUBLIC_IMAGE_GEN else set())
 
 
@@ -320,6 +331,11 @@ def execute_tool(name: str, inputs: dict) -> str:
             inputs.get("creator", ""), inputs.get("brand", ""), inputs.get("deal_id"),
             **{k: v for k, v in inputs.items() if k not in ("creator", "brand", "deal_id")}),
         "pipeline": lambda: _talent_only() or talent.pipeline_text(),
+        "scout_creator": lambda: _talent_only() or __import__("core.scout", fromlist=["scout"]).scout(
+            inputs["handle"], inputs.get("platform", "")),
+        "get_brand_voice": lambda: _talent_only() or __import__("core.scout", fromlist=["x"]).get_brand_voice(),
+        "save_brand_voice": lambda: _talent_only() or __import__("core.scout", fromlist=["x"]).save_brand_voice(inputs["sample"]),
+        "video_transcript": lambda: __import__("core.scout", fromlist=["x"]).timestamped_transcript(inputs["url"]),
     }
     fn = handlers.get(name)
     return fn() if fn else "Unknown tool."
