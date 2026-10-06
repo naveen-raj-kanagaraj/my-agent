@@ -121,7 +121,13 @@ def _learn(uid: str, recent_user_msgs: list):
         return
     fields = {}
     if data.get("interests"):
-        fields["interests"] = _clean_interests(data["interests"])
+        learned = _clean_interests(data["interests"])
+        pinned = store.kv_get(f"topics_pinned:{uid}", [])  # topics the user picked themselves always stay
+        merged = list(pinned)
+        for t in learned:
+            if t.lower() not in [m.lower() for m in merged]:
+                merged.append(t)
+        fields["interests"] = merged[:max(MAX_INTERESTS, len(pinned))]
     if isinstance(data.get("profile"), str) and data["profile"].strip():
         fields["profile"] = data["profile"].strip()[:1200]
     tz = _valid_tz(str(data.get("timezone") or ""))
