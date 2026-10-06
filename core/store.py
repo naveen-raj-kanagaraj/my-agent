@@ -102,7 +102,8 @@ def _init(c):
     cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
     for col, ddl in (("keywords", "TEXT DEFAULT '{}'"), ("custom_keywords", "TEXT DEFAULT '[]'"),
                      ("last_model", "TEXT DEFAULT ''"), ("default_model", "TEXT DEFAULT 'auto'"),
-                     ("picker_on", "INTEGER DEFAULT 1")):
+                     ("picker_on", "INTEGER DEFAULT 1"), ("session_model", "TEXT DEFAULT ''"),
+                     ("session_at", "REAL DEFAULT 0")):
         if col not in cols:
             c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
     c.commit()

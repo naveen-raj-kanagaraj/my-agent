@@ -10,7 +10,7 @@ What it does:
 - Reads files (PDF, DOCX, PPTX, XLSX, CSV, TXT) and images; remembers images for follow-up questions
 - Voice notes, transcribed on the machine with faster-whisper (free)
 - Reminders (one-off, daily, weekdays, weekly), notes, calculator, web search
-- Choice of model per message: Claude Haiku, Sonnet, Opus, ChatGPT and Gemini (pricier models use more of a user's daily requests)
+- Choice of model at the start of each conversation, kept until 2 hours of quiet or /switch: Claude Haiku 4.5, Sonnet 5.5, Opus 5.5, Fable 5.1; GPT-5.6 Luna, Terra, Sol; Gemini 3.1 Flash-Lite, 3.7 Flash, 3.1 Pro (pricier models use more of a user's daily requests)
 - Web dashboard at http://localhost:8090: active sessions, requests and spend per user, spend by model, day and feature, source health
 - Image generation (owner by default)
 - Instant keyword alerts every 30 minutes from news sites, Reddit and Hacker News (free, no AI call)
@@ -35,7 +35,7 @@ Then send `/start` to the bot on Telegram. The bot runs only while this terminal
 
 Everyone: `/start`, `/news`, `/alert <keyword>`, `/alerts`, `/unalert <id>`, `/interests <topics>`, `/keywords`, `/newsoff`, `/newson`, `/profile`, `/forget`, `/clear`, `/help`, `/quick <q>`
 
-Everyone also: `/model` (models and default), `/picker on|off` (choose a model before each message)
+Everyone also: `/model` (models and default), `/switch` (pick a different model), `/picker on|off`
 
 Owner: `/deep <q>` (Sonnet 5.5), `/dashboard`, `/credits <balance>`, `/brief` (full briefing), `/radar` (content and business radar), `/pipeline` (talent tracker), `/status` (health), `/usage` (spend), `/users`, `/block <id>`, `/unblock <id>`
 

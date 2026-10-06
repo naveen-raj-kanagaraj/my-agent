@@ -55,7 +55,7 @@ def sonnet_call():
 
 def _compat(provider):
     from core import llm, models
-    m = next(m for m in models.registry().values() if m["provider"] == provider)
+    m = models.registry()["gpt" if provider == "openai" else "gemini"]
     c = llm.OpenAICompatClient(provider, "selftest")
     kw = {"model": m["id"], "messages": [{"role": "user", "content": "Reply with OK"}]}
     kw["max_completion_tokens" if provider == "openai" else "max_tokens"] = 20
