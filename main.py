@@ -33,7 +33,34 @@ def clear_legacy_data():
         print("Cleared old data: " + ", ".join(removed))
 
 
+def single_instance():
+    """Two copies polling Telegram fight each other ('Conflict' errors). Refuse to start a second one."""
+    import fcntl
+    os.makedirs("data", exist_ok=True)
+    f = open("data/agent.lock", "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("The agent is already running (maybe started automatically at login).\n"
+              "Check with: bash scripts/autostart.sh status   Stop autostart: bash scripts/autostart.sh uninstall")
+        raise SystemExit(1)
+    return f  # keep the file open for the life of the process
+
+
+def rotate_log(path: str = "data/agent.log", max_mb: int = 20):
+    try:
+        if os.path.getsize(path) > max_mb * 1024 * 1024:
+            import shutil
+            shutil.copyfile(path, path + ".1")
+            with open(path, "r+") as f:  # truncate in place: launchd keeps writing to the same file
+                f.truncate(0)
+    except OSError:
+        pass
+
+
 if __name__ == "__main__":
+    _lock = single_instance()
+    rotate_log()
     print("\nStarting your Personal Strategic Agent...\n")
     clear_legacy_data()
 

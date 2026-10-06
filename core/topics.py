@@ -17,6 +17,9 @@ LIVE_MAX_AGE_HOURS = 4
 QUIET_START, QUIET_END = 23, 7   # no live updates 11 PM - 7 AM local time
 PER_TOPIC = 2
 PER_MESSAGE = 6
+# Preset topics are fetched once and shared by everyone (30-min cache). Typed-in topics each need their own
+# fetches, so cap how many distinct topics one run may fetch; users beyond the cap go first next run.
+LIVE_MAX_TOPICS_PER_RUN = int(os.getenv("LIVE_MAX_TOPICS_PER_RUN", "60"))
 
 # Topic -> keywords that headlines and posts literally contain.
 PRESETS = {
@@ -172,7 +175,11 @@ def format_live(picked: list, heading: str = "Latest for you") -> str:
 
 def run_live(send):
     """Scheduler job. send(text, chat_id) -> bool."""
-    for u in store.all_users():
+    users = store.all_users()
+    start = store.kv_get("live_rotate", 0) % max(len(users), 1)
+    users = users[start:] + users[:start]
+    fetched = set()
+    for n, u in enumerate(users):
         if u.get("blocked") or not u.get("news_on") or u.get("news_mode") != "live":
             continue
         if u.get("state") != "active" or not u.get("chat_id") or not store.interests(u):
@@ -183,6 +190,12 @@ def run_live(send):
         day_key = f"live_count:{u['uid']}:{local:%Y-%m-%d}"
         if store.kv_get(day_key, 0) >= LIVE_MAX_PER_DAY:
             continue
+        need = {t.lower() for t in store.interests(u)[:10]} - fetched
+        if len(fetched | need) > LIVE_MAX_TOPICS_PER_RUN:
+            store.kv_set("live_rotate", start + n)  # out of fetch budget: this user goes first next time
+            print(f"Live updates: topic cap reached ({LIVE_MAX_TOPICS_PER_RUN}); continuing next run")
+            return
+        fetched |= need
         try:
             first_run = not store.kv_get(f"live_seeded:{u['uid']}")
             picked = collect_live(u)
@@ -196,6 +209,7 @@ def run_live(send):
                     store.update_user(u["uid"], news_on=0)
         except Exception as e:
             print(f"Live updates failed for {u['uid']}: {e}")
+    store.kv_set("live_rotate", 0)
 
 
 def latest_now(uid: str, per_topic: int = 2) -> str:

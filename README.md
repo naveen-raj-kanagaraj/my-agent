@@ -99,3 +99,13 @@ See DEPLOY.md (free Oracle Cloud server).
 ## Never commit
 
 `.env`, `memory.json`, `covered_news.json`, `cookies.txt`, `venv/` (already in `.gitignore`).
+
+## Keep it running on your Mac
+
+    bash scripts/autostart.sh install     # starts at login, restarts on crash, stops idle sleep
+    bash scripts/autostart.sh status      # running? last log lines
+    bash scripts/autostart.sh logs        # follow the log
+    bash scripts/autostart.sh restart     # after changing code or .env
+    bash scripts/autostart.sh uninstall   # back to starting it by hand
+
+Closing the lid still sleeps the Mac. For true 24/7, use a server (DEPLOY.md).
