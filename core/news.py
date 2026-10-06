@@ -111,7 +111,7 @@ def build_user_brief(uid: str) -> str:
             f"Write in {lang}. Plain text only: no markdown, no asterisks, no bullet symbols.\n\n"
             "The items come from news sites, Reddit, Hacker News, X, Instagram, Threads and YouTube, already matched "
             "to the reader's keywords and ranked. Format: a one-line greeting, then for each topic with real news, "
-            "the topic name on its own line, then the 1-3 most important stories in 2-3 sentences each: what "
+            "the topic name on its own line, then the 1-3 most important stories in 2-3 sentences each, favouring the newest developments: what "
             "happened, then why it matters to this person. Say where it's buzzing when that's informative (for "
             "example 'big thread on r/india' or 'trending on X'). Treat social posts as claims, not confirmed "
             "facts, unless a news outlet also reports them. Put the single best link after each story. Skip "
