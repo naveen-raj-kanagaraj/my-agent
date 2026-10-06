@@ -102,6 +102,22 @@ def stats():
     })
 
 
+@app.route("/api/activity")
+def activity():
+    if not _authorised():
+        abort(403)
+    uid = request.args.get("uid") or None
+    kind = request.args.get("kind") or None
+    rows = store.get_activity(uid=uid, kind=kind, limit=200)
+    names = {}
+    for u in store.all_users():
+        names[u["uid"]] = "You" if u["uid"] == "owner" else (f"@{u['username']}" if u.get("username") else (u.get("name") or u["uid"]))
+    for r in rows:
+        r["seconds_ago"] = _age_seconds(r["ts"])
+        r["who"] = names.get(r["uid"], r["uid"])
+    return jsonify({"rows": rows, "top_searches": store.top_searches(7)})
+
+
 @app.route("/")
 def index():
     if not _authorised():
@@ -153,6 +169,8 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;font-varia
 .tag{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin:1px}
 .bad{color:var(--bad)}.ok{color:var(--ok)}.warn{color:var(--warn)}canvas{max-height:260px}
 .empty{color:var(--muted);padding:12px 0}
+.filters{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}select{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit}
+.kind{font-size:11px;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);white-space:nowrap}
 </style></head><body>
 <header><div><h1>Agent dashboard</h1><div class="sub" id="sub">Loading...</div></div><div class="sub">Refreshes every 30 s</div></header>
 <main>
@@ -162,6 +180,15 @@ td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;font-varia
   <div class="card"><h2>Spend by model (7 days)</h2><canvas id="models"></canvas></div>
 </section>
 <section class="card"><h2>Sessions and usage by user</h2><div class="scroll"><table id="users"></table></div></section>
+<section class="grid2">
+  <div class="card"><h2>What people are asking and searching</h2>
+    <div class="filters"><select id="fuser"><option value="">Everyone</option></select>
+    <select id="fkind"><option value="">Everything</option><option value="message">Messages</option>
+    <option value="tool:web_search">Web searches</option><option value="tool:scan_sources">Buzz scans</option>
+    <option value="tool:read_url">Links opened</option><option value="download">Downloads</option><option value="tool:">All tool use</option></select></div>
+    <div class="scroll" style="max-height:520px;overflow-y:auto"><table id="activity"></table></div></div>
+  <div class="card"><h2>Top searches (7 days)</h2><table id="topsearch"></table></div>
+</section>
 <section class="grid2">
   <div class="card"><h2>Recent AI calls</h2><div class="scroll"><table id="recent"></table></div></div>
   <div class="card"><h2>Where the money goes (7 days)</h2><table id="features"></table>
@@ -176,7 +203,7 @@ const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim
 const colors=()=>({Claude:css('--claude'),ChatGPT:css('--chatgpt'),Gemini:css('--gemini'),other:css('--muted')});
 let daily,modelsChart;
 function kpi(l,v,s){return `<div class="card kpi"><div class="l">${l}</div><div class="v">${v}</div>${s?`<div class="s">${s}</div>`:''}</div>`}
-async function load(){
+var load=async function(){
   const r=await fetch('api/stats'+location.search); if(!r.ok){$('sub').textContent='Not authorised';return}
   const d=await r.json(), k=d.kpis;
   $('sub').textContent=`Up ${Math.floor(k.uptime_s/3600)}h ${Math.floor(k.uptime_s%3600/60)}m · scheduler ${ago(k.scheduler_ago)} · models: ${k.models_available.join(', ')}`;
@@ -211,5 +238,18 @@ async function load(){
     modelsChart=new Chart($('models'),{type:'bar',data:{labels:ml,datasets:[{data:mv,backgroundColor:mc,borderRadius:4}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{color:css('--muted'),callback:v=>'$'+v},grid:{color:css('--line')}},y:{ticks:{color:css('--muted')},grid:{display:false}}}}});
   }catch(e){for(const id of ['daily','models']){const c=$(id);c.replaceWith(Object.assign(document.createElement('div'),{className:'empty',id,textContent:'Charts need internet access to load Chart.js; the numbers below are complete.'}))}}
 }
+async function loadActivity(){
+  const q=new URLSearchParams(location.search); if($('fuser').value)q.set('uid',$('fuser').value); if($('fkind').value)q.set('kind',$('fkind').value);
+  const r=await fetch('api/activity?'+q); if(!r.ok)return; const d=await r.json();
+  const label=k=>({message:'asked','tool:web_search':'searched','tool:scan_sources':'buzz scan','tool:read_url':'opened link',download:'downloaded','tool:download_video':'downloaded','tool:remember':'remembered','tool:set_reminder':'reminder','tool:watch_keyword':'alert','tool:generate_image':'image','tool:save_note':'note'})[k]||k.replace('tool:','').replace(/_/g,' ');
+  $('activity').innerHTML='<tr><th>When</th><th>User</th><th>What</th><th>Detail</th></tr>'+
+   (d.rows.map(x=>`<tr><td style="white-space:nowrap">${ago(x.seconds_ago)}</td><td>${esc(x.who)}<div class="sub mono">${esc(x.uid)}</div></td><td><span class="kind">${esc(label(x.kind))}</span></td><td>${esc(x.detail)}</td></tr>`).join('')||'<tr><td class="empty" colspan="4">Nothing yet</td></tr>');
+  $('topsearch').innerHTML='<tr><th>Search</th><th class="num">Times</th><th class="num">Users</th></tr>'+
+   (d.top_searches.map(t=>`<tr><td>${esc(t.q)}</td><td class="num">${t.n}</td><td class="num">${t.users}</td></tr>`).join('')||'<tr><td class="empty" colspan="3">No searches yet</td></tr>');
+}
+let usersFilled=false;
+const _load=load; load=async function(){await _load(); if(!usersFilled){const r=await fetch('api/stats'+location.search); if(r.ok){const d=await r.json();
+  $('fuser').innerHTML='<option value="">Everyone</option>'+d.users.map(u=>`<option value="${esc(u.uid)}">${esc(u.display)}</option>`).join(''); usersFilled=true}} loadActivity();};
+$('fuser').onchange=loadActivity; $('fkind').onchange=loadActivity;
 load();setInterval(load,30000);
 </script></body></html>"""

@@ -322,6 +322,7 @@ def start_digest_scheduler():
         schedule.every(watch.ALERT_EVERY_MIN).minutes.do(watch.run_watches, send_telegram)
     schedule.every().monday.at(talent.WEEKLY_TIME).do(talent.send_weekly, send_telegram)
     schedule.every().day.at("03:30").do(store.prune_seen)
+    schedule.every().day.at("03:35").do(store.prune_activity)
     while True:
         store.kv_set("scheduler_tick", time.time())
         for job in (schedule.run_pending, send_due_reminders, send_user_news):
