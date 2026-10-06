@@ -10,14 +10,13 @@ from docx import Document
 import openpyxl
 from core.agent import chat
 from core.memory import Memory
-from core import store
+from core import llm, store
 from dotenv import load_dotenv
-import anthropic
 
 load_dotenv()
 
 memory = Memory()
-client = anthropic.Anthropic()
+client = llm.Client("vision")
 ALLOWED = set(os.getenv("ALLOWED_DISCORD_IDS", "").split(","))
 
 intents = discord.Intents.default()
@@ -83,6 +82,7 @@ def summarize_image(path: str) -> str:
     media_type = media_map.get(ext, "image/jpeg")
     b64 = base64.standard_b64encode(image_data).decode("utf-8")
     response = client.messages.create(
+        _uid="owner",
         model="claude-sonnet-5-5",
         max_tokens=1024,
         messages=[{

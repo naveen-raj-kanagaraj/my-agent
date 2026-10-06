@@ -4,12 +4,11 @@ import threading
 import time
 from datetime import datetime
 
-import anthropic
 import requests
 
-from core import profile, sources, store
+from core import llm, profile, sources, store
 
-client = anthropic.Anthropic()
+client = llm.Client("news")
 NEWS_MODEL = "claude-haiku-4-5-20251001"
 MAX_TOPICS = 5
 CACHE_SECONDS = 3 * 3600
@@ -48,6 +47,7 @@ def google_news(query: str, region: str = "us", num: int = 6) -> list:
             timeout=15,
         )
         items = r.json().get("news", []) if r.ok else []
+        store.bump("serper")
     except Exception as e:
         print(f"News search failed for '{query}': {e}")
         items = []
@@ -103,6 +103,7 @@ def build_user_brief(uid: str) -> str:
     part = "Morning" if now.hour < 12 else ("Afternoon" if now.hour < 17 else "Evening")
     lang = u.get("language") or "English"
     resp = client.messages.create(
+        _uid=uid,
         model=NEWS_MODEL,
         max_tokens=1800,
         messages=[{"role": "user", "content": (

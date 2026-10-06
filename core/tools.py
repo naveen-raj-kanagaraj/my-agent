@@ -10,7 +10,7 @@ import requests
 from core import context, store
 from core.downloader import tool_download_video
 from core.web import read_url
-from core import sources
+from core import sources, talent, watch
 
 PUBLIC_IMAGE_GEN = os.getenv("PUBLIC_IMAGE_GEN", "false").lower() == "true"
 
@@ -33,6 +33,7 @@ def web_search(query: str) -> str:
         }
         payload = {"q": query, "num": 5}
         response = requests.post(url, headers=headers, json=payload, timeout=15)
+        store.bump("serper")
         data = response.json()
 
         output = ""
@@ -58,6 +59,16 @@ def scan_sources(query: str) -> str:
     if not items:
         return "Nothing matching that in the last day across news, Reddit, HN, X, Instagram, Threads or YouTube."
     return "Matches from the last day (best first):\n" + "\n".join(_fmt(i) for i in items)
+
+
+def watch_keyword(keyword: str) -> str:
+    ctx = context.get()
+    u = store.get_user(ctx.uid) or {}
+    return watch.add(ctx.uid, u.get("chat_id") or (ctx.chat_id if ctx.platform == "telegram" else ""), keyword)
+
+
+def _talent_only():
+    return None if context.get().is_owner else "The talent tracker is private to the bot owner."
 
 
 def save_note(content: str, tag: str = "general") -> str:
@@ -240,6 +251,25 @@ ALL_TOOLS = [
              "repeat": {**S, "description": "'', 'daily', 'weekdays' or 'weekly'"}}, ["text", "when"]),
     _schema("list_reminders", "List the user's upcoming reminders with IDs."),
     _schema("cancel_reminder", "Cancel a reminder by ID.", {"reminder_id": I}, ["reminder_id"]),
+    _schema("watch_keyword", "Start instant alerts: the user gets a Telegram message within ~30 minutes whenever "
+            "news sites, Reddit or Hacker News post something new matching this keyword. Use for 'alert me', "
+            "'tell me when', 'keep an eye on'.", {"keyword": S}, ["keyword"]),
+    _schema("list_watches", "List the user's keyword alerts."),
+    _schema("unwatch_keyword", "Stop alerts for a keyword or watch ID.", {"keyword": S}, ["keyword"]),
+    _schema("save_creator", "Talent agency tracker: add or update a creator (matched by name). Use whenever the owner "
+            "mentions a creator they're scouting, talking to or managing. Only include fields mentioned.",
+            {"name": S, "platform": S, "handle": S, "followers": S, "niche": S,
+             "rate": {**S, "description": "e.g. '₹40K per reel'"},
+             "contact": S, "status": {**S, "description": "prospect, contacted, in talks, signed, passed"},
+             "notes": {**S, "description": "New information to append"}}, ["name"]),
+    _schema("find_creators", "Search the owner's creators by name, niche, platform or notes, optionally by status.",
+            {"query": S, "status": S}),
+    _schema("save_deal", "Talent agency tracker: add or update a brand deal. Stages: lead, pitched, negotiating, "
+            "signed, live, paid, lost. Pass deal_id to update a specific deal; otherwise matched by creator + brand. "
+            "For follow-ups, also set a reminder.",
+            {"creator": S, "brand": S, "deal_id": I, "value": {**S, "description": "e.g. '₹1.2L'"},
+             "stage": S, "due": {**S, "description": "YYYY-MM-DD"}, "notes": S}),
+    _schema("pipeline", "The owner's talent pipeline: open deals by stage, due soon, stale deals, creator counts."),
     _schema("save_note", "Save a note, task or idea.",
             {"content": S, "tag": {**S, "description": "task, idea, research, meeting, general"}}, ["content"]),
     _schema("get_notes", "Show the user's saved notes, optionally filtered by tag.", {"tag": S}),
@@ -251,7 +281,8 @@ ALL_TOOLS = [
             "concept art). Write a detailed visual prompt.", {"prompt": S}, ["prompt"]),
 ]
 
-OWNER_ONLY = {"generate_image"} if not PUBLIC_IMAGE_GEN else set()
+TALENT_TOOLS = {"save_creator", "find_creators", "save_deal", "pipeline"}
+OWNER_ONLY = TALENT_TOOLS | ({"generate_image"} if not PUBLIC_IMAGE_GEN else set())
 
 
 def tools_for(is_owner: bool) -> list:
@@ -279,6 +310,16 @@ def execute_tool(name: str, inputs: dict) -> str:
         "calculate": lambda: calculate(inputs["expression"]),
         "get_datetime": get_datetime,
         "generate_image": lambda: generate_image(inputs["prompt"]),
+        "watch_keyword": lambda: watch_keyword(inputs["keyword"]),
+        "list_watches": lambda: watch.list_text(_uid()),
+        "unwatch_keyword": lambda: watch.remove(_uid(), inputs["keyword"]),
+        "save_creator": lambda: _talent_only() or talent.save_creator(
+            inputs["name"], **{k: v for k, v in inputs.items() if k != "name"}),
+        "find_creators": lambda: _talent_only() or talent.find(inputs.get("query", ""), inputs.get("status", "")),
+        "save_deal": lambda: _talent_only() or talent.save_deal(
+            inputs.get("creator", ""), inputs.get("brand", ""), inputs.get("deal_id"),
+            **{k: v for k, v in inputs.items() if k not in ("creator", "brand", "deal_id")}),
+        "pipeline": lambda: _talent_only() or talent.pipeline_text(),
     }
     fn = handlers.get(name)
     return fn() if fn else "Unknown tool."
