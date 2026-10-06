@@ -1,11 +1,13 @@
 import re
 import anthropic
+
+from core import llm
 from datetime import datetime
 from core.memory import Memory
 from core.tools import execute_tool, tools_for
 from core import context, profile, store
 
-client = anthropic.Anthropic()
+client = llm.Client("chat")
 memory = Memory()
 
 
@@ -76,6 +78,8 @@ read_url: read any link I send (articles, PDFs, YouTube transcripts); use it whe
 download_video: download a video from an X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link; the file is sent to me automatically after your reply
 remember / forget: my long-term memory; save durable facts about me, my projects, people and deadlines without being asked when they clearly matter
 set_reminder / list_reminders / cancel_reminder: Telegram reminders in my timezone
+watch_keyword / list_watches / unwatch_keyword: instant alerts when something new about a keyword appears
+save_creator / find_creators / save_deal / pipeline: my talent agency tracker; whenever I mention a creator I'm scouting or a brand deal, record it without being asked, and set a reminder for any follow-up date
 save_note / get_notes / delete_note: tasks, ideas, research, strategy
 generate_image: thumbnails, mockups, concept art
 calculate: math, financial modeling, projections
@@ -98,11 +102,11 @@ Be warm, patient, and helpful with everyone by default. Answer all questions ful
 
 Only switch your tone when someone is genuinely disrespectful or abusive. If they are rude, clap back hard. If they troll you, roast them without mercy. If they are dismissive, be dismissive back. You are sharp, witty, and ruthless when provoked. You do not explain yourself to rude people. You put them in their place and move on. But normal people asking many questions deserve full, helpful, patient answers every single time.
 
-You can search the web, read links (articles, PDFs, YouTube transcripts), download videos from social media links (they are sent automatically), set reminders, remember things about the user, save notes, do calculations, and remember the conversation. Answer questions directly. If you need current information, search first before answering.
+You can search the web, read links (articles, PDFs, YouTube transcripts), set instant keyword alerts, download videos from social media links (they are sent automatically), set reminders, remember things about the user, save notes, do calculations, and remember the conversation. Answer questions directly. If you need current information, search first before answering.
 
 You personalise answers using what you know about the user (shown below when available). When someone shares something durable about themselves (projects, goals, preferences), use the remember tool. If someone asks what you know about them, tell them, and mention /profile to see it and /forget to erase it.
 
-Commands users can use: /news for their personalised news now, /interests to change news topics, /newsoff and /newson, /profile, /forget, /clear, /help.
+Commands users can use: /news for their personalised news now, /alert <keyword> for instant alerts, /alerts to list them, /interests to change news topics, /newsoff and /newson, /profile, /forget, /clear, /help.
 
 Never use markdown formatting. Write in plain text only. No bullet points, no headers, no bold text."""
 
@@ -206,6 +210,7 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
         for _ in range(MAX_TOOL_ROUNDS + 1):
             last_round = _ == MAX_TOOL_ROUNDS
             response = client.messages.create(
+                _uid=uid,
                 model=model,
                 max_tokens=2048,
                 system=system,
@@ -239,7 +244,16 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
             memory.save(uid, platform, history)
             profile.note_message(uid, history)
             return final_text
+    except llm.BudgetExceeded:
+        return ("I've reached my usage limit for today, so I'm taking a break. Try again tomorrow!"
+                if not is_owner else "You've hit your own daily budget (OWNER_DAILY_BUDGET_USD). Raise it in .env if needed.")
     except anthropic.APIError as e:
+        from core import alerts
+        if "credit balance" in str(e).lower():
+            alerts.notify("anthropic_credits", "Anthropic API credits are used up. The agent can't answer anyone. "
+                          "Top up at console.anthropic.com > Billing.", 120)
+        elif isinstance(e, anthropic.AuthenticationError):
+            alerts.notify("anthropic_auth", "Anthropic rejected the API key. Check ANTHROPIC_API_KEY.", 120)
         return friendly_error(e)
     except Exception as e:
         return f"Something went wrong: {str(e)[:200]}"

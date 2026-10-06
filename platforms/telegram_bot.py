@@ -9,7 +9,6 @@ import logging
 import os
 import tempfile
 
-import anthropic
 import fitz
 import openpyxl
 from docx import Document
@@ -20,7 +19,7 @@ from telegram.constants import ChatAction
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 from core import context as agent_context
-from core import downloader, profile, store, voice
+from core import alerts, downloader, llm, profile, store, voice
 from core.agent import chat
 from core.memory import Memory
 
@@ -28,7 +27,7 @@ load_dotenv()
 logging.basicConfig(level=logging.WARNING)
 
 memory = Memory()
-client = anthropic.Anthropic()
+client = llm.Client("vision")
 DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "20"))
 VISION_OWNER_MODEL = "claude-sonnet-5-5"
 VISION_PUBLIC_MODEL = "claude-haiku-4-5-20251001"
@@ -49,6 +48,8 @@ HELP = (
     "/interests <topics> - change your news topics\n"
     "/keywords <words> - track exact keywords across news, Reddit, X, Instagram, YouTube\n"
     "/newsoff, /newson - stop or restart daily news\n"
+    "/alert <keyword> - instant alerts when something new appears\n"
+    "/alerts - your alerts, /unalert <id> to remove\n"
     "/profile - what I know about you\n"
     "/forget - erase what I know about you\n"
     "/clear - reset this conversation\n"
@@ -60,6 +61,9 @@ OWNER_HELP = HELP + (
     "/brief - full strategic briefing now\n"
     "/radar - content and business radar now\n"
     "/users - who is using the bot today\n"
+    "/status - health check: sources, spend, scheduler\n"
+    "/usage - what the bot cost today and this week\n"
+    "/pipeline - talent agency pipeline\n"
     "/block <id>, /unblock <id> - moderate users\n"
 )
 
@@ -151,7 +155,7 @@ async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE, u
 
 async def finish_onboarding(update: Update, user: dict, text: str):
     try:
-        info = await asyncio.to_thread(profile.extract_onboarding, text)
+        info = await asyncio.to_thread(profile.extract_onboarding, text, user["uid"])
     except Exception as e:
         await update.message.reply_text(f"Sorry, something went wrong reading that ({str(e)[:100]}). Try once more?")
         return
@@ -254,6 +258,111 @@ async def cmd_keywords(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         ("Keywords I match in your news:\n\n" + "\n".join(lines) if lines else "No topics yet. Use /interests first.")
         + "\n\nAdd your own: /keywords Zepto, IPL auction, Nothing Phone")
+
+
+async def cmd_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if not user:
+        return
+    from core import watch
+    kw = " ".join(context.args)
+    if not kw:
+        await update.message.reply_text("Tell me what to watch, like: /alert Zepto\n\n" + watch.list_text(user["uid"]))
+        return
+    await update.message.reply_text(watch.add(user["uid"], str(update.effective_chat.id), kw))
+
+
+async def cmd_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if user:
+        from core import watch
+        await update.message.reply_text(watch.list_text(user["uid"]))
+
+
+async def cmd_unalert(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if not user:
+        return
+    from core import watch
+    what = " ".join(context.args)
+    await update.message.reply_text(watch.remove(user["uid"], what) if what else "Usage: /unalert <id or keyword>")
+
+
+async def cmd_pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    from core import talent
+    await send_long(update, talent.pipeline_text())
+
+
+def _ago(ts) -> str:
+    import time as _t
+    if not ts:
+        return "never"
+    s = int(_t.time() - ts)
+    return f"{s // 3600}h {s % 3600 // 60}m ago" if s >= 3600 else (f"{s // 60}m ago" if s >= 60 else f"{s}s ago")
+
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    import time as _t
+    from core import sources, watch
+    up = int(_t.time() - alerts.STARTED)
+    tick = store.kv_get("scheduler_tick")
+    lines = [
+        f"Running for {up // 3600}h {up % 3600 // 60}m",
+        f"Scheduler: last ran {_ago(tick)}" + ("  << STUCK?" if tick and _t.time() - tick > 300 else ""),
+        "",
+        f"Spend today: ${store.spend_today():.3f} (you ${store.spend_today(owner=True):.3f}, others "
+        f"${store.spend_today(owner=False):.3f} of ${llm.PUBLIC_DAILY_BUDGET:.2f} budget)",
+        f"Serper searches today: {store.counter('serper')}",
+        "",
+    ]
+    users = store.all_users()
+    active = [u for u in users if (u.get("last_seen") or "").startswith(store.iso(store.now_utc())[:10])]
+    lines.append(f"Users: {len(users)} total, {len(active)} active today, "
+                 f"{sum(1 for u in users if u.get('news_on'))} getting news")
+    lines.append(f"Keyword alerts: {len(store.list_watches())} active (every {watch.ALERT_EVERY_MIN} min)")
+    lines.append(f"Voice notes: {'ready' if voice.available() else 'not installed'}")
+    lines.append("\nSources:")
+    if not sources.HEALTH:
+        lines.append("  no checks yet (send /news to run them)")
+    for kind, h in sources.HEALTH.items():
+        name = sources.SOURCE_NAMES.get(kind, kind)
+        if h.get("fails"):
+            lines.append(f"  {name}: FAILING x{h['fails']} ({h.get('err', '')[:80]})")
+        else:
+            lines.append(f"  {name}: ok, {_ago(h.get('ok'))}")
+    await send_long(update, "\n".join(lines))
+
+
+async def cmd_usage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    out = []
+    for label, days in (("TODAY", 1), ("LAST 7 DAYS", 7)):
+        b = store.spend_breakdown(days)
+        out.append(f"{label}: ${b['total']:.3f}, Serper searches: {store.counter('serper', days)}")
+        out += [f"  {f['feature']}: ${f['cost']:.3f} ({f['calls']} calls)" for f in b["by_feature"]]
+        if days == 7 and b["by_user"]:
+            out.append("  Top users:")
+            out += [f"    {u['uid']}: ${u['cost']:.3f}" for u in b["by_user"][:5]]
+        out.append("")
+    week = store.spend_breakdown(7)["total"]
+    out.append(f"At this rate: about ${week / 7 * 30:.2f} a month.")
+    await send_long(update, "\n".join(out))
+
+
+async def on_error(update, context: ContextTypes.DEFAULT_TYPE):
+    err = context.error
+    print(f"Telegram handler error: {err!r}")
+    alerts.notify(f"tg:{type(err).__name__}", f"A Telegram request crashed: {type(err).__name__}: {str(err)[:200]}", 60)
+    try:
+        if update and getattr(update, "message", None):
+            await update.message.reply_text("Sorry, something went wrong on my side. Try again in a moment.")
+    except Exception:
+        pass
 
 
 async def cmd_news_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -454,12 +563,13 @@ EXTRACTORS = {
 }
 
 
-def describe_image(path: str, owner: bool) -> str:
+def describe_image(path: str, owner: bool, uid: str = None) -> str:
     with open(path, "rb") as f:
         b64 = base64.standard_b64encode(f.read()).decode()
     ext = path.rsplit(".", 1)[-1].lower()
     media = {"png": "image/png", "gif": "image/gif", "webp": "image/webp"}.get(ext, "image/jpeg")
     resp = client.messages.create(
+        _uid=uid,
         model=VISION_OWNER_MODEL if owner else VISION_PUBLIC_MODEL,
         max_tokens=900,
         messages=[{"role": "user", "content": [
@@ -474,7 +584,7 @@ def describe_image(path: str, owner: bool) -> str:
 async def handle_image_file(update: Update, context: ContextTypes.DEFAULT_TYPE, user: dict, path: str):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     try:
-        desc = await asyncio.to_thread(describe_image, path, user["uid"] == "owner")
+        desc = await asyncio.to_thread(describe_image, path, user["uid"] == "owner", user["uid"])
     except Exception as e:
         await update.message.reply_text(f"Could not read image: {str(e)[:200]}")
         return
@@ -553,11 +663,18 @@ def run_telegram():
     app.add_handler(CommandHandler("brief", cmd_brief))
     app.add_handler(CommandHandler("radar", cmd_radar))
     app.add_handler(CommandHandler("users", cmd_users))
+    app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("usage", cmd_usage))
+    app.add_handler(CommandHandler("pipeline", cmd_pipeline))
+    app.add_handler(CommandHandler("alert", cmd_alert))
+    app.add_handler(CommandHandler("alerts", cmd_alerts))
+    app.add_handler(CommandHandler("unalert", cmd_unalert))
     app.add_handler(CommandHandler(["block", "unblock"], cmd_block))
     app.add_handler(CommandHandler(["deep", "quick"], cmd_model))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    app.add_error_handler(on_error)
     print(f"Telegram: running (open to everyone, {DAILY_LIMIT} requests/day for non-owners)")
     app.run_polling()

@@ -24,6 +24,14 @@ from urllib.parse import quote_plus, urlparse
 
 import requests
 
+
+def store_bump(name):
+    try:
+        from core import store
+        store.bump(name)
+    except Exception:
+        pass
+
 UA = "pesagent-news/1.0 (personal news assistant)"
 # How far back to look, and how long to reuse a search before checking again.
 MAX_AGE_HOURS = int(os.getenv("NEWS_WINDOW_HOURS", "24"))
@@ -35,6 +43,10 @@ FEEDS = [f.strip() for f in os.getenv("NEWS_FEEDS", "").split(",") if f.strip()]
 
 _cache = {}
 _lock = threading.Lock()
+# Per-source health for /status: {kind: {"ok": ts, "fail": ts, "err": str, "fails": consecutive}}
+HEALTH = {}
+SOURCE_NAMES = {"gnews": "Google News", "reddit": "Reddit", "subreddit": "Reddit", "hn": "Hacker News",
+                "social": "X/Instagram/Threads (Serper)", "youtube": "YouTube (Serper)", "feed": "Your RSS feeds"}
 _reddit_token = {"value": None, "exp": 0}
 
 
@@ -43,11 +55,27 @@ def _cached(key, fn):
         hit = _cache.get(key)
         if hit and time.time() - hit[0] < CACHE_SECONDS:
             return hit[1]
+    kind = key[0]
     try:
         val = fn()
+        with _lock:
+            h = HEALTH.setdefault(kind, {})
+            h.update(ok=time.time(), fails=0)
     except Exception as e:
-        print(f"Source {key[0]} failed for '{key[1]}': {str(e)[:120]}")
+        err = str(e)[:160]
+        print(f"Source {kind} failed for '{key[1]}': {err}")
         val = []
+        with _lock:
+            h = HEALTH.setdefault(kind, {})
+            h.update(fail=time.time(), err=err, fails=h.get("fails", 0) + 1)
+            fails = h["fails"]
+        if fails >= 3:
+            from core import alerts
+            hint = ""
+            if kind in ("reddit", "subreddit") and ("403" in err or "429" in err):
+                hint = " Reddit may be blocking this network; add REDDIT_CLIENT_ID/SECRET to .env."
+            alerts.notify(f"source:{kind}", f"{SOURCE_NAMES.get(kind, kind)} has failed {fails} times in a row "
+                          f"({err[:120]}). News still works from the other sources.{hint}", 360)
     with _lock:
         _cache[key] = (time.time(), val)
     return val
@@ -202,6 +230,11 @@ def _serper(endpoint: str, q: str, region: str, num: int = 10) -> list:
     r = requests.post(f"https://google.serper.dev/{endpoint}",
                       headers={"X-API-KEY": key, "Content-Type": "application/json"},
                       json={"q": q, "num": num, "tbs": "qdr:d", "gl": region}, timeout=15)
+    store_bump("serper")
+    if r.status_code in (400, 401, 403) and "credit" in r.text.lower():
+        from core import alerts
+        alerts.notify("serper_credits", "Serper is out of credits, so web search, X/Instagram and YouTube results "
+                      "are off. Top up at serper.dev, or set NEWS_SOCIAL=false and NEWS_YOUTUBE=false.", 360)
     r.raise_for_status()
     return r.json().get("organic" if endpoint == "search" else endpoint, [])
 
@@ -311,7 +344,7 @@ def dedupe(items: list) -> list:
     return out
 
 
-def gather(topic: str, keywords: list, region: str = "us", limit: int = 6) -> list:
+def gather(topic: str, keywords: list, region: str = "us", limit: int = 6, free_only: bool = False) -> list:
     """All sources for one topic, scored against its keywords."""
     keywords = [k for k in dict.fromkeys([topic] + keywords) if k.strip()][:8]
     # Search with the two strongest phrasings; match against all keywords.
@@ -321,8 +354,9 @@ def gather(topic: str, keywords: list, region: str = "us", limit: int = 6) -> li
         items += google_news(q, region)
         items += reddit(q)
     items += hacker_news(keywords[0])
-    items += social(" OR ".join(f'"{k}"' for k in keywords[:3]), region)
-    items += youtube(keywords[0], region)
+    if not free_only:  # X/IG/Threads and YouTube cost Serper credits
+        items += social(" OR ".join(f'"{k}"' for k in keywords[:3]), region)
+        items += youtube(keywords[0], region)
     items += custom_feeds()
     seen, scored = set(), []
     for it in items:
