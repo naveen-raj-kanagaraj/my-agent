@@ -42,9 +42,11 @@ WELCOME = (
     "news brief every morning and evening.\n\n"
     "To set that up: what are you interested in, and which city are you in?\n"
     "For example: \"AI startups, cricket, Bollywood and personal finance. I'm in Chennai.\"\n\n"
-    "I learn from our chats to personalise answers and news. See what I know with /profile, erase it with /forget."
+    "I learn from our chats to personalise answers and news. Chats are saved on the bot owner's hard disk, and the "
+    "owner can read them to improve the bot. See what I know with /profile, erase it all with /forget."
 )
 
+PRIVACY = "\nPrivacy: chats are saved on the bot owner's hard disk, and the owner can read them."
 HELP = (
     "Just talk to me, send a link, a file, a photo or a voice note.\n\n"
     "/news - your personalised news now\n"
@@ -54,10 +56,11 @@ HELP = (
     "/alert <keyword> - instant alerts when something new appears\n"
     "/alerts - your alerts, /unalert <id> to remove\n"
     "/profile - what I know about you\n"
-    "/forget - erase what I know about you\n"
+    "/forget - erase what I know about you and our chats\n"
     "/model - see models, set your default\n"
     "/switch - pick a different model\n"
     "/picker on|off - ask which model at the start of each conversation\n"
+    "/style <how you like replies> - e.g. short, casual, Hinglish\n"
     "/clear - reset this conversation\n"
     "/deep <question> - strongest model (owner)\n"
     "/quick <question> - fastest model\n"
@@ -72,6 +75,9 @@ OWNER_HELP = HELP + (
     "/credits <amount> - track your Anthropic balance\n"
     "/dashboard - link to the web dashboard\n"
     "/pipeline - talent agency pipeline\n"
+    "/activity [user id] - what people asked and searched\n"
+    "/thinking off|low|medium|high - how hard models think\n"
+    "/think <question> - think hard for one message\n"
     "/block <id>, /unblock <id> - moderate users\n"
 )
 
@@ -213,7 +219,7 @@ async def run_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str
     await execute_chat(update, context, text, key)
 
 
-async def execute_chat(update, context, text: str, model_key: str, status_msg=None):
+async def execute_chat(update, context, text: str, model_key: str, status_msg=None, think: str = None):
     raw, chat_id, name, username = ids(update)
     uid = store.uid_for("telegram", raw)
     if model_key not in ("auto", "") and model_key not in models.available():
@@ -223,7 +229,7 @@ async def execute_chat(update, context, text: str, model_key: str, status_msg=No
         store.update_user(uid, session_at=time.time())  # keep the conversation's model alive
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     ctx = agent_context.Ctx()
-    reply = await asyncio.to_thread(chat, raw, "telegram", text, ctx, name, username, chat_id, model_key)
+    reply = await asyncio.to_thread(chat, raw, "telegram", text, ctx, name, username, chat_id, model_key, think)
     if status_msg is not None:
         try:
             await status_msg.edit_text(f"Answered by {ctx.model_label}")
@@ -301,6 +307,75 @@ async def cmd_model_default(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{'on' if user.get('picker_on', 1) else 'off'}.\nSet default: /model sonnet   Toggle picker: /picker on|off")
 
 
+async def cmd_style(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await gate(update, count=False)
+    if not user:
+        return
+    text = " ".join(context.args).strip()
+    if text.lower() in ("clear", "reset", "off"):
+        store.update_user(user["uid"], style="")
+        await update.message.reply_text("Reply style cleared.")
+        return
+    if not text:
+        await update.message.reply_text(
+            f"Your reply style: {user.get('style') or 'default'}\n\n"
+            "Set one like: /style short and casual, no long intros, mix in Hinglish\nClear it with /style clear")
+        return
+    store.update_user(user["uid"], style=text[:400])
+    await update.message.reply_text(f"Got it. I'll reply like this from now on: {text[:400]}")
+
+
+async def cmd_thinking(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    from core import agent as _agent
+    arg = (" ".join(context.args) or "").lower().strip()
+    if arg in _agent.THINKING_LEVELS:
+        store.kv_set("thinking_level", arg)
+        await update.message.reply_text(
+            f"Thinking set to {arg}." + ("" if arg == "off" else
+            " Replies get slower and pricier as this goes up (thinking is billed as output). "
+            "It applies to your chats only; other users stay on fast replies."))
+        return
+    await update.message.reply_text(
+        f"Thinking is {_agent.thinking_level()}.\n\n"
+        "/thinking off - fastest, cheapest\n/thinking low - a quick think on hard questions\n"
+        "/thinking medium - balanced\n/thinking high - deepest, slowest, priciest\n\n"
+        "Or for one message: /think <question>")
+
+
+async def cmd_think(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    text = " ".join(context.args).strip()
+    if not text:
+        await update.message.reply_text("Usage: /think <question>. I'll think hard before answering.")
+        return
+    user = await gate(update)
+    if user:
+        await execute_chat(update, context, text, session_model(user) or "sonnet", think="high")
+
+
+async def cmd_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_owner(update):
+        return
+    arg = " ".join(context.args).strip()
+    uid = None
+    if arg:
+        uid = arg if ":" in arg or arg == "owner" else f"telegram:{arg}"
+    rows = store.get_activity(uid=uid, limit=25)
+    if not rows:
+        await update.message.reply_text("No activity yet." if not uid else f"No activity for {uid}.")
+        return
+    lines = []
+    for r in reversed(rows):
+        who = "" if uid else f"{r['uid']} "
+        kind = {"message": "asked", "download": "downloaded"}.get(r["kind"], r["kind"].replace("tool:", "used "))
+        lines.append(f"{r['ts'][5:16].replace('T', ' ')} {who}{kind}: {r['detail'][:160]}")
+    await send_long(update, ("Recent activity" + (f" for {uid}" if uid else "") + " (UTC):\n\n") + "\n".join(lines)
+                    + "\n\nFull view: /dashboard")
+
+
 async def cmd_switch(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await gate(update, count=False)
     if not user:
@@ -365,7 +440,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Agent online.\n\n" + OWNER_HELP)
         return
     if user.get("state") == "active":
-        await update.message.reply_text("Welcome back! " + HELP)
+        await update.message.reply_text("Welcome back! " + HELP + PRIVACY)
         return
     await start_onboarding(update, context, user)
 
@@ -373,7 +448,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await gate(update, count=False)
     if user:
-        await update.message.reply_text(OWNER_HELP if user["uid"] == "owner" else HELP)
+        await update.message.reply_text(OWNER_HELP if user["uid"] == "owner" else HELP + PRIVACY)
 
 
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -682,6 +757,7 @@ async def process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, user:
 
 
 async def download_link(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str):
+    store.log_activity(store.uid_for("telegram", str(update.effective_user.id)), "telegram", "download", url)
     status = await update.message.reply_text("Downloading...")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_VIDEO)
     try:
@@ -891,6 +967,10 @@ def run_telegram():
     app.add_handler(CommandHandler("model", cmd_model_default))
     app.add_handler(CommandHandler("picker", cmd_picker))
     app.add_handler(CommandHandler("switch", cmd_switch))
+    app.add_handler(CommandHandler("style", cmd_style))
+    app.add_handler(CommandHandler("thinking", cmd_thinking))
+    app.add_handler(CommandHandler("think", cmd_think))
+    app.add_handler(CommandHandler("activity", cmd_activity))
     app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice))

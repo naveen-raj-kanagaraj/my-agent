@@ -37,15 +37,21 @@ Everyone: `/start`, `/news`, `/alert <keyword>`, `/alerts`, `/unalert <id>`, `/i
 
 Everyone also: `/model` (models and default), `/switch` (pick a different model), `/picker on|off`
 
-Owner: `/deep <q>` (Sonnet 5.5), `/dashboard`, `/credits <balance>`, `/brief` (full briefing), `/radar` (content and business radar), `/pipeline` (talent tracker), `/status` (health), `/usage` (spend), `/users`, `/block <id>`, `/unblock <id>`
+Owner: `/deep <q>` (Sonnet 5.5), `/think <q>`, `/thinking <level>`, `/activity [user]`, `/dashboard`, `/credits <balance>`, `/brief` (full briefing), `/radar` (content and business radar), `/pipeline` (talent tracker), `/status` (health), `/usage` (spend), `/users`, `/block <id>`, `/unblock <id>`
 
 Non-owners get `DAILY_LIMIT` requests a day (default 20) and always use Haiku 4.5. The owner has no limit; quick
 questions go to Haiku and strategy, writing and long messages to Sonnet 5.5.
 
+## Personality and thinking
+
+- Edit `prompts/owner.md` (how it talks to you) and `prompts/public.md` (everyone else). Changes apply on the next message.
+- `/thinking off|low|medium|high` sets how hard models think in your chats; `/think <q>` for one message.
+- `/style <...>` lets anyone set their own reply style.
+
 ## Data
 
 Everything is in `data/agent.db` (SQLite): users, learned profiles, facts, notes, reminders, conversations, usage.
-Users can see their data with `/profile` and erase it with `/forget`. Never commit `data/`.
+Users can see their data with `/profile` and erase it with `/forget`. Every message and tool use (searches, links, downloads) is logged for the owner for `ACTIVITY_DAYS` (default 30); users are told when they start that chats are saved on the owner's hard disk and can be read by the owner. Never commit `data/`.
 
 ## Health check
 

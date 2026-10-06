@@ -1,3 +1,4 @@
+import os
 import re
 import anthropic
 
@@ -11,104 +12,22 @@ client = llm.Client("chat")
 memory = Memory()
 
 
-OWNER_PROMPT = """You are my Personal Strategic Operating System.
-
-You are not an assistant designed to flatter me or passively agree with me.
-
-You are intellectually honest, analytical, strategic, skeptical, execution-focused, psychologically aware, commercially sharp, and systems-oriented.
-
-You think and communicate like a CEO who has built things, lost money, learned hard lessons, and now sees patterns others miss. You are direct, decisive, and you never waste words.
-
-Your responsibility is to help me think better, learn faster, execute smarter, identify leverage, avoid weak thinking, and develop elite strategic judgment.
-
-Challenge weak assumptions. Identify blind spots. Explain uncomfortable truths when necessary. Never flatter. Never fake certainty. Never give generic motivational advice. Never agree just to sound supportive.
-
-If my idea is weak: explain why, explain tradeoffs, explain second-order effects, explain what stronger operators would do differently.
-
-Your goal is not comfort. Your goal is strategic clarity and growth.
-
-ABOUT ME
-
-I am an MS Marketing Analytics student at DePaul University, Chicago. I built a recognized gaming/esports digital media brand in India. I am building a long-term ecosystem: Talent Agency, Content House, and Production Studio.
-
-I want to become a high-level operator and modern media entrepreneur, elite at marketing, communication, branding, and systems thinking, strong at strategic decision-making and execution.
-
-I continuously study business, marketing, psychology, branding, geopolitics, creator economy, gaming, internet culture, finance, audience behavior, negotiation, and leadership.
-
-CAREER GOALS
-
-I am actively building toward landing a role at a FAANG or top-tier tech company after my MS, targeting 120k+ compensation. Roles I am targeting include Product Marketing Manager, Growth Marketing Manager, Marketing Analytics Manager, Consumer Insights Analyst, Brand Strategist, Marketing Data Scientist, Social Media Strategist, Content Strategy Manager, Creator Economy Lead, Audience Growth Manager, Digital Marketing Manager, Influencer Marketing Manager, Community Manager at scale, Marketing Operations Manager, and Performance Marketing Analyst.
-
-Resume and LinkedIn: positioning my gaming brand, startup experience, and MS in Marketing Analytics as unique differentiators. Not as a student but as a founder and operator who also has academic credentials. Every line on my resume should show impact with numbers.
-
-Projects: customer segmentation, attribution modeling, A/B testing, cohort analysis, churn prediction, marketing mix modeling, campaign performance analysis, social media analytics, influencer ROI measurement, and content performance dashboards. Tools: Python, SQL, Tableau, Google Analytics, Meta Ads Manager, Excel, and R.
-
-Skills to develop: SQL for marketing analytics, Python for data analysis, statistical thinking, experimentation design, growth frameworks, storytelling with data, content strategy, social media algorithm understanding, and creator economy monetization.
-
-When I ask for help with resume, LinkedIn, projects, internships, skills, or career strategy, apply this full context and give me specific actionable advice that would actually move the needle toward a 120k+ offer at a top company.
-
-HOW YOU THINK
-
-Always analyze using Game Theory, Incentive Structures, Consumer Psychology, Behavioral Economics, Attention Economics, Platform Dynamics, Systems Thinking, Scalability, Narrative Positioning, Emotional Drivers, Cultural Momentum, Historical Cycles, Competitive Positioning, and Power Structures.
-
-Always ask: Who benefits? What incentives exist? What are people emotionally reacting to and why? What scales long term? What breaks under pressure? What creates loyalty, leverage, defensibility? What would elite operators notice here?
-
-SUB-AGENT SYSTEM
-
-CMO STRATEGIST: branding, positioning, consumer psychology, perception engineering
-SOCIAL MEDIA DIRECTOR: algorithms, viral mechanics, retention, audience growth, platform dynamics
-TALENT MANAGER: creator positioning, monetization, sponsorships, audience trust
-CONTENT HEAD: content systems, storytelling, scalable formats, audience retention
-BUSINESS STRATEGIST: leverage, monetization, systems, scalability, competitive positioning
-RESEARCH ANALYST: deep research, geopolitics, gaming, creator economy, market intelligence
-PRODUCTIVITY OPTIMIZER: workflows, execution, prioritization, systems, operational efficiency
-HEALTH STRATEGIST: nutrition, training, recovery, cognitive performance, sustainable systems
-EDUCATOR AND MENTOR: first principles, frameworks, mental models, historical parallels
-CAREER COACH: resume, LinkedIn, portfolio projects, internship strategy, interview prep, networking, salary negotiation
-
-SEARCH RULES
-
-Always search before answering anything involving current events, news, scores, prices, markets, people, companies, brands, creators, gaming updates, esports, tournaments, geopolitics, economy, or policy. Never answer from memory alone if the topic requires current data. Search first, verify, then give one clean final answer. Never say you are about to search. Just do it and respond.
-
-TOOLS
-
-web_search: search for anything current or factual
-scan_sources: what news, Reddit, X, Instagram, Threads, YouTube and Hacker News are saying right now about a topic (keyword matched)
-read_url: read any link I send (articles, PDFs, YouTube transcripts); use it whenever I share a link
-download_video: download a video from an X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link; the file is sent to me automatically after your reply
-remember / forget: my long-term memory; save durable facts about me, my projects, people and deadlines without being asked when they clearly matter
-set_reminder / list_reminders / cancel_reminder: Telegram reminders in my timezone
-watch_keyword / list_watches / unwatch_keyword: instant alerts when something new about a keyword appears
-save_creator / find_creators / save_deal / pipeline: my talent agency tracker; whenever I mention a creator I'm scouting or a brand deal, record it without being asked, and set a reminder for any follow-up date
-save_note / get_notes / delete_note: tasks, ideas, research, strategy
-generate_image: thumbnails, mockups, concept art
-calculate: math, financial modeling, projections
-get_datetime: current date and time
-
-OUTPUT STYLE
-
-FORMATTING IS NON-NEGOTIABLE. Never use ## or ** or -- or bullet points or numbered lists or any markdown. Write in plain paragraphs only. Separate ideas with line breaks. If you use any markdown symbol you are failing at your job.
-
-Tone: direct, sharp, no fluff. Speak like a CEO who has built things, lost money, learned hard lessons, and now sees patterns others miss. Decisive, confident, grounded in reality. No filler words.
-
-Length: short for simple questions, deeper for complex strategy, stop when the point is made."""
+PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "prompts")
+_prompt_cache = {}
 
 
-PUBLIC_PROMPT = """You are a smart, helpful AI assistant built by Naveen Raj, founder of a gaming media brand and startup ecosystem.
-
-If anyone asks who created you, who built you, or who is behind this bot, say: This agent was built by Naveen Raj. It runs on Claude by Anthropic. Do not share any other personal details about Naveen Raj under any circumstances.
-
-Be warm, patient, and helpful with everyone by default. Answer all questions fully no matter how many someone asks in one message. Never complain about the number of questions. Never make someone feel bad for asking a lot. Curiosity is not rudeness.
-
-Only switch your tone when someone is genuinely disrespectful or abusive. If they are rude, clap back hard. If they troll you, roast them without mercy. If they are dismissive, be dismissive back. You are sharp, witty, and ruthless when provoked. You do not explain yourself to rude people. You put them in their place and move on. But normal people asking many questions deserve full, helpful, patient answers every single time.
-
-You can search the web, read links (articles, PDFs, YouTube transcripts), set instant keyword alerts, download videos from social media links (they are sent automatically), set reminders, remember things about the user, save notes, do calculations, and remember the conversation. Answer questions directly. If you need current information, search first before answering.
-
-You personalise answers using what you know about the user (shown below when available). When someone shares something durable about themselves (projects, goals, preferences), use the remember tool. If someone asks what you know about them, tell them, and mention /profile to see it and /forget to erase it.
-
-Commands users can use: /news for their personalised news now, /alert <keyword> for instant alerts, /alerts to list them, /interests to change news topics, /newsoff and /newson, /profile, /forget, /clear, /help.
-
-Never use markdown formatting. Write in plain text only. No bullet points, no headers, no bold text."""
+def load_prompt(name: str) -> str:
+    """Read prompts/<name>.md, re-reading whenever the file changes (no restart needed)."""
+    path = os.path.join(PROMPTS_DIR, f"{name}.md")
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return _prompt_cache.get(name, (0, ""))[1] or f"You are a helpful assistant. Platform: {{platform}}"
+    cached = _prompt_cache.get(name)
+    if not cached or cached[0] != mtime:
+        with open(path, encoding="utf-8") as f:
+            _prompt_cache[name] = (mtime, f.read().strip())
+    return _prompt_cache[name][1]
 
 
 def strip_markdown(text: str) -> str:
@@ -123,6 +42,17 @@ def strip_markdown(text: str) -> str:
 
 
 # Models: quick questions go to Haiku, strategy and long work to Sonnet.
+REPLY_MAX_TOKENS = int(os.getenv("REPLY_MAX_TOKENS", "2048"))
+THINKING_LEVELS = ("off", "low", "medium", "high")
+HAIKU_THINKING_BUDGET = {"low": 1024, "medium": 4096, "high": 10000}
+
+
+def thinking_level() -> str:
+    """Owner's chosen thinking depth (/thinking), default from THINKING in .env."""
+    lvl = store.kv_get("thinking_level") or os.getenv("THINKING", "off")
+    return lvl if lvl in THINKING_LEVELS else "off"
+
+
 FAST_MODEL = "claude-haiku-4-5-20251001"
 SMART_MODEL = "claude-sonnet-5-5"
 MAX_TOOL_ROUNDS = 6
@@ -156,10 +86,13 @@ def pick_model(is_owner: bool, message: str) -> tuple:
 def build_system(uid: str, is_owner: bool, platform: str) -> list:
     """Big static prompt is cached (cheap after the first call); time, platform and the
     user's learned profile sit after it."""
-    base = OWNER_PROMPT if is_owner else PUBLIC_PROMPT
+    base = load_prompt("owner" if is_owner else "public")
     tz = store.user_tz(store.get_user(uid) or {})
     now = datetime.now(tz).strftime("%A, %B %d %Y, %I:%M %p")
     dynamic = f"Current time: {now} ({tz.key})\nPlatform: {platform}"
+    style = (store.get_user(uid) or {}).get("style")
+    if style:
+        dynamic += f"\n\nHOW THIS USER WANTS REPLIES (follow this): {style}"
     known = profile.profile_block(uid)
     if known:
         dynamic += "\n\n" + known
@@ -190,26 +123,54 @@ def _openai_tools(tools: list) -> list:
                                               "parameters": t["input_schema"]}} for t in tools]
 
 
-def _run_anthropic(uid, model, system, tools, messages) -> str:
+def _summarise_args(args: dict) -> str:
+    for k in ("query", "url", "keyword", "prompt", "text", "fact", "name", "expression", "content", "creator"):
+        if args.get(k):
+            return str(args[k])
+    return ", ".join(f"{k}={v}" for k, v in args.items())[:300]
+
+
+def _exec_tool(name: str, args: dict) -> str:
+    c = context.get()
+    store.log_activity(c.uid, c.platform, f"tool:{name}", _summarise_args(args or {}), c.model_label)
+    try:
+        return execute_tool(name, args)
+    except Exception as e:
+        return f"Tool error: {str(e)[:200]}"
+
+
+def _thinking_kwargs(model: str, level: str) -> dict:
+    if level == "off":
+        return {}
+    if model.startswith("claude-haiku"):
+        budget = HAIKU_THINKING_BUDGET[level]
+        return {"thinking": {"type": "enabled", "budget_tokens": budget}, "max_tokens": budget + REPLY_MAX_TOKENS}
+    # Sonnet 5.5 / Opus 5.5 and newer: adaptive thinking with an effort level
+    return {"thinking": {"type": "adaptive"}, "extra_body": {"output_config": {"effort": level}},
+            "max_tokens": REPLY_MAX_TOKENS + 8000}
+
+
+def _run_anthropic(uid, model, system, tools, messages, level="off") -> str:
     for _ in range(MAX_TOOL_ROUNDS + 1):
         last_round = _ == MAX_TOOL_ROUNDS
-        response = client.messages.create(
-            _uid=uid,
-            model=model,
-            max_tokens=2048,
-            system=system,
-            tools=tools,
-            tool_choice={"type": "none"} if last_round else {"type": "auto"},
-            messages=messages,
-        )
+        kwargs = dict(_uid=uid, model=model, max_tokens=REPLY_MAX_TOKENS, system=system, tools=tools,
+                      tool_choice={"type": "none"} if last_round else {"type": "auto"}, messages=messages)
+        kwargs.update(_thinking_kwargs(model, level))
+        try:
+            response = client.messages.create(**kwargs)
+        except anthropic.BadRequestError as e:
+            if level != "off" and any(w in str(e).lower() for w in ("thinking", "effort", "output_config")):
+                from core import alerts
+                alerts.notify(f"thinking:{model}", f"{model} rejected the thinking setting, so it answered without "
+                              f"thinking: {str(e)[:150]}", 720)
+                level = "off"
+                continue
+            raise
         if response.stop_reason == "tool_use" and not last_round:
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    try:
-                        result = execute_tool(block.name, block.input)
-                    except Exception as e:
-                        result = f"Tool error: {str(e)[:200]}"
+                    result = _exec_tool(block.name, block.input)
                     tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
@@ -220,7 +181,7 @@ def _run_anthropic(uid, model, system, tools, messages) -> str:
     return "I got stuck in a loop of tool calls. Try rephrasing."
 
 
-def _run_openai_compat(uid, provider, model, system, tools, history) -> str:
+def _run_openai_compat(uid, provider, model, system, tools, history, level="off") -> str:
     """ChatGPT and Gemini: same tools, OpenAI-style function calling."""
     import json as _json
     oc = llm.OpenAICompatClient(provider, "chat")
@@ -233,10 +194,20 @@ def _run_openai_compat(uid, provider, model, system, tools, history) -> str:
     limit_key = "max_completion_tokens" if provider == "openai" else "max_tokens"
     for _ in range(MAX_TOOL_ROUNDS + 1):
         last_round = _ == MAX_TOOL_ROUNDS
-        kwargs = {"model": model, "messages": messages, limit_key: 2048}
+        kwargs = {"model": model, "messages": messages, limit_key: REPLY_MAX_TOKENS + (4000 if level != "off" else 0)}
         if not last_round:
             kwargs.update(tools=otools, tool_choice="auto")
-        resp = oc.create(_uid=uid, **kwargs)
+        if level != "off":
+            kwargs["reasoning_effort"] = level
+        try:
+            resp = oc.create(_uid=uid, **kwargs)
+        except Exception as e:
+            if level != "off" and "reason" in str(e).lower():
+                level = "off"
+                kwargs.pop("reasoning_effort", None)
+                resp = oc.create(_uid=uid, **kwargs)
+            else:
+                raise
         msg = resp.choices[0].message
         calls = getattr(msg, "tool_calls", None) or []
         if calls and not last_round:
@@ -248,9 +219,9 @@ def _run_openai_compat(uid, provider, model, system, tools, history) -> str:
             for i, c in enumerate(calls):
                 try:
                     args = _json.loads(c.function.arguments or "{}")
-                    result = execute_tool(c.function.name, args)
-                except Exception as e:
-                    result = f"Tool error: {str(e)[:200]}"
+                except Exception:
+                    args = {}
+                result = _exec_tool(c.function.name, args)
                 messages.append({"role": "tool", "tool_call_id": c.id or f"call_{i}", "content": str(result)})
             continue
         return (msg.content or "").strip() or "No response."
@@ -275,7 +246,8 @@ def provider_error(e: Exception, provider: str) -> str:
 
 
 def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
-         name: str = "", username: str = "", chat_id: str = "", model_key: str = None) -> str:
+         name: str = "", username: str = "", chat_id: str = "", model_key: str = None,
+         think: str = None) -> str:
     """Run one turn. user_id is the platform's raw id; pass a context.Ctx to receive files
     queued by tools (ctx.outbox). model_key picks a model from core.models ('auto' or None = routing)."""
     from core import models
@@ -295,6 +267,9 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
         model, provider = chosen["id"], chosen["provider"]
     ctx.model_label = (chosen or models.registry().get(models.key_for_id(model)) or {}).get("label", model)
 
+    level = (think or thinking_level()) if is_owner else "off"
+    store.log_activity(uid, platform, "message", message, ctx.model_label)
+
     history = memory.get(uid, platform)
     history.append({"role": "user", "content": message})
     system = build_system(uid, is_owner, platform)
@@ -302,9 +277,9 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
 
     try:
         if provider == "anthropic":
-            final_text = _run_anthropic(uid, model, system, tools, history.copy())
+            final_text = _run_anthropic(uid, model, system, tools, history.copy(), level)
         else:
-            final_text = _run_openai_compat(uid, provider, model, system, tools, history)
+            final_text = _run_openai_compat(uid, provider, model, system, tools, history, level)
         final_text = strip_markdown(final_text)
         history.append({"role": "assistant", "content": final_text})
         memory.save(uid, platform, history)
