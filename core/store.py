@@ -100,7 +100,9 @@ def _init(c):
     );
     """)
     cols = {r["name"] for r in c.execute("PRAGMA table_info(users)")}
-    for col, ddl in (("keywords", "TEXT DEFAULT '{}'"), ("custom_keywords", "TEXT DEFAULT '[]'")):
+    for col, ddl in (("keywords", "TEXT DEFAULT '{}'"), ("custom_keywords", "TEXT DEFAULT '[]'"),
+                     ("last_model", "TEXT DEFAULT ''"), ("default_model", "TEXT DEFAULT 'auto'"),
+                     ("picker_on", "INTEGER DEFAULT 1")):
         if col not in cols:
             c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
     c.commit()
@@ -553,3 +555,76 @@ def all_deals(include_closed: bool = False) -> list:
 def all_creators() -> list:
     with _lock:
         return [dict(r) for r in conn().execute("SELECT * FROM creators ORDER BY updated_at DESC")]
+
+
+# ---------- dashboard queries ----------
+
+def _since(days: int) -> str:
+    from datetime import timedelta as _td
+    return (datetime.now(ZoneInfo(OWNER_TZ)) - _td(days=days - 1)).strftime("%Y-%m-%d")
+
+
+def dashboard_users() -> list:
+    today, week = owner_today(), _since(7)
+    with _lock:
+        c = conn()
+        spend = {r["uid"]: dict(r) for r in c.execute(
+            "SELECT uid, SUM(CASE WHEN day=? THEN cost ELSE 0 END) AS today, "
+            "SUM(CASE WHEN day>=? THEN cost ELSE 0 END) AS week, SUM(cost) AS total, COUNT(*) AS calls "
+            "FROM spend GROUP BY uid", (today, week))}
+        reqs = {r["uid"]: r["count"] for r in c.execute("SELECT uid, count FROM usage WHERE day=?", (today,))}
+        watches = {r["uid"]: r["n"] for r in c.execute("SELECT uid, COUNT(*) AS n FROM watches GROUP BY uid")}
+        users = [dict(r) for r in c.execute("SELECT * FROM users")]
+    out = []
+    for u in users:
+        s = spend.get(u["uid"], {})
+        out.append({
+            "uid": u["uid"], "name": u.get("name") or "", "username": u.get("username") or "",
+            "platform": u.get("platform") or "", "timezone": u.get("timezone") or "",
+            "last_seen": u.get("last_seen") or "", "created_at": u.get("created_at") or "",
+            "last_model": u.get("last_model") or "", "state": u.get("state") or "",
+            "requests_today": reqs.get(u["uid"], 0), "messages": u.get("msg_count") or 0,
+            "spend_today": round(s.get("today") or 0, 5), "spend_week": round(s.get("week") or 0, 5),
+            "spend_total": round(s.get("total") or 0, 5), "calls": s.get("calls") or 0,
+            "news_on": bool(u.get("news_on")), "blocked": bool(u.get("blocked")),
+            "alerts": watches.get(u["uid"], 0), "interests": interests(u),
+        })
+    return sorted(out, key=lambda x: x["last_seen"], reverse=True)
+
+
+def spend_series(days: int = 14) -> list:
+    with _lock:
+        rows = conn().execute("SELECT day, model, SUM(cost) AS cost FROM spend WHERE day>=? GROUP BY day, model",
+                              (_since(days),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def spend_by(field: str, days: int = 7) -> list:
+    assert field in ("model", "feature")
+    with _lock:
+        rows = conn().execute(f"SELECT {field} AS k, SUM(cost) AS cost, COUNT(*) AS calls, "
+                              f"SUM(input_tokens + cache_read + cache_write) AS tin, SUM(output_tokens) AS tout "
+                              f"FROM spend WHERE day>=? GROUP BY {field} ORDER BY cost DESC", (_since(days),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def recent_calls(limit: int = 40) -> list:
+    with _lock:
+        rows = conn().execute("SELECT created_at, uid, feature, model, cost, input_tokens, output_tokens "
+                              "FROM spend ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def spend_since(iso_ts: str, provider_prefix: str = "claude") -> float:
+    with _lock:
+        return conn().execute("SELECT COALESCE(SUM(cost),0) AS c FROM spend WHERE created_at>=? AND model LIKE ?",
+                              (iso_ts, provider_prefix + "%")).fetchone()["c"]
+
+
+def credit_estimate():
+    """Anthropic balance estimate: the amount the owner entered with /credits minus Claude spend since."""
+    base = kv_get("credit_baseline")
+    if not base:
+        return None
+    left = base["amount"] - spend_since(base["set_at"])
+    return {"entered": base["amount"], "set_at": base["set_at"], "left": round(left, 4)}

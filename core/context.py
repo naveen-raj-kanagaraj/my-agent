@@ -15,6 +15,7 @@ class Ctx:
     chat_id: str = ""        # where files/reminders go
     is_owner: bool = False
     outbox: list = field(default_factory=list)  # files queued by tools: {"kind": "video"|"photo", ...}
+    model_label: str = ""    # which model answered (set by core.agent.chat)
 
 
 _current = contextvars.ContextVar("agent_ctx", default=None)

@@ -15,3 +15,4 @@ yt-dlp
 beautifulsoup4
 lxml
 faster-whisper
+openai
