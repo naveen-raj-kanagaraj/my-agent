@@ -1,6 +1,6 @@
 # Personal Strategic Agent
 
-A Claude-powered agent on Telegram (open to anyone, with daily limits) and Discord (owner only).
+A Claude-powered agent on Telegram and Discord. For everyone else it works like ChatGPT, Claude, Gemini or Perplexity (any question, web answers with sources, formatted replies, files, images, voice); the business tools (scouting, content studio, talent tracker, radar, briefings) are the owner's only.
 
 What it does:
 - Chat with a learned profile of each user: it asks new users what they're interested in, learns from their messages, files and images, and remembers facts long-term

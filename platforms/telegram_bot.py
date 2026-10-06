@@ -38,20 +38,28 @@ DAILY_LIMIT = int(os.getenv("DAILY_LIMIT", "20"))
 VISION_OWNER_MODEL = "claude-sonnet-5-5"
 VISION_PUBLIC_MODEL = "claude-haiku-4-5-20251001"
 
+FIRST_HELLO = ("Hi{name}! I'm an AI assistant: ask me anything, send links, files, photos or voice notes. "
+               "Tip: /help shows what I can do. Chats are saved on the bot owner's hard disk, and the owner can read them.")
+
 WELCOME = (
     "Hi{name}! I'm an AI assistant built by Naveen Raj.\n\n"
     "I can answer questions, search the web, read links and YouTube videos, download videos from X, Instagram "
     "and TikTok, read your files and images, understand voice notes, set reminders, and send you a personalised "
     "news brief every morning and evening.\n\n"
-    "To set that up: what are you interested in, and which city are you in?\n"
-    "For example: \"AI startups, cricket, Bollywood and personal finance. I'm in Chennai.\"\n\n"
+    "Just ask me anything to get started.\n\n"
+    "Want a daily news brief? Send /interests with your topics and city, for example:\n"
+    "/interests AI startups, cricket, Bollywood, personal finance. I'm in Chennai.\n\n"
     "I learn from our chats to personalise answers and news. Chats are saved on the bot owner's hard disk, and the "
     "owner can read them to improve the bot. See what I know with /profile, erase it all with /forget."
 )
 
 PRIVACY = "\nPrivacy: chats are saved on the bot owner's hard disk, and the owner can read them."
 HELP = (
-    "Just talk to me, send a link, a file, a photo or a voice note.\n\n"
+    "Ask me anything, like you would ChatGPT, Claude, Gemini or Perplexity: questions, research with sources, "
+    "writing, studying, coding, maths, advice. Send links, PDFs, Word/Excel/PowerPoint files, photos or voice notes "
+    "and I'll read them. Send an X, Instagram, TikTok or YouTube Shorts link to download the video.\n\n"
+    "/new - start a fresh conversation\n"
+    "/search <question> - web answer with sources\n"
     "/news - your personalised news now\n"
     "/interests <topics> - change your news topics\n"
     "/keywords <words> - track exact keywords across news, Reddit, X, Instagram, YouTube\n"
@@ -103,10 +111,23 @@ def is_owner(update: Update) -> bool:
     return store.is_owner("telegram", str(update.effective_user.id))
 
 
-async def send_long(update: Update, text: str):
+async def send_long(update: Update, text: str, rich: bool = False):
+    """Send a reply in Telegram-sized pieces. rich=True renders Markdown (bold, lists, code, links)."""
     text = text or "(no response)"
-    for i in range(0, len(text), 4096):
-        await update.message.reply_text(text[i:i + 4096])
+    if not rich:
+        for i in range(0, len(text), 4096):
+            await update.message.reply_text(text[i:i + 4096])
+        return
+    from core import tg_format
+    for chunk in tg_format.split_for_telegram(text):
+        html_chunk = tg_format.to_html(chunk)
+        try:
+            if len(html_chunk) > 4096:
+                raise ValueError("too long after formatting")
+            await update.message.reply_text(html_chunk, parse_mode="HTML", disable_web_page_preview=True)
+        except Exception:
+            for i in range(0, len(chunk), 4096):  # formatting failed: send it plain
+                await update.message.reply_text(chunk[i:i + 4096])
 
 
 async def gate(update: Update, count: bool = True):
@@ -247,9 +268,9 @@ async def execute_chat(update, context, text: str, model_key: str, status_msg=No
             await status_msg.edit_text(f"Answered by {ctx.model_label}")
         except Exception:
             pass
-    footer = (f"\n\n({ctx.model_label} · /switch to change)"
-              if ctx.model_label and model_key not in ("auto", "") else "")
-    await send_long(update, reply + footer)
+    footer = (f"\n\n_{ctx.model_label} · /switch to change_" if ctx.rich else f"\n\n({ctx.model_label} · /switch to change)") \
+        if ctx.model_label and model_key not in ("auto", "") else ""
+    await send_long(update, reply + footer, rich=ctx.rich)
     await send_outbox(update, ctx)
 
 
@@ -388,6 +409,18 @@ async def cmd_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     + "\n\nFull view: /dashboard")
 
 
+async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = " ".join(context.args).strip()
+    if not q:
+        await update.message.reply_text("Usage: /search <question>. I'll search the web and answer with sources.")
+        return
+    user = await gate(update)
+    if user:
+        await run_chat(update, context, (
+            f"{q}\n\n(Search the web for this, read the best sources, and answer with numbered citations and a "
+            "Sources list at the end.)"))
+
+
 async def cmd_switch(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await gate(update, count=False)
     if not user:
@@ -416,7 +449,7 @@ async def cmd_picker(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------- onboarding ----------
 
 async def start_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE, user: dict):
-    store.update_user(user["uid"], state="awaiting_interests")
+    store.update_user(user["uid"], state="active")
     first = update.effective_user.first_name
     await update.message.reply_text(WELCOME.format(name=f" {first}" if first else ""))
     if user.get("state") == "new":
@@ -467,7 +500,8 @@ async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await gate(update, count=False)
     if user:
         memory.clear(user["uid"], "telegram")
-        await update.message.reply_text("Conversation cleared. (Your profile is kept; /forget erases it.)")
+        store.update_user(user["uid"], session_model="")
+        await update.message.reply_text("New conversation started. (What I've learned about you is kept; /forget erases it.)")
 
 
 async def cmd_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -753,14 +787,13 @@ async def cmd_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, user: dict, text: str):
     if user["uid"] != "owner" and user.get("state") in ("new", "awaiting_interests"):
-        if downloader.is_bare_link(text):
-            pass  # let new users download right away
-        elif user.get("state") == "new":
-            await start_onboarding(update, context, user)
-            return
-        else:
-            await finish_onboarding(update, user, text)
-            return
+        # Like ChatGPT: answer straight away. Daily news is optional (/interests).
+        store.update_user(user["uid"], state="active")
+        if user.get("state") == "new":
+            first = update.effective_user.first_name
+            await update.message.reply_text(FIRST_HELLO.format(name=f" {first}" if first else ""))
+            uname = f"@{user['username']}" if user.get("username") else user["uid"]
+            await notify_owner(context, f"New user: {first or ''} {uname} ({user['uid']})")
 
     if downloader.is_bare_link(text):
         await download_link(update, context, downloader.find_url(text))
@@ -1001,7 +1034,7 @@ async def handle_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ctx = agent_context.Ctx()
     reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None,
                                     {"id": chat.id, "title": chat.title})
-    await send_long(update, reply)
+    await send_long(update, reply, rich=ctx.rich)
     await send_outbox(update, ctx)
 
 
@@ -1023,7 +1056,7 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     group = {"id": chat.id, "title": chat.title} if getattr(chat, "type", "private") != "private" else None
     ctx = agent_context.Ctx()
     reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None, group)
-    await send_long(update, reply)
+    await send_long(update, reply, rich=ctx.rich)
     await send_outbox(update, ctx)
 
 
@@ -1173,7 +1206,8 @@ def run_telegram():
     GROUPS = filters.ChatType.GROUPS
     app.add_handler(CommandHandler("start", cmd_start, filters=PRIVATE))
     app.add_handler(CommandHandler("help", cmd_help, filters=PRIVATE))
-    app.add_handler(CommandHandler("clear", cmd_clear, filters=PRIVATE))
+    app.add_handler(CommandHandler(["clear", "new"], cmd_clear, filters=PRIVATE))
+    app.add_handler(CommandHandler("search", cmd_search, filters=PRIVATE))
     app.add_handler(CommandHandler("profile", cmd_profile, filters=PRIVATE))
     app.add_handler(CommandHandler("forget", cmd_forget, filters=PRIVATE))
     app.add_handler(CommandHandler("interests", cmd_interests, filters=PRIVATE))
