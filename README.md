@@ -12,6 +12,11 @@ What it does:
 - Reminders (one-off, daily, weekdays, weekly), notes, calculator, web search
 - Choice of model at the start of each conversation, kept until 2 hours of quiet or /switch: Claude Haiku 4.5, Sonnet 5.5, Opus 5.5, Fable 5.1; GPT-5.6 Luna, Terra, Sol; Gemini 3.1 Flash-Lite, 3.7 Flash, 3.1 Pro (pricier models use more of a user's daily requests)
 - Web dashboard at http://localhost:8090: active sessions, requests and spend per user, spend by model, day and feature, source health
+- Group chats, like Meta AI in WhatsApp: add the bot to a Telegram group and it answers when someone @mentions it or replies to it (shared memory per group, public persona, no private tools; owner is notified and can /leave)
+- Talent scouting: /scout @channel gives subscribers, median views, engagement, upload cadence and momentum, saved to the tracker
+- Content studio: /script, /shorts (clip moments with timestamps from a long video), /captions, all in your brand voice (/brandvoice add)
+- Nightly database backup to iCloud Drive (or data/backups), last 7 kept; /backup for now
+- Protection against instructions hidden in web pages, posts and transcripts
 - Image generation (owner by default)
 - Instant keyword alerts every 30 minutes from news sites, Reddit and Hacker News (free, no AI call)
 - Talent agency tracker for the owner: creators, brand deals, stages, due dates, stale-deal follow-ups, weekly Monday summary
