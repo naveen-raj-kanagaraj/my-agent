@@ -88,6 +88,11 @@ def _init(c):
     CREATE TABLE IF NOT EXISTS alert_seen (
         uid TEXT, item_key TEXT, seen_at TEXT, PRIMARY KEY (uid, item_key)
     );
+    CREATE TABLE IF NOT EXISTS activity (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts TEXT, uid TEXT, platform TEXT, kind TEXT, detail TEXT, model TEXT
+    );
+    CREATE INDEX IF NOT EXISTS activity_uid ON activity(uid, id);
     CREATE TABLE IF NOT EXISTS creators (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT, platform TEXT, handle TEXT, followers TEXT, niche TEXT, rate TEXT,
@@ -103,7 +108,7 @@ def _init(c):
     for col, ddl in (("keywords", "TEXT DEFAULT '{}'"), ("custom_keywords", "TEXT DEFAULT '[]'"),
                      ("last_model", "TEXT DEFAULT ''"), ("default_model", "TEXT DEFAULT 'auto'"),
                      ("picker_on", "INTEGER DEFAULT 1"), ("session_model", "TEXT DEFAULT ''"),
-                     ("session_at", "REAL DEFAULT 0")):
+                     ("session_at", "REAL DEFAULT 0"), ("style", "TEXT DEFAULT ''")):
         if col not in cols:
             c.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
     c.commit()
@@ -222,8 +227,10 @@ def forget_user(uid: str):
         c.execute("DELETE FROM notes WHERE uid=?", (uid,))
         c.execute("DELETE FROM reminders WHERE uid=?", (uid,))
         c.execute("DELETE FROM conversations WHERE key LIKE ?", (f"%|{uid}",))
+        c.execute("DELETE FROM activity WHERE uid=?", (uid,))
+        c.execute("DELETE FROM watches WHERE uid=?", (uid,))
         c.execute(
-            "UPDATE users SET interests='[]', profile='', language='', msg_count=0, keywords='{}', custom_keywords='[]', "
+            "UPDATE users SET interests='[]', profile='', language='', msg_count=0, keywords='{}', custom_keywords='[]', style='', "
             "state=CASE WHEN uid='owner' THEN 'active' ELSE 'awaiting_interests' END WHERE uid=?",
             (uid,),
         )
@@ -629,3 +636,48 @@ def credit_estimate():
         return None
     left = base["amount"] - spend_since(base["set_at"])
     return {"entered": base["amount"], "set_at": base["set_at"], "left": round(left, 4)}
+
+
+# ---------- activity log ----------
+
+ACTIVITY_DAYS = int(os.getenv("ACTIVITY_DAYS", "30"))
+
+
+def log_activity(uid: str, platform: str, kind: str, detail: str, model: str = ""):
+    try:
+        with _lock:
+            conn().execute("INSERT INTO activity (ts, uid, platform, kind, detail, model) VALUES (?,?,?,?,?,?)",
+                           (iso(now_utc()), uid, platform, kind, (detail or "")[:1000], model))
+            conn().commit()
+    except Exception as e:
+        print(f"Activity log failed: {e}")
+
+
+def get_activity(uid: str = None, kind: str = None, limit: int = 100) -> list:
+    q, args = "SELECT * FROM activity WHERE 1=1", []
+    if uid:
+        q += " AND uid=?"
+        args.append(uid)
+    if kind:
+        q += " AND kind LIKE ?"
+        args.append(kind + "%")
+    with _lock:
+        return [dict(r) for r in conn().execute(q + " ORDER BY id DESC LIMIT ?", (*args, limit))]
+
+
+def top_searches(days: int = 7, limit: int = 15) -> list:
+    from datetime import timedelta as _td
+    since = iso(now_utc() - _td(days=days))
+    with _lock:
+        rows = conn().execute(
+            "SELECT lower(detail) AS q, COUNT(*) AS n, COUNT(DISTINCT uid) AS users FROM activity "
+            "WHERE kind IN ('tool:web_search', 'tool:scan_sources') AND ts>=? GROUP BY lower(detail) "
+            "ORDER BY n DESC LIMIT ?", (since, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def prune_activity():
+    from datetime import timedelta as _td
+    with _lock:
+        conn().execute("DELETE FROM activity WHERE ts < ?", (iso(now_utc() - _td(days=ACTIVITY_DAYS)),))
+        conn().commit()
