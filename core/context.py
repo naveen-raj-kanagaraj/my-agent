@@ -16,6 +16,7 @@ class Ctx:
     is_owner: bool = False
     outbox: list = field(default_factory=list)  # files queued by tools: {"kind": "video"|"photo", ...}
     model_label: str = ""    # which model answered (set by core.agent.chat)
+    rich: bool = False       # reply contains Markdown to render as Telegram formatting
 
 
 _current = contextvars.ContextVar("agent_ctx", default=None)

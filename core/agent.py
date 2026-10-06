@@ -292,7 +292,9 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
             final_text = _run_anthropic(uid, model, system, tools, history.copy(), level)
         else:
             final_text = _run_openai_compat(uid, provider, model, system, tools, history, level)
-        final_text = strip_markdown(final_text)
+        if is_owner:
+            final_text = strip_markdown(final_text)  # your prompt asks for plain text
+        ctx.rich = not is_owner  # everyone else gets formatted replies (bold, lists, code, links)
         history.append({"role": "assistant", "content": final_text})
         memory.save(mem_key, platform, history)
         if not group:
