@@ -36,13 +36,40 @@ def find_url(text: str):
     return m.group(0) if m else None
 
 
-def is_bare_link(text: str) -> bool:
-    """True when the message is just a supported link (maybe with a word or two)."""
+ANY_URL = re.compile(r"https?://\S+", re.IGNORECASE)
+DOWNLOAD_WORDS = re.compile(
+    r"\b(download|downlaod|dl|save|mp4|reel ?file|video ?file|send (me )?(the |this )?(video|clip|reel)|"
+    r"get (me )?(the |this )?(video|clip|reel)|grab)\b", re.IGNORECASE)
+
+BARE_LINK_NOTE = ("(They sent only this link, no message. Open it with read_url and tell them what it is: a short "
+                  "summary and the key points. For a video, use the transcript if there is one. Don't download it.)")
+
+
+def any_url(text: str):
+    m = ANY_URL.search(text or "")
+    return m.group(0).rstrip(").,!?'\"") if m else None
+
+
+def is_video_link(url: str) -> bool:
+    """A site we can download videos from (X, Instagram, TikTok, YouTube, Reddit, Facebook, Threads)."""
+    return bool(URL_PATTERN.match(url or ""))
+
+
+def only_link(text: str) -> bool:
+    """The message is just a link, nothing else."""
+    url = any_url(text)
+    return bool(url) and not (text or "").replace(url, "").strip(" \n\t.,!?:-")
+
+
+def wants_download(text: str) -> bool:
+    """A video link plus words asking for the file ('download', 'save', 'dl', 'send me the video')."""
     url = find_url(text)
-    if not url:
-        return False
-    rest = (text or "").replace(url, "").strip()
-    return len(rest.split()) <= 2
+    return bool(url) and bool(DOWNLOAD_WORDS.search((text or "").replace(url, " ")))
+
+
+def is_bare_link(text: str) -> bool:
+    """Kept for compatibility: now means 'a video link the user wants downloaded'."""
+    return wants_download(text)
 
 
 class DownloadFailed(Exception):

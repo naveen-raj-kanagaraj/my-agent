@@ -72,6 +72,101 @@ def _html_to_text(html: str) -> tuple:
     return title, text
 
 
+def _n(x) -> str:
+    if x is None:
+        return "?"
+    x = float(x)
+    for unit, div in (("M", 1e6), ("K", 1e3)):
+        if x >= div:
+            return f"{x / div:.1f}{unit}".replace(".0", "")
+    return str(int(x))
+
+
+def _tweet(url: str):
+    """X/Twitter posts need a login to read; FxTwitter's public API returns the text and stats."""
+    m = re.search(r"(?:twitter|x)\.com/([^/]+)/status(?:es)?/(\d+)", url)
+    if not m:
+        return None
+    r = requests.get(f"https://api.fxtwitter.com/{m.group(1)}/status/{m.group(2)}",
+                     headers={"User-Agent": UA}, timeout=15)
+    if r.status_code != 200:
+        return None
+    t = r.json().get("tweet") or {}
+    if not t:
+        return None
+    a = t.get("author") or {}
+    media = t.get("media") or {}
+    kinds = [k for k in ("videos", "photos") if media.get(k)]
+    out = [f"Post on X by {a.get('name', '')} (@{a.get('screen_name', '')}), {t.get('created_at', '')}",
+           f"Likes {_n(t.get('likes'))}, reposts {_n(t.get('retweets'))}, replies {_n(t.get('replies'))}, "
+           f"views {_n(t.get('views'))}" + (f"; contains {' and '.join(kinds)}" if kinds else ""),
+           "", t.get("text", "")]
+    q = t.get("quote")
+    if q:
+        out += ["", f"Quoting @{(q.get('author') or {}).get('screen_name', '')}: {q.get('text', '')}"]
+    return "\n".join(out)
+
+
+def _reddit_thread(url: str):
+    host = (urlparse(url).hostname or "").lower()
+    if "/comments/" not in url or not (host == "reddit.com" or host.endswith(".reddit.com")):
+        return None
+    r = requests.get(url.split("?")[0].rstrip("/") + ".json", params={"limit": 15, "sort": "top"},
+                     headers={"User-Agent": "pesagent/1.0 (link reader)"}, timeout=15)
+    if r.status_code != 200:
+        return None
+    data = r.json()
+    post = data[0]["data"]["children"][0]["data"]
+    out = [f"Reddit post in r/{post.get('subreddit')} by u/{post.get('author')}: {post.get('title')}",
+           f"Score {_n(post.get('score'))}, {_n(post.get('num_comments'))} comments", "",
+           (post.get("selftext") or post.get("url") or "")[:6000], "", "Top comments:"]
+    for c in data[1]["data"]["children"][:12]:
+        d = c.get("data", {})
+        if d.get("body"):
+            out.append(f"- ({_n(d.get('score'))}) {d['body'][:500]}")
+    return "\n".join(out)
+
+
+def _video_info(url: str):
+    """Caption and stats for a video post (Instagram, TikTok, YouTube, Facebook, Threads) without downloading it."""
+    import yt_dlp
+    from core.downloader import COOKIES_FILE
+    opts = {"quiet": True, "no_warnings": True, "skip_download": True, "socket_timeout": 20}
+    if COOKIES_FILE.exists():
+        opts["cookiefile"] = str(COOKIES_FILE)
+    with yt_dlp.YoutubeDL(opts) as y:
+        i = y.extract_info(url, download=False)
+    if i.get("entries"):
+        i = next((e for e in i["entries"] if e), i)
+    dur = i.get("duration")
+    date = i.get("upload_date") or ""
+    lines = [f"{i.get('extractor_key') or 'Video'} post by {i.get('uploader') or i.get('channel') or '?'}"
+             + (f", {date[:4]}-{date[4:6]}-{date[6:]}" if len(date) == 8 else ""),
+             f"Title: {i.get('title') or ''}",
+             f"Views {_n(i.get('view_count'))}, likes {_n(i.get('like_count'))}, comments {_n(i.get('comment_count'))}"
+             + (f", length {int(dur // 60)}:{int(dur % 60):02d}" if dur else ""),
+             "", "Caption / description:", (i.get("description") or "(none)")[:5000]]
+    return "\n".join(lines)
+
+
+def social_post(url: str):
+    """Best-effort reading of social links that normally need a login. None if nothing worked."""
+    from core.downloader import is_video_link
+    for fn in (_tweet, _reddit_thread):
+        try:
+            got = fn(url)
+            if got:
+                return got
+        except Exception:
+            pass
+    if is_video_link(url):
+        try:
+            return _video_info(url)
+        except Exception as e:
+            return f"Couldn't read that post ({str(e)[:150]}). It may be private or need a login."
+    return None
+
+
 def read_url(url: str) -> str:
     url = url.strip()
     if not re.match(r"^https?://", url):
@@ -82,11 +177,22 @@ def read_url(url: str) -> str:
 
     vid = youtube_id(url)
     if vid:
+        info = ""
+        try:
+            info = _video_info(url)
+        except Exception:
+            pass
         try:
             text = youtube_transcript(vid)
-            return f"YouTube transcript ({len(text.split())} words):\n{text[:MAX_CHARS]}"
+            return (info + "\n\n" if info else "") + f"Transcript ({len(text.split())} words):\n{text[:MAX_CHARS]}"
         except Exception as e:
+            if info:
+                return info + f"\n\n(No transcript available: {str(e)[:100]}. Summarise from the title and description.)"
             return f"No transcript available for that YouTube video ({str(e)[:120]})."
+
+    social = social_post(url)
+    if social:
+        return social
 
     try:
         current = url
