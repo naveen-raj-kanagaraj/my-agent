@@ -55,7 +55,8 @@ PRIVACY = "\nPrivacy: chats are saved on the bot owner's hard disk, and the owne
 HELP = (
     "Ask me anything, like you would ChatGPT, Claude, Gemini or Perplexity: questions, research with sources, "
     "writing, studying, coding, maths, advice. Send links, PDFs, Word/Excel/PowerPoint files, photos or voice notes "
-    "and I'll read them. Send an X, Instagram, TikTok or YouTube Shorts link to download the video.\n\n"
+    "and I'll read them. Send any link and I'll tell you what it is; add the word \"download\" to a video link "
+    "(X, Instagram, TikTok, YouTube, Reddit) to get the file.\n\n"
     "/new - start a fresh conversation\n"
     "/search <question> - web answer with sources\n"
     "/interests - pick topics you want updates on (or type your own)\n"
@@ -270,7 +271,10 @@ async def execute_chat(update, context, text: str, model_key: str, status_msg=No
     footer = (f"\n\n_{ctx.model_label} · /switch to change_" if ctx.rich else f"\n\n({ctx.model_label} · /switch to change)") \
         if ctx.model_label and model_key not in ("auto", "") else ""
     await send_long(update, reply + footer, rich=ctx.rich)
+    had_files = bool(ctx.outbox)
     await send_outbox(update, ctx)
+    if not had_files:
+        await offer_download(update.message, text, ctx)
     if uid != "owner" and not store.interests(user) and not store.kv_get(f"topics_offered:{uid}") \
             and getattr(update.effective_chat, "type", "private") == "private":
         await send_topic_picker(update.message, uid,
@@ -984,10 +988,52 @@ async def process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, user:
 
     if await receive_typed_topics(update, user, text):
         return
-    if downloader.is_bare_link(text):
+    if downloader.wants_download(text):
         await download_link(update, context, downloader.find_url(text))
         return
-    await run_chat(update, context, text)
+    await run_chat(update, context, link_prompt(text))
+
+
+def link_prompt(text: str) -> str:
+    """A message that's only a link becomes 'tell me about this link' for the agent."""
+    if downloader.only_link(text):
+        return f"{downloader.any_url(text)}\n\n{downloader.BARE_LINK_NOTE}"
+    return text
+
+
+async def offer_download(message, text: str, ctx):
+    """After talking about a bare video link, offer the file with one tap."""
+    if downloader.BARE_LINK_NOTE not in text or ctx.outbox:
+        return
+    url = downloader.any_url(text)
+    if not downloader.is_video_link(url):
+        return
+    key = secrets.token_urlsafe(6)
+    store.kv_set(f"dlurl:{key}", url)
+    try:
+        await message.reply_text("Want the video file?", reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Download video", callback_data=f"dl:{key}")]]))
+    except Exception:
+        pass
+
+
+async def on_download_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    url = store.kv_get(f"dlurl:{q.data.split(':', 1)[1]}")
+    await q.answer()
+    if not url:
+        await q.edit_message_text("That button expired. Send the link again with the word download.")
+        return
+    user = store.get_user(store.uid_for("telegram", str(update.effective_user.id)))
+    if user and user.get("blocked"):
+        return
+    try:
+        await q.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    shim = types.SimpleNamespace(message=q.message, effective_user=update.effective_user,
+                                 effective_chat=update.effective_chat)
+    await download_link(shim, context, url)
 
 
 async def download_link(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str):
@@ -1210,9 +1256,10 @@ async def handle_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await gate(update)
     if not user:
         return
-    if downloader.is_bare_link(text):
+    if downloader.wants_download(text):
         await download_link(update, context, downloader.find_url(text))
         return
+    text = link_prompt(text)
     quoted = msg.reply_to_message
     if quoted and quoted.from_user and quoted.from_user.id != context.bot.id and (quoted.text or quoted.caption):
         who = quoted.from_user.first_name or "someone"
@@ -1224,7 +1271,10 @@ async def handle_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None,
                                     {"id": chat.id, "title": chat.title})
     await send_long(update, reply, rich=ctx.rich)
+    had_files = bool(ctx.outbox)
     await send_outbox(update, ctx)
+    if not had_files:
+        await offer_download(msg, text, ctx)
 
 
 async def cmd_help_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1425,6 +1475,7 @@ def run_telegram():
     app.add_handler(CommandHandler("activity", cmd_activity, filters=PRIVATE))
     app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
     app.add_handler(CallbackQueryHandler(on_topic_pick, pattern=r"^(t|tx|f|z):"))
+    app.add_handler(CallbackQueryHandler(on_download_pick, pattern=r"^dl:"))
     app.add_handler(CommandHandler("updates", cmd_updates, filters=PRIVATE))
     app.add_handler(MessageHandler(PRIVATE & filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(PRIVATE & (filters.VOICE | filters.AUDIO), handle_voice))

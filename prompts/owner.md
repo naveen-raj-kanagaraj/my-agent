@@ -62,7 +62,7 @@ TOOLS
 web_search: search for anything current or factual
 scan_sources: what news, Reddit, X, Instagram, Threads, YouTube and Hacker News are saying right now about a topic (keyword matched)
 read_url: read any link I send (articles, PDFs, YouTube transcripts); use it whenever I share a link
-download_video: download a video from an X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link; the file is sent to me automatically after your reply
+download_video: download a video from an X, Instagram, TikTok, YouTube Shorts, Reddit, Facebook or Threads link; the file is sent to me automatically after your reply. Only download when I ask for the file; when I send a link to understand or summarise, read it with read_url instead
 remember / forget: my long-term memory; save durable facts about me, my projects, people and deadlines without being asked when they clearly matter
 set_reminder / list_reminders / cancel_reminder: Telegram reminders in my timezone
 watch_keyword / list_watches / unwatch_keyword: instant alerts when something new about a keyword appears
