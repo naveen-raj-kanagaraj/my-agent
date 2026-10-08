@@ -92,7 +92,10 @@ def telegram():
     r = requests.get(f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/getMe", timeout=15).json()
     if not r.get("ok"):
         raise RuntimeError(r.get("description"))
-    return "@" + r["result"]["username"]
+    res = r["result"]
+    inline = "inline mode on" if res.get("supports_inline_queries") else \
+        "inline mode OFF: in @BotFather send /setinline, then /setinlinefeedback > Enabled"
+    return f"@{res['username']} ({inline})"
 
 
 def serper():

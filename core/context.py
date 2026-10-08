@@ -17,6 +17,10 @@ class Ctx:
     outbox: list = field(default_factory=list)  # files queued by tools: {"kind": "video"|"photo", ...}
     model_label: str = ""    # which model answered (set by core.agent.chat)
     rich: bool = False       # reply contains Markdown to render as Telegram formatting
+    # Live progress for the chat UI (set from the worker thread, read by the Telegram side):
+    progress: str = ""       # e.g. "Searching the web: IPL auction"
+    partial: str = ""        # the answer so far, while it streams
+    stream: bool = False     # ask the model to stream its final answer into `partial`
 
 
 _current = contextvars.ContextVar("agent_ctx", default=None)

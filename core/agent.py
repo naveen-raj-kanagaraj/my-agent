@@ -92,7 +92,12 @@ def build_system(uid: str, is_owner: bool, platform: str, group: dict = None, sp
     tz = store.user_tz(store.get_user(uid) or {})
     now = datetime.now(tz).strftime("%A, %B %d %Y, %I:%M %p")
     dynamic = f"Current time: {now} ({tz.key})\nPlatform: {platform}"
-    if group:
+    if group and group.get("inline"):
+        dynamic += ("\n\nINLINE MODE: your answer is being posted into a chat between the user and other people "
+                    "(they typed @ and your name in that chat). Write a standalone answer the whole chat can read: "
+                    "direct, under 120 words unless the question needs more, no follow-up questions, no greetings. "
+                    "Don't use download_video, generate_image, reminders or memory tools here.")
+    elif group:
         dynamic += (f"\n\nYou are in a Telegram group chat called '{group.get('title') or 'a group'}'. Several people talk "
                     f"here and you only see messages where someone mentions you or replies to you. The person asking now "
                     f"is {speaker or 'a group member'}. Keep replies short and conversational, address them by name when "
@@ -139,14 +144,46 @@ def _summarise_args(args: dict) -> str:
     return ", ".join(f"{k}={v}" for k, v in args.items())[:300]
 
 
+TOOL_LABELS = {
+    "web_search": "Searching the web: {query}", "scan_sources": "Checking news, Reddit, X and YouTube: {query}",
+    "read_url": "Reading {host}", "video_transcript": "Getting the video transcript",
+    "download_video": "Downloading the video", "generate_image": "Drawing the image",
+    "scout_creator": "Pulling creator numbers: {handle}", "set_reminder": "Setting the reminder",
+    "calculate": "Calculating", "remember": "Saving that to memory", "watch_keyword": "Setting up the alert",
+}
+
+
+def tool_label(name: str, args: dict) -> str:
+    from urllib.parse import urlparse
+    a = dict(args or {})
+    a["host"] = (urlparse(a.get("url", "")).hostname or "the page").replace("www.", "")
+    try:
+        label = TOOL_LABELS.get(name, "Working on it").format(**{k: str(v)[:60] for k, v in a.items()})
+    except (KeyError, IndexError):
+        label = TOOL_LABELS.get(name, "Working on it").split(":")[0]
+    return label
+
+
 def _exec_tool(name: str, args: dict) -> str:
     from core import safety
     c = context.get()
+    c.progress = tool_label(name, args)
     store.log_activity(c.uid, c.platform, f"tool:{name}", _summarise_args(args or {}), c.model_label)
     try:
         return safety.wrap(name, execute_tool(name, args))
     except Exception as e:
         return f"Tool error: {str(e)[:200]}"
+
+
+def _run_tools(calls: list) -> list:
+    """Run the tools the model asked for; several at once run in parallel (each keeps the user's context)."""
+    if len(calls) <= 1:
+        return [_exec_tool(n, a) for n, a in calls]
+    import contextvars
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(4, len(calls))) as pool:
+        futures = [pool.submit(contextvars.copy_context().run, _exec_tool, n, a) for n, a in calls]
+        return [f.result() for f in futures]
 
 
 def _thinking_kwargs(model: str, level: str) -> dict:
@@ -166,8 +203,17 @@ def _run_anthropic(uid, model, system, tools, messages, level="off") -> str:
         kwargs = dict(_uid=uid, model=model, max_tokens=REPLY_MAX_TOKENS, system=system, tools=tools,
                       tool_choice={"type": "none"} if last_round else {"type": "auto"}, messages=messages)
         kwargs.update(_thinking_kwargs(model, level))
+        c = context.get()
         try:
-            response = client.messages.create(**kwargs)
+            if c.stream and hasattr(client.messages, "stream"):
+                streamed = []
+
+                def on_text(delta, c=c, streamed=streamed):
+                    streamed.append(delta)
+                    c.partial = "".join(streamed)
+                response = client.messages.stream(on_text, **kwargs)
+            else:
+                response = client.messages.create(**kwargs)
         except anthropic.BadRequestError as e:
             if level != "off" and any(w in str(e).lower() for w in ("thinking", "effort", "output_config")):
                 from core import alerts
@@ -177,11 +223,10 @@ def _run_anthropic(uid, model, system, tools, messages, level="off") -> str:
                 continue
             raise
         if response.stop_reason == "tool_use" and not last_round:
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    result = _exec_tool(block.name, block.input)
-                    tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": result})
+            c.partial = ""  # text before a tool call ("Let me check") isn't the answer
+            calls = [b for b in response.content if b.type == "tool_use"]
+            results = _run_tools([(b.name, b.input) for b in calls])
+            tool_results = [{"type": "tool_result", "tool_use_id": b.id, "content": r} for b, r in zip(calls, results)]
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
             continue
