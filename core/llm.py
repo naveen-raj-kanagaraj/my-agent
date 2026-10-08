@@ -104,6 +104,28 @@ class _Messages:
         return resp
 
 
+    def stream(self, on_text, _uid: str = None, **kwargs):
+        """Like create(), but calls on_text(delta) as the answer is written. Falls back to create()."""
+        raw = self._owner._client.messages
+        if not hasattr(raw, "stream"):
+            return self.create(_uid=_uid, **kwargs)
+        uid = _uid or context.get().uid or "owner"
+        check_budget(uid)
+        with raw.stream(**kwargs) as s:
+            for delta in s.text_stream:
+                try:
+                    on_text(delta)
+                except Exception:
+                    pass
+            resp = s.get_final_message()
+        try:
+            cost, usage = cost_of(kwargs.get("model", ""), resp.usage)
+            store.record_spend(uid, self._owner.feature, kwargs.get("model", ""), usage, cost)
+        except Exception as e:
+            print(f"Spend tracking failed: {e}")
+        return resp
+
+
 class Client:
     def __init__(self, feature: str):
         self.feature = feature
