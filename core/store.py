@@ -231,7 +231,7 @@ def forget_user(uid: str):
         c.execute("DELETE FROM activity WHERE uid=?", (uid,))
         c.execute("DELETE FROM watches WHERE uid=?", (uid,))
         c.execute("DELETE FROM alert_seen WHERE uid=?", (uid,))
-        for k in ("topics_pinned", "topics_offered", "tz_chosen", "live_seeded"):
+        for k in ("topics_pinned", "topics_offered", "tz_chosen", "live_seeded", "sent_titles"):
             c.execute("DELETE FROM kv WHERE key=?", (f"{k}:{uid}",))
         c.execute(
             "UPDATE users SET interests='[]', profile='', language='', msg_count=0, keywords='{}', custom_keywords='[]', style='', "

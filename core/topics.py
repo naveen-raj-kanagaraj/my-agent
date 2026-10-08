@@ -138,30 +138,42 @@ def _age(item) -> str:
     return f"{mins // 60}h ago" if mins >= 60 else f"{max(mins, 1)}m ago"
 
 
-def collect_live(u: dict) -> list:
-    """[(topic, item)] that are fresh, keyword-matched and new to this user."""
+def _newest_first(items: list) -> list:
+    floor = datetime.min.replace(tzinfo=timezone.utc)
+    return sorted(items, key=lambda i: i.get("published") or floor, reverse=True)
+
+
+def collect_live(u: dict, seed: bool = False) -> list:
+    """[(topic, item)]: the newest keyword-matched stories this user hasn't been sent (by link or headline).
+    seed=True records everything current as already seen and returns nothing (first run)."""
     from core.news import _region
-    from core import profile
+    from core import profile, seen
     kw = profile.ensure_keywords(u["uid"]) if store.interests(u) else {}
     region = _region(u.get("timezone"))
     now = datetime.now(timezone.utc)
-    picked, seen_now = [], []
+    picked, everything = [], []
     for topic in store.interests(u)[:10]:
         items = sources.gather(topic, kw.get(topic, []), region, limit=8, free_only=True)
-        fresh = [i for i in items if i.get("published")
-                 and (now - i["published"]).total_seconds() < LIVE_MAX_AGE_HOURS * 3600]
-        seen_now += [_key(i) for i in items]
-        new = [i for i in fresh if not store.seen_before(u["uid"], _key(i))]
+        fresh = _newest_first([i for i in items if i.get("published")
+                               and (now - i["published"]).total_seconds() < LIVE_MAX_AGE_HOURS * 3600])
+        everything += fresh
+        new = seen.filter_new(seen.scopes_for(u["uid"]), fresh)
+        new = [i for i in new if not any(seen.same_story(i["title"], p["title"]) for _, p in picked)]
         picked += [(topic, i) for i in new[:PER_TOPIC]]
-    store.mark_seen(u["uid"], seen_now)
-    picked.sort(key=lambda ti: -ti[1].get("score", 0))
+    if seed:
+        seen.remember(u["uid"], everything)
+        return []
+    picked.sort(key=lambda ti: (ti[1].get("published") or now), reverse=True)  # very latest first
     return picked[:PER_MESSAGE]
 
 
 def format_live(picked: list, heading: str = "Latest for you") -> str:
     """Telegram HTML: topic headings, linked headlines, source and age."""
     out, last = [f"<b>{html.escape(heading)}</b>"], None
-    for topic, it in sorted(picked, key=lambda ti: ti[0]):
+    order = {}
+    for topic, _ in picked:
+        order.setdefault(topic, len(order))  # topics in the order of their newest story
+    for topic, it in sorted(picked, key=lambda ti: order[ti[0]]):
         if topic != last:
             out.append(f"\n<b>{html.escape(topic)}</b>")
             last = topic
@@ -197,13 +209,15 @@ def run_live(send):
             return
         fetched |= need
         try:
-            first_run = not store.kv_get(f"live_seeded:{u['uid']}")
-            picked = collect_live(u)
-            if first_run:
-                store.kv_set(f"live_seeded:{u['uid']}", True)  # everything current is now "seen"
+            from core import seen
+            if not store.kv_get(f"live_seeded:{u['uid']}"):
+                collect_live(u, seed=True)  # everything current counts as seen; only newer stories get sent
+                store.kv_set(f"live_seeded:{u['uid']}", True)
                 continue
+            picked = collect_live(u)
             if picked:
                 if send(format_live(picked), u["chat_id"]):
+                    seen.remember(u["uid"], [i for _, i in picked])
                     store.kv_set(day_key, store.kv_get(day_key, 0) + 1)
                 else:
                     store.update_user(u["uid"], news_on=0)
@@ -219,12 +233,15 @@ def latest_now(uid: str, per_topic: int = 2) -> str:
     region = _region(u.get("timezone"))
     from core import profile
     kw = profile.ensure_keywords(uid)
+    from core import seen
     picked = []
     for topic in store.interests(u)[:6]:
-        items = sources.gather(topic, kw.get(topic, []), region, limit=per_topic, free_only=True)
+        items = seen.filter_new(seen.scopes_for(uid), _newest_first(sources.gather(topic, kw.get(topic, []), region, limit=8,
+                                                                  free_only=True)))
+        items = [i for i in items if not any(seen.same_story(i["title"], p["title"]) for _, p in picked)]
         picked += [(topic, i) for i in items[:per_topic]]
-        store.mark_seen(uid, [_key(i) for i in items])
     if not picked:
         return ""
+    seen.remember(uid, [i for _, i in picked])
     store.kv_set(f"live_seeded:{uid}", True)
     return format_live(picked, "Here's what's happening right now")
