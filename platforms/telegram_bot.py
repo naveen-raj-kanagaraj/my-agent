@@ -8,6 +8,7 @@ import base64
 import re
 import logging
 import os
+import html
 import secrets
 import tempfile
 import time
@@ -18,12 +19,14 @@ import openpyxl
 from docx import Document
 from dotenv import load_dotenv
 from pptx import Presentation
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle,
+                      InlineQueryResultsButton, InputTextMessageContent, Update)
 from telegram.constants import ChatAction
-from telegram.ext import (ApplicationBuilder, CallbackQueryHandler, ChatMemberHandler, CommandHandler,
-                          ContextTypes, MessageHandler, filters)
+from telegram.ext import (ApplicationBuilder, CallbackQueryHandler, ChatMemberHandler, ChosenInlineResultHandler,
+                          CommandHandler, ContextTypes, InlineQueryHandler, MessageHandler, filters)
 
 from core import context as agent_context
+from platforms import tg_live
 from core import alerts, downloader, llm, models, profile, store, topics, voice
 from core.agent import chat
 chat_fn = chat
@@ -57,6 +60,7 @@ HELP = (
     "writing, studying, coding, maths, advice. Send links, PDFs, Word/Excel/PowerPoint files, photos or voice notes "
     "and I'll read them. Send any link and I'll tell you what it is; add the word \"download\" to a video link "
     "(X, Instagram, TikTok, YouTube, Reddit) to get the file.\n\n"
+    "In any chat, type @{bot} and your question to post an answer right there.\n\n"
     "/new - start a fresh conversation\n"
     "/search <question> - web answer with sources\n"
     "/interests - pick topics you want updates on (or type your own)\n"
@@ -101,6 +105,10 @@ OWNER_HELP = HELP + (
 
 
 # ---------- helpers ----------
+
+def _bot_name(text: str, context) -> str:
+    return text.replace("{bot}", getattr(context.bot, "username", None) or "this bot's name")
+
 
 def ids(update: Update) -> tuple:
     u = update.effective_user
@@ -262,7 +270,12 @@ async def execute_chat(update, context, text: str, model_key: str, status_msg=No
         store.update_user(uid, session_at=time.time())  # keep the conversation's model alive
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     ctx = agent_context.Ctx()
-    reply = await asyncio.to_thread(chat, raw, "telegram", text, ctx, name, username, chat_id, model_key, think)
+    private = getattr(update.effective_chat, "type", "private") == "private"
+    live = tg_live.LiveReply(context.bot, chat_id, ctx, private, update.message, rich=uid != "owner").start()
+    try:
+        reply = await asyncio.to_thread(chat, raw, "telegram", text, ctx, name, username, chat_id, model_key, think)
+    finally:
+        await live.stop()
     if status_msg is not None:
         try:
             await status_msg.edit_text(f"Answered by {ctx.model_label}")
@@ -667,10 +680,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user:
         return
     if user["uid"] == "owner":
-        await update.message.reply_text("Agent online.\n\n" + OWNER_HELP)
+        await update.message.reply_text("Agent online.\n\n" + _bot_name(OWNER_HELP, context))
         return
     if user.get("state") == "active":
-        await update.message.reply_text("Welcome back! " + HELP + PRIVACY)
+        await update.message.reply_text("Welcome back! " + _bot_name(HELP, context) + PRIVACY)
         return
     await start_onboarding(update, context, user)
 
@@ -678,7 +691,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = await gate(update, count=False)
     if user:
-        await update.message.reply_text(OWNER_HELP if user["uid"] == "owner" else HELP + PRIVACY)
+        await update.message.reply_text(_bot_name(OWNER_HELP if user["uid"] == "owner" else HELP + PRIVACY, context))
 
 
 async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1224,6 +1237,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 GROUPS_ENABLED = os.getenv("GROUPS_ENABLED", "true").lower() == "true"
 GROUP_INTRO = ("Hi everyone! I'm an AI assistant built by Naveen Raj. Mention me (@{bot}) or reply to one of my "
                "messages and I'll answer: questions, research, news, links, summaries, video downloads.\n"
+               "Admins: /botoff pauses me here, /boton brings me back.\n"
                "Messages sent to me are saved on the bot owner's hard disk, and the owner can read them.")
 
 
@@ -1250,9 +1264,20 @@ async def handle_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for_me, text = _addressed_to_bot(msg, context.bot)
     if not for_me:
         return
+    sender = getattr(msg, "from_user", None) or update.effective_user
+    if sender is None or getattr(sender, "is_bot", False):
+        return  # never answer other bots or anonymous channel posts (avoids bot-to-bot loops)
+    if tg_live.group_off(update.effective_chat.id):
+        return
     if not text:
         await msg.reply_text("Yes? Ask me anything: mention me with your question, or reply to my message.")
         return
+    ok, warning = tg_live.check_group(update.effective_chat.id, sender.id)
+    if not ok:
+        if warning:
+            await msg.reply_text(warning)
+        return
+    text = text[:tg_live.GROUP_MAX_CHARS]
     user = await gate(update)
     if not user:
         return
@@ -1268,8 +1293,12 @@ async def handle_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     await context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
     ctx = agent_context.Ctx()
-    reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None,
-                                    {"id": chat.id, "title": chat.title})
+    live = tg_live.LiveReply(context.bot, chat.id, ctx, False, msg).start()
+    try:
+        reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None,
+                                        {"id": chat.id, "title": chat.title})
+    finally:
+        await live.stop()
     await send_long(update, reply, rich=ctx.rich)
     had_files = bool(ctx.outbox)
     await send_outbox(update, ctx)
@@ -1287,16 +1316,129 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         await update.message.reply_text("Usage: /ask <your question>")
         return
+    chat = update.effective_chat
+    in_group = getattr(chat, "type", "private") != "private"
+    if in_group:
+        if tg_live.group_off(chat.id) or (update.effective_user and update.effective_user.is_bot):
+            return
+        ok, warning = tg_live.check_group(chat.id, update.effective_user.id)
+        if not ok:
+            if warning:
+                await update.message.reply_text(warning)
+            return
+        text = text[:tg_live.GROUP_MAX_CHARS]
     user = await gate(update)
     if not user:
         return
     raw, _, name, username = ids(update)
-    chat = update.effective_chat
-    group = {"id": chat.id, "title": chat.title} if getattr(chat, "type", "private") != "private" else None
+    group = {"id": chat.id, "title": chat.title} if in_group else None
     ctx = agent_context.Ctx()
-    reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None, group)
+    live = tg_live.LiveReply(context.bot, chat.id, ctx, not in_group, update.message,
+                             rich=user["uid"] != "owner").start()
+    try:
+        reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None, group)
+    finally:
+        await live.stop()
     await send_long(update, reply, rich=ctx.rich)
     await send_outbox(update, ctx)
+
+
+async def cmd_bot_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/botoff and /boton in a group: admins pause or resume the bot there."""
+    chat = update.effective_chat
+    if getattr(chat, "type", "private") == "private":
+        await update.message.reply_text("Use /botoff or /boton inside a group (admins only).")
+        return
+    if not await tg_live.is_group_admin(context.bot, chat.id, update.effective_user.id):
+        await update.message.reply_text("Only group admins can do that.")
+        return
+    off = update.message.text.lower().startswith("/botoff")
+    tg_live.set_group_off(chat.id, off)
+    await update.message.reply_text("Paused in this group. An admin can send /boton to bring me back."
+                                    if off else "I'm back. Mention me or reply to me to ask something.")
+
+
+# ---------- inline mode: @bot <question> in any chat ----------
+
+async def on_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    iq = update.inline_query
+    q = (iq.query or "").strip()
+    uid = store.uid_for("telegram", str(iq.from_user.id))
+    u = store.get_user(uid)
+    if u and u.get("blocked"):
+        await iq.answer([], cache_time=0, is_personal=True)
+        return
+    button = InlineQueryResultsButton(text="Open the full chat", start_parameter="inline")
+    if len(q) < 3:
+        await iq.answer([], cache_time=0, is_personal=True, button=button)
+        return
+    bot_name = context.bot.username or "bot"
+    result = InlineQueryResultArticle(
+        id=secrets.token_hex(8),
+        title="Ask: " + (q if len(q) <= 60 else q[:60] + "…"),
+        description="Tap to post the answer here",
+        input_message_content=InputTextMessageContent(tg_live.inline_text(q, "<i>Thinking…</i>"), parse_mode="HTML"),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(f"Ask @{bot_name} yourself",
+                                                                 url=f"https://t.me/{bot_name}?start=inline")]]),
+    )
+    await iq.answer([result], cache_time=0, is_personal=True, button=button)
+
+
+async def on_inline_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    r = update.chosen_inline_result
+    mid, q = r.inline_message_id, (r.query or "").strip()
+    if not mid or not q:
+        return
+    bot_name = context.bot.username or "bot"
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"Ask @{bot_name} yourself", url=f"https://t.me/{bot_name}?start=inline")]])
+
+    async def show(body_html: str, plain: str = None):
+        try:
+            await context.bot.edit_message_text(inline_message_id=mid, text=tg_live.inline_text(q, body_html),
+                                                parse_mode="HTML", disable_web_page_preview=True, reply_markup=kb)
+        except Exception as e:
+            if plain is not None and "not modified" not in str(e).lower():
+                try:
+                    await context.bot.edit_message_text(inline_message_id=mid, text=f"Q: {q}\n\n{plain}"[:4090],
+                                                        reply_markup=kb)
+                except Exception:
+                    pass
+
+    raw = str(r.from_user.id)
+    uid = store.uid_for("telegram", raw)
+    user = store.ensure_user(uid, "telegram", raw, r.from_user.first_name or "", r.from_user.username or "")
+    if user.get("blocked"):
+        await show("<i>Not available.</i>")
+        return
+    wait = tg_live.inline_cooldown(raw)
+    if wait:
+        await show(f"<i>Too fast. Try again in {wait}s.</i>")
+        return
+    if uid != "owner":
+        if store.usage_today(uid) >= DAILY_LIMIT:
+            await show(f"<i>Daily limit reached. Open @{html.escape(bot_name)} tomorrow for more.</i>")
+            return
+        store.use_one(uid)
+    memory.clear(f"group:inline:{raw}", "telegram")  # every inline question stands alone
+    ctx = agent_context.Ctx()
+    task = asyncio.create_task(asyncio.to_thread(
+        chat_fn, raw, "telegram", q, ctx, r.from_user.first_name or "", r.from_user.username or "", raw, "auto",
+        None, {"id": f"inline:{raw}", "title": "inline", "inline": True}))
+    shown = None
+    while not task.done():
+        await asyncio.sleep(1.5)
+        label = (ctx.progress or "Thinking") + "…"
+        if label != shown and not task.done():
+            await show(f"<i>{html.escape(label)}</i>")
+            shown = label
+    try:
+        answer = task.result()
+    except Exception as e:
+        answer = f"Something went wrong: {str(e)[:150]}"
+    answer = answer if len(answer) < 3300 else answer[:3300].rsplit("\n", 1)[0] + "\n…"
+    from core import tg_format
+    await show(tg_format.to_html(answer), plain=answer)
+    store.log_activity(uid, "telegram_inline", "inline", q)
 
 
 async def on_my_membership(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1476,6 +1618,9 @@ def run_telegram():
     app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
     app.add_handler(CallbackQueryHandler(on_topic_pick, pattern=r"^(t|tx|f|z):"))
     app.add_handler(CallbackQueryHandler(on_download_pick, pattern=r"^dl:"))
+    app.add_handler(InlineQueryHandler(on_inline_query))
+    app.add_handler(ChosenInlineResultHandler(on_inline_chosen))
+    app.add_handler(CommandHandler(["botoff", "boton"], cmd_bot_toggle))
     app.add_handler(CommandHandler("updates", cmd_updates, filters=PRIVATE))
     app.add_handler(MessageHandler(PRIVATE & filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(PRIVATE & (filters.VOICE | filters.AUDIO), handle_voice))
