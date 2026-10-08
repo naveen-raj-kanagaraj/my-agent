@@ -129,46 +129,108 @@ def search_clean(query: str) -> str:
     return "\n".join(lines)[:600]
 
 
-def check_breaking_news() -> str:
-    breaking = search_clean("breaking news trending right now urgent")
-    india_breaking = search_clean("India breaking news trending now")
-    return f"{breaking}\n{india_breaking}"
+# ---------- owner news feeds ----------
+
+# Short feed queries (Google News search, newest first). Each category can have several.
+OWNER_FEEDS = {
+    "World": ["world news", "breaking news"],
+    "India": ["India", "India breaking news"],
+    "Tamil Nadu": ["Tamil Nadu", "Chennai"],
+    "Gaming and esports": ["esports", "gaming industry", "BGMI"],
+    "Gaming deals": ["gaming acquisition", "game studio funding"],
+    "Geopolitics": ["geopolitics", "sanctions"],
+    "Markets": ["stock market", "Sensex Nifty", "Wall Street"],
+    "Crypto": ["bitcoin", "crypto market"],
+    "Creators and marketing": ["creator economy", "influencer marketing", "YouTube creators"],
+    "Tech and AI": ["artificial intelligence", "OpenAI Anthropic Google AI"],
+    "Economy": ["inflation interest rates", "RBI Federal Reserve"],
+}
+LATEST_QUIET = (23, 7)          # no hourly updates 11 PM - 7 AM (owner's time); they roll into the morning
+LATEST_MAX_ITEMS = 10
+
+
+def _owner_feeds() -> dict:
+    feeds = dict(OWNER_FEEDS)
+    owner = store.get_user("owner") or {}
+    known = " ".join(feeds).lower()
+    for topic in store.interests(owner)[:4]:
+        if topic.lower() not in known:
+            feeds[topic] = [topic]
+    return feeds
+
+
+def owner_items(max_age_hours: float) -> list:
+    """[(category, item)] from Google News (plus Hacker News for tech), newer than max_age_hours, newest first."""
+    from core import sources
+    from datetime import timezone as _tz
+    now = datetime.now(_tz.utc)
+    out = []
+    for cat, queries in _owner_feeds().items():
+        region = "in" if cat in ("India", "Tamil Nadu", "Markets") else "us"
+        items = []
+        for q in queries:
+            items += sources.google_news(q, region)
+        if cat == "Tech and AI":
+            items += sources.hacker_news("AI")
+        for it in items:
+            if it.get("published") and (now - it["published"]).total_seconds() <= max_age_hours * 3600:
+                out.append((cat, it))
+    floor = datetime.min.replace(tzinfo=_tz.utc)
+    out.sort(key=lambda ci: ci[1].get("published") or floor, reverse=True)
+    return out
+
+
+def _ago(item) -> str:
+    from datetime import timezone as _tz
+    mins = int((datetime.now(_tz.utc) - item["published"]).total_seconds() // 60)
+    return f"{mins // 60}h {mins % 60}m ago" if mins >= 60 else f"{max(mins, 1)}m ago"
+
+
+def build_latest(window_min: int = None) -> str:
+    """Hourly: only stories published since the last check that were never sent before. '' if nothing new."""
+    from core import seen
+    window = window_min or (BREAKING_EVERY_MIN + 30)
+    pairs = owner_items(window / 60)
+    fresh = seen.filter_new(seen.scopes_for("owner"), [it for _, it in pairs])
+    if not fresh:
+        return ""
+    keep = {id(i) for i in fresh}
+    pairs = [(c, i) for c, i in pairs if id(i) in keep]
+    # at most 3 per category so one busy topic can't fill the message; still newest first overall
+    per, chosen = {}, []
+    for c, i in pairs:
+        if per.get(c, 0) < 3:
+            chosen.append((c, i))
+            per[c] = per.get(c, 0) + 1
+        if len(chosen) >= LATEST_MAX_ITEMS:
+            break
+    seen.remember("owner|latest", [i for _, i in chosen])
+    now = datetime.now(store.user_tz({"timezone": store.OWNER_TZ}))
+    lines = [f"Latest, {now:%I:%M %p} (newest first)"]
+    for c, i in chosen:
+        lines.append(f"\n[{c}] {i['title']}\n{i['source'] or 'News'}, {_ago(i)}\n{i['url']}")
+    return "\n".join(lines)
 
 
 def build_digest():
     now = datetime.now().strftime("%A, %B %d %Y, %I:%M %p")
-    covered = load_covered_news()
-    covered_context = "News already covered in previous briefs (do not repeat these): " + ", ".join(covered[-30:]) if covered else ""
-
-    categories = {
-        "World News": "breaking news today world",
-        "India News": "India news today latest",
-        "Tamil Nadu News": "Tamil Nadu news today latest",
-        "Global Gaming and Esports": "global gaming esports news investments trends today",
-        "Gaming Industry Investments": "gaming industry investments funding acquisitions deals today",
-        "Geopolitics": "geopolitics international relations news today",
-        "Stocks to Watch": "top stocks unusual movement volume gains today",
-        "Crypto Today": "top cryptocurrency gains bitcoin market today",
-        "Marketing and Creator Trends": "marketing creator economy social media trends today",
-        "Tech and AI": "AI technology news trends today",
-        "Finance and Economy": "global finance economy markets inflation interest rates today",
-    }
-
-    owner = store.get_user("owner") or {}
-    known = " ".join(categories).lower()
-    for topic in store.interests(owner)[:3]:
-        if topic.lower() not in known:
-            categories[topic] = f"{topic} news today"
-
-    raw_data = {}
-    for category, query in categories.items():
-        google = search_clean(query)
-        reddit = search_clean(f"site:reddit.com {query}")
-        raw_data[category] = f"{google}\n{reddit}"
-
+    from core import seen
+    categories = _owner_feeds()
+    pairs = owner_items(14)  # since roughly the previous briefing
+    fresh = seen.filter_new("owner|brief", [i for _, i in pairs])
+    keep = {id(i) for i in fresh}
+    by_cat = {}
+    for c, i in pairs:
+        if id(i) in keep and len(by_cat.setdefault(c, [])) < 6:
+            by_cat[c].append(i)
+    used = [i for items in by_cat.values() for i in items]
     combined = ""
-    for category, data in raw_data.items():
-        combined += f"\n{category}:\n{data}\n"
+    for c in categories:
+        items = by_cat.get(c, [])
+        combined += f"\n{c}:\n" + ("\n".join(f"- ({_ago(i)}) {i['title']} [{i['source']}]: {i['snippet'][:200]}"
+                                               for i in items) if items else "- nothing new since the last briefing") + "\n"
+    covered_context = ("Every story below is new: none appeared in an earlier briefing. Use only these. If a topic says "
+                       "'nothing new', write one line saying so instead of padding it.")
 
     response = client.messages.create(
         _uid="owner",
@@ -182,7 +244,7 @@ STRICT RULES:
 - Plain text only. Zero markdown. No ## no ** no -- no bullet points.
 - No URLs or source names.
 - Each topic is independent. Do not connect topics to each other.
-- Do NOT repeat any news from previous briefs.
+- Lead each topic with the newest development (the items show how long ago each was published).
 - For each topic: write what happened in detail, then the historical parallel, then the prediction. Then immediately write the SWOT for that topic only.
 - Each topic section should be 6-10 sentences of detailed analysis. Never cut off mid-sentence.
 - SWOT should be 3-4 sentences per quadrant covering that topic specifically.
@@ -210,47 +272,21 @@ Current time: {now}"""
     analysis = re.sub(r'-{2,}', '', analysis)
     analysis = re.sub(r'\n{3,}', '\n\n', analysis)
 
-    new_covered = []
-    for data in raw_data.values():
-        lines = [l for l in data.split("\n") if l.startswith("Title:")]
-        for line in lines[:2]:
-            new_covered.append(line.replace("Title:", "").strip()[:80])
-    save_covered_news(covered + new_covered)
+    seen.remember("owner|brief", used)
 
     final = f"BRIEFING\n{now}\n\n{analysis.strip()}"
     return final
 
 
 def check_and_send_breaking():
-    breaking = check_breaking_news()
-    if not breaking:
+    """Hourly 'latest' update for the owner: new stories only, newest first, quiet at night."""
+    hour = datetime.now(store.user_tz({"timezone": store.OWNER_TZ})).hour
+    if hour >= LATEST_QUIET[0] or hour < LATEST_QUIET[1]:
         return
-
-    covered = load_covered_news()
-    covered_str = " ".join(covered[-30:]).lower()
-
-    response = client.messages.create(
-        _uid="owner",
-        model="claude-haiku-4-5-20251001",
-        max_tokens=500,
-        messages=[{
-            "role": "user",
-            "content": f"""You are a breaking news analyst. Based on the news below, identify if there is anything genuinely urgent, trending suddenly, or breaking right now that has NOT already been covered.
-
-Already covered: {covered_str}
-
-New data: {breaking}
-
-If there is something genuinely breaking or suddenly trending that was not covered before, write a brief 3-4 sentence alert starting with BREAKING NEWS. If nothing is new or urgent, respond with only the word NOTHING.
-
-Plain text only. No markdown."""
-        }]
-    )
-
-    result = response.content[0].text.strip()
-    if result != "NOTHING" and "BREAKING" in result:
-        deliver(result)
-        print(f"Breaking news sent: {result[:100]}")
+    text = build_latest()
+    if text:
+        deliver(text)
+        print(f"Latest update sent ({text.count(chr(10) + '[')} stories)")
 
 
 def send_digest():
@@ -297,6 +333,8 @@ def _send_user_news(u: dict, key: str):
     except Exception as e:
         print(f"News for {u['uid']} failed: {e}")
         return
+    if brief.startswith("Nothing new"):
+        return  # scheduled briefs stay quiet when there's nothing new
     if not send_telegram(brief, u["chat_id"]):
         store.update_user(u["uid"], news_on=0)  # they blocked the bot or the chat is gone
         print(f"News off for {u['uid']}: chat unreachable")
