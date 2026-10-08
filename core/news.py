@@ -93,9 +93,18 @@ def build_user_brief(uid: str) -> str:
         return "I don't know you yet. Send /start first."
     if not store.interests(u) and not store.custom_keywords(u):
         return "Tell me what you're interested in first: send /interests followed by your topics."
-    found = collect_for_user(uid)
+    from core import seen
+    found = {}
+    taken = []
+    for t, items in collect_for_user(uid).items():  # drop anything already sent in a brief or live update
+        fresh = [i for i in seen.filter_new(seen.scopes_for(uid), items)
+                 if not any(seen.same_story(i["title"], x["title"]) for x in taken)]
+        if fresh:
+            found[t] = fresh
+            taken += fresh
     if not found:
-        return "I couldn't find fresh news on your topics in the last day. Try again later, or broaden your /interests."
+        return ("Nothing new on your topics since your last update. I'll send more when there's fresh news, "
+                "or broaden your /interests.")
     sections = [f"TOPIC: {t}\n" + "\n".join(_fmt(i) for i in items) for t, items in found.items()]
 
     tz = store.user_tz(u)
@@ -121,5 +130,7 @@ def build_user_brief(uid: str) -> str:
         )}],
     )
     text = resp.content[0].text.strip().replace("**", "").replace("##", "")
+    used = [i for i in taken if i.get("url") and i["url"] in text]
+    seen.remember(uid, used or taken)  # stories that made it into the brief won't come back
     return (f"{part} brief, {now.strftime('%a %b %d')}\n\n{text}\n\n"
             "Change topics with /interests, add keywords with /keywords, stop with /newsoff.")
