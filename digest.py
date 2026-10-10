@@ -407,6 +407,23 @@ def start_digest_scheduler():
     from core import alerts, talent, watch
     if watch.ALERT_EVERY_MIN > 0:
         schedule.every(watch.ALERT_EVERY_MIN).minutes.do(watch.run_watches, send_telegram)
+    from core import events as ev_mod
+    import threading as _th
+    _ev_lock = _th.Lock()
+    _ev_pool = ThreadPoolExecutor(max_workers=1)
+
+    def _poll_events():
+        if _ev_lock.acquire(blocking=False):  # never overlap: a slow poll just skips the next one
+            def run():
+                try:
+                    ev_mod.run_all()
+                finally:
+                    _ev_lock.release()
+            _ev_pool.submit(run)
+    if not store.kv_get("events_seeded"):
+        ev_mod.create("bmsd")  # Battlegrounds Mobile India Showdown, tracking from the start
+        store.kv_set("events_seeded", True)
+    schedule.every(ev_mod.POLL_SEC).seconds.do(_poll_events)
     from core import channels
     if channels.CHANNEL_EVERY_MIN > 0:
         schedule.every(channels.CHANNEL_EVERY_MIN).minutes.do(lambda: _pool.submit(channels.sync))
