@@ -102,6 +102,15 @@ def stats():
     })
 
 
+@app.route("/events")
+@app.route("/events/<key>")
+def event_page(key=None):
+    if not _authorised():
+        abort(403)
+    from core import eventpage
+    return eventpage.build_html(key)
+
+
 @app.route("/api/activity")
 def activity():
     if not _authorised():

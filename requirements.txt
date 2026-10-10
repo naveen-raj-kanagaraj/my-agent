@@ -17,3 +17,4 @@ lxml
 faster-whisper
 openai
 telethon
+matplotlib
