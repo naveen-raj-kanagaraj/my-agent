@@ -79,6 +79,15 @@ def collect_for_user(uid: str) -> dict:
         items = sources.gather(t, kw.get(t, []), region)
         if items:
             found[t] = items
+    if uid != "owner":  # the owner's channels go into the owner briefing instead
+        try:
+            import time as _t
+            from core import channels
+            posts = channels.posts_for(uid, _t.time() - 24 * 3600)[:8]
+            if posts:
+                found["Channels you follow"] = posts
+        except Exception as e:
+            print(f"Channel posts for {uid} failed: {e}")
     custom = store.custom_keywords(u)
     if custom:
         items = sources.gather(custom[0], custom[1:], region)
@@ -91,7 +100,7 @@ def build_user_brief(uid: str) -> str:
     u = store.get_user(uid)
     if not u:
         return "I don't know you yet. Send /start first."
-    if not store.interests(u) and not store.custom_keywords(u):
+    if not store.interests(u) and not store.custom_keywords(u) and not store.kv_get(f"tgchannels:{uid}"):
         return "Tell me what you're interested in first: send /interests followed by your topics."
     from core import seen
     found = {}

@@ -16,3 +16,4 @@ beautifulsoup4
 lxml
 faster-whisper
 openai
+telethon

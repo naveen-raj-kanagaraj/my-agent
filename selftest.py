@@ -128,6 +128,31 @@ def reddit():
     return f"{len(items)} posts via {how}"
 
 
+def tg_channels():
+    from core import channels
+    parts = []
+    if channels.user_configured():
+        from telethon import TelegramClient
+        import asyncio
+
+        async def chk():
+            c = TelegramClient(channels.SESSION, int(os.getenv("TG_API_ID")), os.getenv("TG_API_HASH"))
+            await c.connect()
+            try:
+                if not await c.is_user_authorized():
+                    raise RuntimeError("login expired: run python scripts/telegram_login.py")
+                me = await c.get_me()
+                return me.first_name
+            finally:
+                await c.disconnect()
+        parts.append(f"joined channels via {asyncio.run(chk())}'s account")
+    else:
+        parts.append("joined channels not connected (optional)")
+    title, posts = channels.fetch_public("durov")
+    parts.append(f"public preview works ({len(posts)} posts from {title})")
+    return "; ".join(parts)
+
+
 def hn():
     from core import sources
     sources.hacker_news("AI")
@@ -229,6 +254,7 @@ if __name__ == "__main__":
     check("Reddit", reddit, "Reddit closed free access and SERPER_API_KEY is missing or out of credits; "
           "news still works without Reddit", warn_only=True)
     check("Hacker News", hn, "", warn_only=True)
+    check("Telegram channels", tg_channels, "see /channels in the bot for setup", warn_only=True)
     check("X/Instagram/Threads", social, "needs Serper credits; or set NEWS_SOCIAL=false", warn_only=True)
     check("Read links", read_link, "check your internet connection")
     check("YouTube transcripts", transcript, "YouTube sometimes blocks; usually temporary", warn_only=True)
