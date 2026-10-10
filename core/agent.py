@@ -109,6 +109,10 @@ def build_system(uid: str, is_owner: bool, platform: str, group: dict = None, sp
         known = profile.profile_block(uid)
         if known:
             dynamic += "\n\n" + known
+        from core import newslinks
+        recent = newslinks.recent_block(uid)
+        if recent:
+            dynamic += "\n\n" + recent
     from core import safety
     return [
         {"type": "text", "text": base + "\n\n" + safety.RULES, "cache_control": {"type": "ephemeral"}},
