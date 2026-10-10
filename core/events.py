@@ -371,6 +371,26 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     last_ts = ticks[-1]["ts"]
     live_now = [s for s in samples if s["ts"] == last_ts] if time.time() - last_ts < POLL_SEC * 3 else []
     out["live_now"] = sorted(live_now, key=lambda s: -s["viewers"])
+    # concurrent-viewer view: who made up the peak, each stream's own peak, averages while the official stream was on
+    out["at_peak"] = sorted((s for s in samples if s["ts"] == peak["ts"]), key=lambda s: -s["viewers"])
+    with store._lock:
+        out["stream_peaks"] = [dict(r) for r in _db().execute(
+            "SELECT vid, channel, title, kind, peak, peak_at FROM ev_streams WHERE event=? AND peak>0 ORDER BY peak DESC",
+            (key,))]
+    bc = [(t, min((ticks[i + 1]["ts"] - t["ts"]) if i + 1 < len(ticks) else POLL_SEC, gap_cap))
+          for i, t in enumerate(ticks) if t["official"] > 0]
+    secs = sum(dt for _, dt in bc)
+    out["avg_broadcast"] = sum(t["total"] * dt for t, dt in bc) / secs if secs else out["avg"]
+    out["avg_official"] = sum(t["official"] * dt for t, dt in bc) / secs if secs else 0
+    out["peak_official"] = max((t["official"] for t in ticks), default=0)
+    out["peak_watch"] = max((t["watch"] for t in ticks), default=0)
+    for d in out["days"]:
+        day_bc = [(t, dt) for t, dt in bc if datetime.fromtimestamp(t["ts"], REPORT_TZ).strftime("%a %d %b") == d["day"]]
+        ds = sum(dt for _, dt in day_bc)
+        d["avg_broadcast"] = sum(t["total"] * dt for t, dt in day_bc) / ds if ds else d["avg"]
+        day_ticks = [t for t in ticks if datetime.fromtimestamp(t["ts"], REPORT_TZ).strftime("%a %d %b") == d["day"]]
+        top = max(day_ticks, key=lambda t: t["total"]) if day_ticks else None
+        d["peak_at"] = top["ts"] if top else None
     out["series"] = [(t["ts"], t["total"], t["official"], t["watch"], t["community"]) for t in ticks]
     return out
 
@@ -396,7 +416,7 @@ def summary(key: str = None, top: int = 10) -> str:
     if not st.get("ticks"):
         return (f"{ev['name']}: tracking, but no data yet. The first numbers appear within {POLL_SEC}s of a "
                 "live stream being found.")
-    lines = [f"{ev['name']} viewership (YouTube, all streams)"]
+    lines = [f"{ev['name']}: concurrent viewers (YouTube, all streams)"]
     if st["live_now"]:
         lines.append(f"\nLIVE NOW: {fmt_n(sum(s['viewers'] for s in st['live_now']))} viewers across "
                      f"{len(st['live_now'])} streams")
@@ -405,10 +425,20 @@ def summary(key: str = None, top: int = 10) -> str:
     else:
         lines.append("\nNothing live right now.")
     sp = st["peak_split"]
-    lines += [f"\nEvent so far: peak {fmt_n(st['peak'])} ({_when(st['peak_at'])})",
-              f"  (official {fmt_n(sp['official'])}, watch parties {fmt_n(sp['watch'])}, community {fmt_n(sp['community'])})",
-              f"  average {fmt_n(st['avg'])}, hours watched {fmt_n(st['hours_watched'])}, airtime {st['airtime_h']:.1f} h",
-              f"\nYouTube, checked every {POLL_SEC}s. /event page for the dashboard."]
+    lines += [f"\nPEAK CONCURRENT: {fmt_n(st['peak'])} at {_when(st['peak_at'])}",
+              f"  official {fmt_n(sp['official'])}, watch parties {fmt_n(sp['watch'])}, community {fmt_n(sp['community'])}"]
+    for s in [x for x in st["at_peak"] if x["viewers"] > 0][:5]:
+        lines.append(f"  {fmt_n(s['viewers'])}  {s['channel']}\n     {yt_link(s['vid'])}")
+    lines += [f"\nAverage concurrent while the official broadcast was live: {fmt_n(st['avg_broadcast'])}",
+              f"Official streams: peak {fmt_n(st['peak_official'])}, average {fmt_n(st['avg_official'])}",
+              f"Watch parties combined: peak {fmt_n(st['peak_watch'])}"]
+    if len(st["days"]) > 1:
+        lines.append("\nBy day (IST): peak / average concurrent")
+        lines += [f"  {d['day']}: {fmt_n(d['peak'])} / {fmt_n(d['avg_broadcast'])}" for d in st["days"]]
+    lines.append("\nPeak concurrent by stream:")
+    for i, p in enumerate(st["stream_peaks"][:top], 1):
+        lines.append(f"  {i}. {fmt_n(p['peak'])}  {p['channel']} ({p['kind']})\n     {yt_link(p['vid'])}")
+    lines.append(f"\nYouTube, checked every {POLL_SEC}s. /event page for the dashboard, /event chart for the graph.")
     for label, url in (ev.get("links") or {}).items():
         lines.append(f"{label}: {url}")
     return "\n".join(lines)
