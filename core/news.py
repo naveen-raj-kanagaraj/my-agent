@@ -114,7 +114,10 @@ def build_user_brief(uid: str) -> str:
     if not found:
         return ("Nothing new on your topics since your last update. I'll send more when there's fresh news, "
                 "or broaden your /interests.")
-    sections = [f"TOPIC: {t}\n" + "\n".join(_fmt(i) for i in items) for t, items in found.items()]
+    from core import newslinks
+    ordered = [i for items in found.values() for i in items]
+    num = {id(i): n for n, i in enumerate(ordered, 1)}
+    sections = [f"TOPIC: {t}\n" + "\n".join(f"[{num[id(i)]}] {_fmt(i)}" for i in items) for t, items in found.items()]
 
     tz = store.user_tz(u)
     now = datetime.now(tz)
@@ -133,13 +136,15 @@ def build_user_brief(uid: str) -> str:
             "the topic name on its own line, then the 1-3 most important stories in 2-3 sentences each, favouring the newest developments: what "
             "happened, then why it matters to this person. Say where it's buzzing when that's informative (for "
             "example 'big thread on r/india' or 'trending on X'). Treat social posts as claims, not confirmed "
-            "facts, unless a news outlet also reports them. Put the single best link after each story. Skip "
+            "facts, unless a news outlet also reports them. No links or URLs: end each story with the number(s) of the "
+            "item(s) it comes from in square brackets, like [3] or [2, 5] (they're removed before sending). Skip "
             "duplicates and filler. End with one line starting 'Worth watching:'. Under 450 words.\n\n"
             f"ITEMS FROM THE LAST DAY:\n{chr(10).join(sections)}"
         )}],
     )
     text = resp.content[0].text.strip().replace("**", "").replace("##", "")
-    used = [i for i in taken if i.get("url") and i["url"] in text]
+    text, used = newslinks.take_citations(text, ordered)
     seen.remember(uid, used or taken)  # stories that made it into the brief won't come back
+    newslinks.save(uid, used or taken)
     return (f"{part} brief, {now.strftime('%a %b %d')}\n\n{text}\n\n"
-            "Change topics with /interests, add keywords with /keywords, stop with /newsoff.")
+            "Tap Links for sources. Change topics with /interests, stop with /newsoff.")

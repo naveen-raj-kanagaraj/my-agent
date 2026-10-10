@@ -108,6 +108,22 @@ OWNER_HELP = HELP + (
 
 # ---------- helpers ----------
 
+def links_kb(uid: str):
+    from core import newslinks
+    key = newslinks.last_key(uid)
+    return InlineKeyboardMarkup([[InlineKeyboardButton("Links", callback_data=f"nl:{key}")]]) if key else None
+
+
+async def on_news_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from core import newslinks
+    q = update.callback_query
+    uid = store.uid_for("telegram", str(update.effective_user.id))
+    await q.answer()
+    text = newslinks.links_text(uid, q.data.split(":", 1)[1])
+    for i in range(0, len(text), 4000):
+        await q.message.reply_text(text[i:i + 4000], disable_web_page_preview=True)
+
+
 def _bot_name(text: str, context) -> str:
     return text.replace("{bot}", getattr(context.bot, "username", None) or "this bot's name")
 
@@ -121,23 +137,27 @@ def is_owner(update: Update) -> bool:
     return store.is_owner("telegram", str(update.effective_user.id))
 
 
-async def send_long(update: Update, text: str, rich: bool = False):
-    """Send a reply in Telegram-sized pieces. rich=True renders Markdown (bold, lists, code, links)."""
+async def send_long(update: Update, text: str, rich: bool = False, markup=None):
+    """Send a reply in Telegram-sized pieces. rich=True renders Markdown (bold, lists, code, links).
+    markup (buttons) goes under the last piece."""
     text = text or "(no response)"
     if not rich:
-        for i in range(0, len(text), 4096):
-            await update.message.reply_text(text[i:i + 4096])
+        parts = [text[i:i + 4096] for i in range(0, len(text), 4096)]
+        for n, part in enumerate(parts):
+            await update.message.reply_text(part, **({"reply_markup": markup} if markup and n == len(parts) - 1 else {}))
         return
     from core import tg_format
-    for chunk in tg_format.split_for_telegram(text):
+    chunks = tg_format.split_for_telegram(text)
+    for n, chunk in enumerate(chunks):
+        extra = {"reply_markup": markup} if markup and n == len(chunks) - 1 else {}
         html_chunk = tg_format.to_html(chunk)
         try:
             if len(html_chunk) > 4096:
                 raise ValueError("too long after formatting")
-            await update.message.reply_text(html_chunk, parse_mode="HTML", disable_web_page_preview=True)
+            await update.message.reply_text(html_chunk, parse_mode="HTML", disable_web_page_preview=True, **extra)
         except Exception:
             for i in range(0, len(chunk), 4096):  # formatting failed: send it plain
-                await update.message.reply_text(chunk[i:i + 4096])
+                await update.message.reply_text(chunk[i:i + 4096], **(extra if i + 4096 >= len(chunk) else {}))
 
 
 async def gate(update: Update, count: bool = True):
@@ -535,7 +555,8 @@ async def _finish_setup(q, uid: str):
         preview = await asyncio.to_thread(topics.latest_now, uid)
         if preview:
             try:
-                await q.message.reply_text(preview, parse_mode="HTML", disable_web_page_preview=True)
+                await q.message.reply_text(preview, parse_mode="HTML", disable_web_page_preview=True,
+                                           reply_markup=links_kb(uid))
             except Exception:
                 pass
 
@@ -626,7 +647,8 @@ async def receive_typed_topics(update: Update, user: dict, text: str) -> bool:
         if u.get("news_on") and store.interests(u):
             preview = await asyncio.to_thread(topics.latest_now, uid)
             if preview:
-                await update.message.reply_text(preview, parse_mode="HTML", disable_web_page_preview=True)
+                await update.message.reply_text(preview, parse_mode="HTML", disable_web_page_preview=True,
+                                                reply_markup=links_kb(uid))
         return True
     ints = topics.add_custom(uid, text)
     await update.message.reply_text("Added. Tap more or press Done.\n\nYour topics: " + ", ".join(ints),
@@ -701,6 +723,7 @@ async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user:
         memory.clear(user["uid"], "telegram")
         store.update_user(user["uid"], session_model="")
+        store.kv_set(f"pfile:{user['uid']}", None)
         await update.message.reply_text("New conversation started. (What I've learned about you is kept; /forget erases it.)")
 
 
@@ -925,9 +948,10 @@ async def cmd_news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Pulling your news...")
     try:
         brief = await asyncio.to_thread(build_user_brief, user["uid"])
+        kb = None if brief.startswith("Nothing new") else links_kb(user["uid"])
     except Exception as e:
-        brief = f"Couldn't build your news: {str(e)[:200]}"
-    await send_long(update, brief)
+        brief, kb = f"Couldn't build your news: {str(e)[:200]}", None
+    await send_long(update, brief, markup=kb)
 
 
 async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1002,6 +1026,10 @@ async def process_text(update: Update, context: ContextTypes.DEFAULT_TYPE, user:
             await notify_owner(context, f"New user: {first or ''} {uname} ({user['uid']})")
 
     if await receive_typed_topics(update, user, text):
+        return
+    waiting = pending_file(user["uid"])
+    if waiting and not text.startswith("/"):
+        await run_file_action(update, context, user, waiting, text, "typed")
         return
     if downloader.wants_download(text):
         await download_link(update, context, downloader.find_url(text))
@@ -1183,9 +1211,115 @@ async def handle_image_file(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await send_long(update, desc)
 
 
+FILE_ACTIONS = {
+    "doc": [("sum", "Summarise", "Summarise this file: the main point first, then the important details."),
+            ("key", "Key points", "List the key points and takeaways as short bullets."),
+            ("ana", "Analyse", "Analyse it: main insights, strengths, weaknesses, risks, and what to do next."),
+            ("ask", "Ask something", None)],
+    "image": [("desc", "Describe", None),
+              ("text", "Read the text", "Give me all the text in this image exactly, keeping its layout where it helps."),
+              ("ana", "Analyse", "Analyse this image: what it shows, what stands out, and anything important or wrong."),
+              ("ask", "Ask something", None)],
+}
+PENDING_FILE_MIN = 30
+
+
+def _file_kb(kind: str, key: str):
+    acts = FILE_ACTIONS[kind]
+    rows = [[InlineKeyboardButton(label, callback_data=f"fa:{key}:{code}") for code, label, _ in acts[i:i + 2]]
+            for i in range(0, len(acts), 2)]
+    return InlineKeyboardMarkup(rows)
+
+
+async def offer_file_actions(update: Update, uid: str, file_id: str, name: str, ext: str, kind: str):
+    key = secrets.token_urlsafe(5)
+    store.kv_set(f"pfile:{uid}", {"key": key, "file_id": file_id, "name": name, "ext": ext, "kind": kind,
+                                 "at": time.time()})
+    what = "this image" if kind == "image" else f"{name}"
+    await update.message.reply_text(
+        f"Got {what}. What should I do with it?\nTap an option, or just type what you want "
+        "(for example: \"make notes for my exam\", \"find the numbers\", \"translate to Hindi\").",
+        reply_markup=_file_kb(kind, key))
+
+
+def pending_file(uid: str):
+    p = store.kv_get(f"pfile:{uid}")
+    if p and time.time() - p.get("at", 0) < PENDING_FILE_MIN * 60:
+        return p
+    return None
+
+
+async def run_file_action(update, context, user: dict, p: dict, instruction: str = None, action: str = None):
+    """Download the waiting file, read it, and do what was asked (counts as one request)."""
+    uid = user["uid"]
+    store.kv_set(f"pfile:{uid}", None)
+    if uid != "owner":
+        if store.usage_today(uid) >= DAILY_LIMIT:
+            await update.message.reply_text(f"You've used your {DAILY_LIMIT} requests for today. Come back tomorrow!")
+            return
+        store.use_one(uid)
+    f = await context.bot.get_file(p["file_id"])
+    with tempfile.NamedTemporaryFile(delete=False, suffix=p["ext"]) as tmp:
+        await f.download_to_drive(tmp.name)
+        path = tmp.name
+    try:
+        if p["kind"] == "image":
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+            desc = await asyncio.to_thread(describe_image, path, uid == "owner", uid)
+            if action == "desc":
+                memory.add_exchange(uid, "telegram", "[I sent an image]", desc)
+                await send_long(update, desc)
+                return
+            await run_chat(update, context, f"[I sent an image. What it shows: {desc}]\n\n{instruction}", ask=False)
+            return
+        await update.message.reply_text(f"Reading {p['name']}...")
+        text = await asyncio.to_thread(EXTRACTORS[p["ext"]], path)
+        await run_chat(update, context, f"I'm sending you a file called '{p['name']}'. {instruction}\n\nFile content:\n{text}",
+                       ask=False)
+    except Exception as e:
+        await update.message.reply_text(f"Could not read the file: {str(e)[:200]}")
+    finally:
+        os.unlink(path)
+
+
+async def on_file_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    try:
+        _, key, code = q.data.split(":", 2)
+    except ValueError:
+        return
+    uid = store.uid_for("telegram", str(update.effective_user.id))
+    user = store.get_user(uid)
+    p = pending_file(uid)
+    if not user or user.get("blocked"):
+        return
+    if not p or p["key"] != key:
+        await q.message.reply_text("That file has expired. Send it again.")
+        return
+    try:
+        await q.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    shim = types.SimpleNamespace(message=q.message, effective_user=update.effective_user,
+                                 effective_chat=update.effective_chat)
+    if code == "ask":
+        store.kv_set(f"pfile:{uid}", {**p, "at": time.time()})
+        await q.message.reply_text("Type your question about " + ("the image." if p["kind"] == "image" else f"{p['name']}."))
+        return
+    label, instruction = next(((lb, ins) for c, lb, ins in FILE_ACTIONS[p["kind"]] if c == code), (None, None))
+    if label is None:
+        return
+    await run_file_action(shim, context, user, p, instruction, code)
+
+
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = await gate(update)
+    caption = (update.message.caption or "").strip()
+    user = await gate(update, count=bool(caption))
     if not user:
+        return
+    if not caption:
+        await offer_file_actions(update, user["uid"], update.message.photo[-1].file_id, "photo", ".jpg", "image")
         return
     f = await context.bot.get_file(update.message.photo[-1].file_id)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
@@ -1198,7 +1332,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = await gate(update)
+    caption = (update.message.caption or "").strip()
+    user = await gate(update, count=bool(caption))
     if not user:
         return
     doc = update.message.document
@@ -1212,6 +1347,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "I can read PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), CSV, TXT and images. "
             "For old .doc/.ppt/.xls files, save them in the new format first.")
+        return
+    if not caption:  # ask what they want before spending anything
+        await offer_file_actions(update, user["uid"], doc.file_id, name, ext, "image" if is_image else "doc")
         return
     f = await context.bot.get_file(doc.file_id)
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
@@ -1384,9 +1522,10 @@ async def cmd_channels(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Reading your channels...")
         try:
             text = await asyncio.to_thread(channels.channel_brief, uid)
+            kb = None if text.startswith("Nothing new") else links_kb(uid)
         except Exception as e:
-            text = f"Couldn't build the channel brief: {str(e)[:200]}"
-        await send_long(update, text)
+            text, kb = f"Couldn't build the channel brief: {str(e)[:200]}", None
+        await send_long(update, text, markup=kb)
     elif action in ("mute", "unmute") and names and uid == "owner":
         muted = store.kv_get("tgchannels_muted", [])
         targets = [channels.clean_name(n).lower() or n.lower().lstrip("@") for n in names]
@@ -1626,9 +1765,49 @@ async def cmd_scout(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                          f"talent agency (strengths, risks, rate range to expect, brand categories): {handle}")
 
 
+# What people see on the bot's profile ("About") and on the empty chat screen before they press Start.
+BOT_ABOUT = os.getenv("BOT_ABOUT") or ("Your AI assistant: answers with sources, summaries of links and files, "
+                                       "news on your topics, video downloads.")
+BOT_DESCRIPTION = os.getenv("BOT_DESCRIPTION") or (
+    "Ask anything, like ChatGPT, Claude, Gemini or Perplexity, right inside Telegram.\n\n"
+    "• Answers with sources from the web\n"
+    "• Send a link, PDF, doc, photo or voice note: get a summary or ask about it\n"
+    "• News on topics you pick (cricket, F1, AI, markets...), no repeats\n"
+    "• Follow Telegram channels and get them summarised\n"
+    "• Download videos from Instagram, X, TikTok and YouTube\n"
+    "• Use it in any chat: type @{bot} and your question\n\n"
+    "Free to use with a daily limit. Tap Start.")
+PUBLIC_COMMANDS = [("new", "Start a fresh conversation"), ("search", "Web answer with sources"),
+                   ("news", "Your news now"), ("interests", "Pick topics for updates"),
+                   ("updates", "How often you get updates"), ("channels", "Follow Telegram channels"),
+                   ("alert", "Alert me when a keyword shows up"), ("model", "Choose the AI model"),
+                   ("style", "How you like replies"), ("profile", "What I know about you"),
+                   ("forget", "Erase what I know about you"), ("help", "Everything I can do")]
+OWNER_COMMANDS = [("brief", "Full briefing now"), ("radar", "Content and business radar"),
+                  ("status", "Health check"), ("usage", "Costs today and this week"), ("users", "Who's using the bot")]
+
+
+async def setup_profile(app):
+    """Set the About text, description and command menu (only when they changed)."""
+    from telegram import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeChat
+    bot = app.bot
+    try:
+        about, desc = BOT_ABOUT[:120], BOT_DESCRIPTION.replace("{bot}", bot.username or "this bot")[:512]
+        if (await bot.get_my_short_description()).short_description != about:
+            await bot.set_my_short_description(about)
+        if (await bot.get_my_description()).description != desc:
+            await bot.set_my_description(desc)
+        await bot.set_my_commands([BotCommand(c, d) for c, d in PUBLIC_COMMANDS], scope=BotCommandScopeAllPrivateChats())
+        for oid in store.owner_ids()["telegram"]:
+            await bot.set_my_commands([BotCommand(c, d) for c, d in PUBLIC_COMMANDS + OWNER_COMMANDS],
+                                      scope=BotCommandScopeChat(int(oid)))
+    except Exception as e:
+        print(f"Couldn't update the bot profile: {str(e)[:150]}")
+
+
 def run_telegram():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
-    app = ApplicationBuilder().token(token).concurrent_updates(True).build()
+    app = ApplicationBuilder().token(token).concurrent_updates(True).post_init(setup_profile).build()
     PRIVATE = filters.ChatType.PRIVATE
     GROUPS = filters.ChatType.GROUPS
     app.add_handler(CommandHandler("start", cmd_start, filters=PRIVATE))
@@ -1664,6 +1843,8 @@ def run_telegram():
     app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
     app.add_handler(CallbackQueryHandler(on_topic_pick, pattern=r"^(t|tx|f|z):"))
     app.add_handler(CallbackQueryHandler(on_download_pick, pattern=r"^dl:"))
+    app.add_handler(CallbackQueryHandler(on_news_links, pattern=r"^nl:"))
+    app.add_handler(CallbackQueryHandler(on_file_action, pattern=r"^fa:"))
     app.add_handler(CommandHandler("channels", cmd_channels, filters=PRIVATE))
     app.add_handler(InlineQueryHandler(on_inline_query))
     app.add_handler(ChosenInlineResultHandler(on_inline_chosen))
