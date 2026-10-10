@@ -289,6 +289,17 @@ ALL_TOOLS = [
     _schema("get_datetime", "Current date and time in the user's timezone."),
     _schema("generate_image", "Create an image from a text description and send it to the user (thumbnails, mockups, "
             "concept art). Write a detailed visual prompt.", {"prompt": S}, ["prompt"]),
+    _schema("compose_email", "Write an email for the user and give them buttons that open it, pre-filled, in their own "
+            "Gmail or Outlook (they press send). Use whenever they want an email drafted, written or replied to. Write "
+            "the complete, ready-to-send body in their voice.",
+            {"to": S, "subject": S, "body": S, "cc": S}, ["subject", "body"]),
+    _schema("calendar_event", "Create a calendar event with buttons for Google Calendar and Outlook plus an .ics file "
+            "for Apple Calendar. start/end are ISO date-times in the user's timezone, e.g. 2026-10-16T13:00.",
+            {"title": S, "start": S, "end": S, "location": S, "details": S,
+             "all_day": {"type": "boolean"}}, ["title", "start"]),
+    _schema("whatsapp_message", "Write a WhatsApp message and give a button that opens WhatsApp with it filled in "
+            "(to a phone number with country code if given, otherwise they pick the chat).",
+            {"text": S, "phone": S}, ["text"]),
     _schema("event_stats", "Live viewership of a tracked event (e.g. BMSD) across all YouTube streams: live now, peak "
             "viewers so far and when, average viewers, hours watched, airtime, by day, top channels, official vs watch "
             "parties vs community. Use for any question about the event's viewership.", {"name": S}),
@@ -339,6 +350,13 @@ def execute_tool(name: str, inputs: dict) -> str:
         "get_brand_voice": lambda: _talent_only() or __import__("core.scout", fromlist=["x"]).get_brand_voice(),
         "save_brand_voice": lambda: _talent_only() or __import__("core.scout", fromlist=["x"]).save_brand_voice(inputs["sample"]),
         "video_transcript": lambda: __import__("core.scout", fromlist=["x"]).timestamped_transcript(inputs["url"]),
+        "compose_email": lambda: __import__("core.compose", fromlist=["x"]).compose_email(
+            inputs.get("to", ""), inputs.get("subject", ""), inputs.get("body", ""), inputs.get("cc", "")),
+        "calendar_event": lambda: __import__("core.compose", fromlist=["x"]).calendar_event(
+            inputs["title"], inputs["start"], inputs.get("end", ""), inputs.get("location", ""),
+            inputs.get("details", ""), bool(inputs.get("all_day"))),
+        "whatsapp_message": lambda: __import__("core.compose", fromlist=["x"]).whatsapp_message(
+            inputs["text"], inputs.get("phone", "")),
         "event_stats": lambda: _talent_only() or __import__("core.events", fromlist=["x"]).tool_event_stats(
             inputs.get("name", "")),
     }
