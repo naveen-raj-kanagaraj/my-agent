@@ -76,6 +76,60 @@ class DownloadFailed(Exception):
     pass
 
 
+def probe_video(path: str) -> tuple:
+    """(display width, display height, duration seconds) of the real file, or (0, 0, 0) if unknown."""
+    try:
+        import av
+        with av.open(path) as c:
+            st = c.streams.video[0]
+            w, h = st.codec_context.width, st.codec_context.height
+            sar = st.codec_context.sample_aspect_ratio or st.sample_aspect_ratio
+            if sar and sar.numerator and sar.denominator and sar != 1:
+                w = round(w * sar.numerator / sar.denominator)
+            rot = 0
+            try:
+                rot = int(float(st.metadata.get("rotate", 0) or 0))
+            except (TypeError, ValueError):
+                pass
+            if not rot:
+                try:  # phone videos keep rotation in a display matrix; the first decoded frame reports it
+                    for frame in c.decode(video=0):
+                        rot = int(round(float(getattr(frame, "rotation", 0) or 0)))
+                        break
+                except Exception:
+                    pass
+            if abs(rot) % 180 == 90:
+                w, h = h, w
+            dur = int(float(c.duration) / 1_000_000) if c.duration else 0
+            if w > 0 and h > 0:
+                return w, h, dur
+    except Exception:
+        pass
+    try:  # fall back to ffprobe if PyAV isn't available
+        import json as _json
+        import subprocess
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                              "stream=width,height,sample_aspect_ratio:stream_side_data=rotation:stream_tags=rotate"
+                              ":format=duration", "-of", "json", path], capture_output=True, text=True, timeout=20)
+        d = _json.loads(out.stdout or "{}")
+        st = (d.get("streams") or [{}])[0]
+        w, h = int(st.get("width") or 0), int(st.get("height") or 0)
+        sar = st.get("sample_aspect_ratio") or "1:1"
+        if ":" in sar and sar not in ("1:1", "0:1"):
+            a, b = sar.split(":")
+            if int(b):
+                w = round(w * int(a) / int(b))
+        rot = int(float((st.get("tags") or {}).get("rotate") or 0))
+        for sd in st.get("side_data_list") or []:
+            rot = rot or int(float(sd.get("rotation") or 0))
+        if abs(rot) % 180 == 90:
+            w, h = h, w
+        dur = int(float((d.get("format") or {}).get("duration") or 0))
+        return (w, h, dur) if w > 0 and h > 0 else (0, 0, dur)
+    except Exception:
+        return 0, 0, 0
+
+
 def download_video(url: str) -> dict:
     """Blocking download. Returns {path, dir, title, duration, width, height, size_mb}.
     Caller must delete result['dir'] when done."""
@@ -135,13 +189,16 @@ def download_video(url: str) -> dict:
             "Use @pesvideodownloader_bot for big files."
         )
 
+    w, h, dur = probe_video(str(path))
     return {
         "path": str(path),
         "dir": out_dir,
         "title": (info.get("title") or "")[:200],
-        "duration": int(info.get("duration") or 0),
-        "width": int(info.get("width") or 0),
-        "height": int(info.get("height") or 0),
+        "duration": dur or int(info.get("duration") or 0),
+        # Size as it should be displayed, measured from the actual file (rotation and non-square pixels
+        # included). 0 = unknown: Telegram then works it out itself instead of stretching the video.
+        "width": w,
+        "height": h,
         "size_mb": round(size / 1048576, 1),
         "description": (info.get("description") or "")[:1500],
         "uploader": info.get("uploader") or "",
