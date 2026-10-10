@@ -87,7 +87,7 @@ def send_discord(message: str):
         print(f"Discord send error: {e}")
 
 
-def send_telegram(message: str, chat_id: str = None, html: bool = False) -> bool:
+def send_telegram(message: str, chat_id: str = None, html: bool = False, markup: dict = None) -> bool:
     """Send via the Bot API. Returns False if the chat can't be reached (e.g. user blocked the bot)."""
     chat_id = chat_id or OWNER_TELEGRAM_ID
     if not (TELEGRAM_BOT_TOKEN and chat_id):
@@ -97,9 +97,11 @@ def send_telegram(message: str, chat_id: str = None, html: bool = False) -> bool
     ok = True
     for i in range(0, len(message), 4096):
         try:
-            body = {"chat_id": chat_id, "text": message[i:i + 4096]}
+            body = {"chat_id": chat_id, "text": message[i:i + 4096], "disable_web_page_preview": True}
             if html:
-                body.update(parse_mode="HTML", disable_web_page_preview=True)
+                body["parse_mode"] = "HTML"
+            if markup and i + 4096 >= len(message):  # buttons go under the last part
+                body["reply_markup"] = markup
             r = requests.post(url, json=body, timeout=20)
             if not r.ok:
                 print(f"Telegram send error to {chat_id}: {r.status_code} {r.text[:200]}")
@@ -113,9 +115,9 @@ def send_telegram(message: str, chat_id: str = None, html: bool = False) -> bool
     return ok
 
 
-def deliver(message: str):
+def deliver(message: str, markup: dict = None):
     if DIGEST_TO in ("telegram", "both"):
-        send_telegram(message)
+        send_telegram(message, markup=markup)
     if DIGEST_TO in ("discord", "both") and DISCORD_BOT_TOKEN:
         send_discord(message)
 
@@ -212,10 +214,12 @@ def build_latest(window_min: int = None) -> str:
         if len(chosen) >= LATEST_MAX_ITEMS:
             break
     seen.remember("owner|latest", [i for _, i in chosen])
+    from core import newslinks
+    newslinks.save("owner", [i for _, i in chosen])
     now = datetime.now(store.user_tz({"timezone": store.OWNER_TZ}))
     lines = [f"Latest, {now:%I:%M %p} (newest first)"]
     for c, i in chosen:
-        lines.append(f"\n[{c}] {i['title']}\n{i['source'] or 'News'}, {_ago(i)}\n{i['url']}")
+        lines.append(f"\n[{c}] {i['title']}\n{i['source'] or 'News'}, {_ago(i)}")
     return "\n".join(lines)
 
 
@@ -298,7 +302,8 @@ def check_and_send_breaking():
         return
     text = build_latest()
     if text:
-        deliver(text)
+        from core import newslinks
+        deliver(text, newslinks.markup(newslinks.last_key("owner")))
         print(f"Latest update sent ({text.count(chr(10) + '[')} stories)")
 
 
@@ -348,7 +353,8 @@ def _send_user_news(u: dict, key: str):
         return
     if brief.startswith("Nothing new"):
         return  # scheduled briefs stay quiet when there's nothing new
-    if not send_telegram(brief, u["chat_id"]):
+    from core import newslinks
+    if not send_telegram(brief, u["chat_id"], markup=newslinks.markup(newslinks.last_key(u["uid"]))):
         store.update_user(u["uid"], news_on=0)  # they blocked the bot or the chat is gone
         print(f"News off for {u['uid']}: chat unreachable")
 
@@ -409,7 +415,8 @@ def start_digest_scheduler():
     from core import topics
     if topics.LIVE_EVERY_MIN > 0:
         schedule.every(topics.LIVE_EVERY_MIN).minutes.do(
-            lambda: _pool.submit(topics.run_live, lambda text, cid: send_telegram(text, cid, html=True)))
+            lambda: _pool.submit(topics.run_live,
+                                 lambda text, cid, markup=None: send_telegram(text, cid, html=True, markup=markup)))
     schedule.every().monday.at(talent.WEEKLY_TIME).do(talent.send_weekly, send_telegram)
     from core import backup
     schedule.every().day.at(os.getenv("BACKUP_TIME", "03:00")).do(backup.nightly)
