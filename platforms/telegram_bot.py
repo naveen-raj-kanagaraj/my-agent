@@ -68,6 +68,7 @@ HELP = (
     "/news - your personalised news now\n"
     "/keywords <words> - track exact keywords across news, Reddit, X, Instagram, YouTube\n"
     "/newsoff, /newson - stop or restart updates\n"
+    "/channels add @name - follow a public Telegram channel in your updates\n"
     "/alert <keyword> - instant alerts when something new appears\n"
     "/alerts - your alerts, /unalert <id> to remove\n"
     "/profile - what I know about you\n"
@@ -83,6 +84,7 @@ HELP = (
 OWNER_HELP = HELP + (
     "\nOwner only:\n"
     "/brief - full strategic briefing now\n"
+    "/channels brief - what's new in the channels you've joined\n"
     "/radar - content and business radar now\n"
     "/users - who is using the bot today\n"
     "/status - health check: sources, spend, scheduler\n"
@@ -1358,6 +1360,50 @@ async def cmd_bot_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     if off else "I'm back. Mention me or reply to me to ask something.")
 
 
+# ---------- Telegram channels ----------
+
+async def cmd_channels(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/channels, /channels add @a @b, /channels remove @a, /channels brief, /channels mute|unmute @a (owner)."""
+    from core import channels
+    user = await gate(update, count=False)
+    if not user:
+        return
+    uid = user["uid"]
+    args = context.args or []
+    action = (args[0].lower() if args else "")
+    names = args[1:]
+    if action in ("add", "follow") and names:
+        msgs = [await asyncio.to_thread(channels.follow, uid, n) for n in names[:5]]
+        await update.message.reply_text("\n".join(msgs))
+    elif action in ("remove", "unfollow", "rm") and names:
+        await update.message.reply_text("\n".join(channels.unfollow(uid, n) for n in names))
+    elif action in ("brief", "summary", "news"):
+        if uid != "owner" and not gate_ok_for_ai(user):
+            await update.message.reply_text(f"You've used your {DAILY_LIMIT} requests for today.")
+            return
+        await update.message.reply_text("Reading your channels...")
+        try:
+            text = await asyncio.to_thread(channels.channel_brief, uid)
+        except Exception as e:
+            text = f"Couldn't build the channel brief: {str(e)[:200]}"
+        await send_long(update, text)
+    elif action in ("mute", "unmute") and names and uid == "owner":
+        muted = store.kv_get("tgchannels_muted", [])
+        targets = [channels.clean_name(n).lower() or n.lower().lstrip("@") for n in names]
+        muted = sorted(set(muted) | set(targets)) if action == "mute" else [m for m in muted if m not in targets]
+        store.kv_set("tgchannels_muted", muted)
+        await update.message.reply_text(("Muted: " if action == "mute" else "Unmuted: ") + ", ".join(targets))
+    else:
+        await update.message.reply_text(channels.status_text(uid))
+
+
+def gate_ok_for_ai(user: dict) -> bool:
+    if store.usage_today(user["uid"]) >= DAILY_LIMIT:
+        return False
+    store.use_one(user["uid"])
+    return True
+
+
 # ---------- inline mode: @bot <question> in any chat ----------
 
 async def on_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1618,6 +1664,7 @@ def run_telegram():
     app.add_handler(CallbackQueryHandler(on_model_pick, pattern=r"^m:"))
     app.add_handler(CallbackQueryHandler(on_topic_pick, pattern=r"^(t|tx|f|z):"))
     app.add_handler(CallbackQueryHandler(on_download_pick, pattern=r"^dl:"))
+    app.add_handler(CommandHandler("channels", cmd_channels, filters=PRIVATE))
     app.add_handler(InlineQueryHandler(on_inline_query))
     app.add_handler(ChosenInlineResultHandler(on_inline_chosen))
     app.add_handler(CommandHandler(["botoff", "boton"], cmd_bot_toggle))

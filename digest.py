@@ -146,7 +146,7 @@ OWNER_FEEDS = {
     "Economy": ["inflation interest rates", "RBI Federal Reserve"],
 }
 LATEST_QUIET = (23, 7)          # no hourly updates 11 PM - 7 AM (owner's time); they roll into the morning
-LATEST_MAX_ITEMS = 10
+LATEST_MAX_ITEMS = 12
 
 
 def _owner_feeds() -> dict:
@@ -159,7 +159,7 @@ def _owner_feeds() -> dict:
     return feeds
 
 
-def owner_items(max_age_hours: float) -> list:
+def owner_items(max_age_hours: float, include_channels: bool = True) -> list:
     """[(category, item)] from Google News (plus Hacker News for tech), newer than max_age_hours, newest first."""
     from core import sources
     from datetime import timezone as _tz
@@ -175,6 +175,13 @@ def owner_items(max_age_hours: float) -> list:
         for it in items:
             if it.get("published") and (now - it["published"]).total_seconds() <= max_age_hours * 3600:
                 out.append((cat, it))
+    if include_channels:  # posts from your joined channels and the public ones you follow
+        try:
+            from core import channels
+            since = time.time() - max_age_hours * 3600
+            out += [(f"Telegram: {i['source']}", i) for i in channels.posts_for("owner", since)]
+        except Exception as e:
+            print(f"Channel posts unavailable: {e}")
     floor = datetime.min.replace(tzinfo=_tz.utc)
     out.sort(key=lambda ci: ci[1].get("published") or floor, reverse=True)
     return out
@@ -223,6 +230,12 @@ def build_digest():
     for c, i in pairs:
         if id(i) in keep and len(by_cat.setdefault(c, [])) < 6:
             by_cat[c].append(i)
+    tg = [i for c, i in pairs if c.startswith("Telegram: ") and id(i) in keep][:15]
+    for c in [c for c in by_cat if c.startswith("Telegram: ")]:
+        by_cat.pop(c)
+    if tg:
+        categories = {**categories, "Your Telegram channels": []}
+        by_cat["Your Telegram channels"] = tg
     used = [i for items in by_cat.values() for i in items]
     combined = ""
     for c in categories:
@@ -388,6 +401,11 @@ def start_digest_scheduler():
     from core import alerts, talent, watch
     if watch.ALERT_EVERY_MIN > 0:
         schedule.every(watch.ALERT_EVERY_MIN).minutes.do(watch.run_watches, send_telegram)
+    from core import channels
+    if channels.CHANNEL_EVERY_MIN > 0:
+        schedule.every(channels.CHANNEL_EVERY_MIN).minutes.do(lambda: _pool.submit(channels.sync))
+        _pool.submit(channels.sync)  # read channels once at start-up
+    schedule.every().day.at("03:40").do(channels.prune)
     from core import topics
     if topics.LIVE_EVERY_MIN > 0:
         schedule.every(topics.LIVE_EVERY_MIN).minutes.do(
