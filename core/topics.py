@@ -191,13 +191,13 @@ def format_live(picked: list, heading: str = "Latest for you") -> str:
         where = it["source"] if it["platform"] in ("News", "Web") else f"{it['platform']} {it['source']}".strip()
         age = _age(it)
         meta = html.escape(where + (", " + age if age else ""))
-        out.append(f'• <a href="{html.escape(it["url"], quote=True)}">{html.escape(it["title"])}</a> ({meta})')
-    out.append("\nChange topics: /interests   How often: /updates")
+        out.append(f'• {html.escape(it["title"])} <i>({meta})</i>')
+    out.append("\nTap Links for sources, or ask me about any of these.\nChange topics: /interests   How often: /updates")
     return "\n".join(out)
 
 
 def run_live(send):
-    """Scheduler job. send(text, chat_id) -> bool."""
+    """Scheduler job. send(text, chat_id, reply_markup) -> bool."""
     users = store.all_users()
     start = store.kv_get("live_rotate", 0) % max(len(users), 1)
     users = users[start:] + users[:start]
@@ -228,7 +228,9 @@ def run_live(send):
                 continue
             picked = collect_live(u)
             if picked:
-                if send(format_live(picked), u["chat_id"]):
+                from core import newslinks
+                key = newslinks.save(u["uid"], [i for _, i in picked])
+                if send(format_live(picked), u["chat_id"], newslinks.markup(key)):
                     seen.remember(u["uid"], [i for _, i in picked])
                     store.kv_set(day_key, store.kv_get(day_key, 0) + 1)
                 else:
@@ -255,5 +257,7 @@ def latest_now(uid: str, per_topic: int = 2) -> str:
     if not picked:
         return ""
     seen.remember(uid, [i for _, i in picked])
+    from core import newslinks
+    newslinks.save(uid, [i for _, i in picked])
     store.kv_set(f"live_seeded:{uid}", True)
     return format_live(picked, "Here's what's happening right now")
