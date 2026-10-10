@@ -172,11 +172,13 @@ def main():
     T.config()
     T.run_forever()
     threading.Thread(target=dashboard, daemon=True).start()
+    import tunnel
+    tunnel.start(PORT)
     print(f"Tracking {T.config()['name']}: counts every {T.FAST_SEC}s, searches every {T.DISCOVER_SEC}s. "
           f"Dashboard http://localhost:{PORT}")
     token = os.getenv("TRACKER_BOT_TOKEN")
     if not token:
-        print("No TRACKER_BOT_TOKEN in .env: tracking and dashboard run, Telegram is off.")
+        print("Dashboard-only mode (no TRACKER_BOT_TOKEN): tracking + dashboard running.")
         threading.Event().wait()
     from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
     app = ApplicationBuilder().token(token).concurrent_updates(True).build()

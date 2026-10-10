@@ -6,17 +6,17 @@ Separate from the main agent: its own branch (bmsd-tracker, never merged into ma
 
 - New streams are found every 60s (YouTube live search for the event's phrases; no API key needed).
 - Every live stream is re-counted every 10s, so short peaks are caught.
-- Telegram (owner only): /stats, /live, /top, /chart, /page, /add, /exclude, /official, /phrase, /pause, /resume, /health.
-  Or just type "peak?".
-- Dashboard: http://localhost:8091 (refreshes every 30s), or /page in Telegram for a file you can open anywhere.
+- Dashboard: http://localhost:8091 (refreshes every 30s). With cloudflared installed it also gets a public
+  link you can open on your phone; the link is sent to you through your main agent's Telegram bot.
+- Optional: its own Telegram bot for commands (TRACKER_BOT_TOKEN); not needed.
 
 ## Setup (Mac)
 
 ```
 cd ~ && git clone -b bmsd-tracker --single-branch https://github.com/naveen-raj-kanagaraj/my-agent.git bmsd-tracker && cd bmsd-tracker
-cp .env.example .env && nano .env        # TRACKER_BOT_TOKEN (new bot from @BotFather), OWNER_TELEGRAM_ID
-python3 -m venv venv && venv/bin/pip install -r requirements.txt
-venv/bin/python check.py                 # confirms search + counting work from your network
+cp .env.example .env                     # nothing to fill in
+brew install cloudflared                 # optional: public dashboard link for your phone
+~/my-agent/venv/bin/python check.py      # confirms search + counting work from your network
 bash scripts/autostart.sh install        # runs in the background, restarts on crash, keeps the Mac awake
 ```
 
