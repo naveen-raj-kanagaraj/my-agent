@@ -370,7 +370,7 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     # live now (last tick, if recent)
     last_ts = ticks[-1]["ts"]
     live_now = [s for s in samples if s["ts"] == last_ts] if time.time() - last_ts < POLL_SEC * 3 else []
-    out["live_now"] = sorted(live_now, key=lambda s: -s["viewers"])
+    out["live_now"] = sorted((s for s in live_now if s["viewers"] > 0), key=lambda s: -s["viewers"])  # 0 = nobody watching
     # concurrent-viewer view: who made up the peak, each stream's own peak, averages while the official stream was on
     out["at_peak"] = sorted((s for s in samples if s["ts"] == peak["ts"]), key=lambda s: -s["viewers"])
     with store._lock:
