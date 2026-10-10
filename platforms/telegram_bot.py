@@ -1574,8 +1574,10 @@ async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                                     "snapshot; send /event page again for fresh numbers).")
     elif action == "top":
         st = await asyncio.to_thread(events.stats, key)
-        rows = [f"{i}. {c['channel']} ({c['kind']}): {events.fmt_n(c['hw'])} h watched, peak {events.fmt_n(c['peak'])}, "
-                f"avg {events.fmt_n(c['avg'])}\n   {c['url']}" for i, c in enumerate(st.get("channels", [])[:60], 1)]
+        live = {s["channel"] for s in st.get("live_now", [])}
+        rows = [f"{i}. {c['channel']} ({c['kind']}{', LIVE' if c['channel'] in live else ', ended'}): "
+                f"{events.fmt_n(c['hw'])} h watched, peak {events.fmt_n(c['peak'])}\n   {c['url']}"
+                for i, c in enumerate(st.get("channels", [])[:60], 1)]
         await send_long(update, "\n".join(rows) or "No channels yet.", preview=False)
     elif action == "add" and rest:
         vid = re.search(r"(?:v=|youtu\.be/|/live/)([A-Za-z0-9_-]{11})", rest)

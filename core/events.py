@@ -129,8 +129,8 @@ def search_live(query: str) -> list:
         info = y.extract_info(url, download=False)
     out = []
     for e in info.get("entries") or []:
-        if not e or e.get("live_status") != "is_live" or not e.get("id"):
-            continue
+        if not e or e.get("live_status") != "is_live" or not e.get("id") or e.get("concurrent_view_count") is None:
+            continue  # only streams live right now with a live "watching" count
         out.append({"vid": e["id"], "title": e.get("title") or "", "channel": e.get("channel") or "",
                     "channel_id": e.get("channel_id") or "", "viewers": int(e.get("concurrent_view_count") or 0)})
     return out
@@ -400,29 +400,15 @@ def summary(key: str = None, top: int = 10) -> str:
     if st["live_now"]:
         lines.append(f"\nLIVE NOW: {fmt_n(sum(s['viewers'] for s in st['live_now']))} viewers across "
                      f"{len(st['live_now'])} streams")
-        for s in st["live_now"][:8]:
+        for s in st["live_now"]:
             lines.append(f"  {fmt_n(s['viewers'])}  {s['channel']} ({s['kind']})\n     {yt_link(s['vid'])}")
     else:
         lines.append("\nNothing live right now.")
     sp = st["peak_split"]
-    lines += [f"\nPeak viewers: {fmt_n(st['peak'])} ({_when(st['peak_at'])})",
-              f"  official {fmt_n(sp['official'])}, watch parties {fmt_n(sp['watch'])}, community {fmt_n(sp['community'])}",
-              f"Average viewers: {fmt_n(st['avg'])}",
-              f"Hours watched: {fmt_n(st['hours_watched'])}",
-              f"Airtime: {st['airtime_h']:.1f} h"]
-    kh = st["by_kind_hw"]
-    tot = sum(kh.values()) or 1
-    lines.append("Hours watched share: " + ", ".join(f"{k} {100 * v / tot:.0f}%" for k, v in kh.items()))
-    if len(st["days"]) > 1:
-        lines.append("\nBy day (IST): peak / average / hours watched")
-        for d in st["days"]:
-            lines.append(f"  {d['day']}: {fmt_n(d['peak'])} / {fmt_n(d['avg'])} / {fmt_n(d['hw'])}")
-    lines.append(f"\nTop channels by hours watched (peak):")
-    for n, ch in enumerate(st["channels"][:top], 1):
-        lines.append(f"  {n}. {ch['channel']} ({ch['kind']}): {fmt_n(ch['hw'])} h, peak {fmt_n(ch['peak'])}"
-                     f"\n     {ch['url']}")
-    lines.append(f"\n{len(st['channels'])} channels tracked on YouTube, checked every {POLL_SEC}s. "
-                 "/event page for the dashboard.")
+    lines += [f"\nEvent so far: peak {fmt_n(st['peak'])} ({_when(st['peak_at'])})",
+              f"  (official {fmt_n(sp['official'])}, watch parties {fmt_n(sp['watch'])}, community {fmt_n(sp['community'])})",
+              f"  average {fmt_n(st['avg'])}, hours watched {fmt_n(st['hours_watched'])}, airtime {st['airtime_h']:.1f} h",
+              f"\nYouTube, checked every {POLL_SEC}s. /event page for the dashboard."]
     for label, url in (ev.get("links") or {}).items():
         lines.append(f"{label}: {url}")
     return "\n".join(lines)

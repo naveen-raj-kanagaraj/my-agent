@@ -41,6 +41,8 @@ def build_html(key: str = None) -> str:
                     for k, s in (("official", "official"), ("watch party", "watch"), ("community", "community")))
     days = "".join(f"<tr><td>{html.escape(d['day'])}</td><td>{n(d['peak'])}</td><td>{n(d['avg'])}</td>"
                    f"<td>{n(d['hw'])}</td><td>{d['air'] / 3600:.1f} h</td></tr>" for d in st["days"])
+    live_ch = {s["channel"] for s in st["live_now"]}
+    st["channels"] = [c for c in st["channels"] if c["channel"] not in live_ch]  # table below = ended streams only
     chans = "".join(f"<tr><td>{i}</td><td><a href='{html.escape(c['url'], quote=True)}' target='_blank' rel='noopener'>"
                     f"{html.escape(c['channel'])}</a></td><td><span class='tag {c['kind'][:4]}'>"
                     f"{c['kind']}</span></td><td>{n(c['peak'])}</td><td>{n(c['avg'])}</td><td>{n(c['hw'])}</td></tr>"
@@ -57,7 +59,7 @@ def build_html(key: str = None) -> str:
  <div class="card"><h2>By stream type</h2><table><tr><th>Type</th><th>At peak</th><th>Hours watched</th></tr>{split}</table></div>
 </div>
 <div class="card"><h2>By day</h2><table><tr><th>Day (IST)</th><th>Peak</th><th>Average</th><th>Hours watched</th><th>Airtime</th></tr>{days}</table></div>
-<div class="card"><h2>Channels</h2><table><tr><th>#</th><th>Channel</th><th>Type</th><th>Peak</th><th>Average</th><th>Hours watched</th></tr>{chans}</table></div>
+<details class="card"><summary class="muted">Ended streams, for the record</summary><table><tr><th>#</th><th>Channel</th><th>Type</th><th>Peak</th><th>Average</th><th>Hours watched</th></tr>{chans}</table></details>
 {"".join(f'<p><a href="{html.escape(u, quote=True)}" target="_blank" rel="noopener">{html.escape(l)}</a></p>' for l, u in (ev.get("links") or {}).items())}
 <p class="muted">YouTube only. Counts every {events.POLL_SEC}s across official, watch-party and community streams.
 Average viewers = hours watched / airtime. Updated {events._when(st['last']['ts'])}.</p>"""
