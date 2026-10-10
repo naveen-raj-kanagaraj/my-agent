@@ -41,10 +41,12 @@ def build_html(key: str = None) -> str:
                     for k, s in (("official", "official"), ("watch party", "watch"), ("community", "community")))
     days = "".join(f"<tr><td>{html.escape(d['day'])}</td><td>{n(d['peak'])}</td><td>{n(d['avg'])}</td>"
                    f"<td>{n(d['hw'])}</td><td>{d['air'] / 3600:.1f} h</td></tr>" for d in st["days"])
-    chans = "".join(f"<tr><td>{i}</td><td>{html.escape(c['channel'])}</td><td><span class='tag {c['kind'][:4]}'>"
+    chans = "".join(f"<tr><td>{i}</td><td><a href='{html.escape(c['url'], quote=True)}' target='_blank' rel='noopener'>"
+                    f"{html.escape(c['channel'])}</a></td><td><span class='tag {c['kind'][:4]}'>"
                     f"{c['kind']}</span></td><td>{n(c['peak'])}</td><td>{n(c['avg'])}</td><td>{n(c['hw'])}</td></tr>"
                     for i, c in enumerate(st["channels"][:100], 1))
-    live = "".join(f"<tr><td>{html.escape(s['channel'])}</td><td class='title'>{html.escape(s['title'][:90])}</td>"
+    live = "".join(f"<tr><td>{html.escape(s['channel'])}</td><td class='title'><a href='{events.yt_link(s['vid'])}' "
+                   f"target='_blank' rel='noopener'>{html.escape(s['title'][:90])}</a></td>"
                    f"<td>{n(s['viewers'])}</td></tr>" for s in st["live_now"][:30]) or \
         "<tr><td colspan=3 class='muted'>Nothing live right now</td></tr>"
     body = f"""
@@ -56,6 +58,7 @@ def build_html(key: str = None) -> str:
 </div>
 <div class="card"><h2>By day</h2><table><tr><th>Day (IST)</th><th>Peak</th><th>Average</th><th>Hours watched</th><th>Airtime</th></tr>{days}</table></div>
 <div class="card"><h2>Channels</h2><table><tr><th>#</th><th>Channel</th><th>Type</th><th>Peak</th><th>Average</th><th>Hours watched</th></tr>{chans}</table></div>
+{"".join(f'<p><a href="{html.escape(u, quote=True)}" target="_blank" rel="noopener">{html.escape(l)}</a></p>' for l, u in (ev.get("links") or {}).items())}
 <p class="muted">YouTube only. Counts every {events.POLL_SEC}s across official, watch-party and community streams.
 Average viewers = hours watched / airtime. Updated {events._when(st['last']['ts'])}.</p>"""
     return _page(ev["name"], body, json.dumps(series))
@@ -75,7 +78,7 @@ h1{{font-size:20px;margin:4px 0 14px}} h2{{font-size:14px;margin:0 0 10px;color:
 .card{{margin-bottom:12px;overflow-x:auto}} .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}}
 .chart{{position:relative;height:300px}} table{{width:100%;border-collapse:collapse}} th,td{{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}}
 th{{color:var(--muted);font-weight:600;font-size:12px}} td.title{{white-space:normal;min-width:180px}} .muted{{color:var(--muted)}}
-.tag{{font-size:11px;padding:2px 6px;border-radius:6px;background:var(--line)}} .tag.offi{{color:var(--o)}} .tag.watc{{color:var(--w)}} .tag.comm{{color:var(--c)}}
+a{{color:var(--acc);text-decoration:none}} .tag{{font-size:11px;padding:2px 6px;border-radius:6px;background:var(--line)}} .tag.offi{{color:var(--o)}} .tag.watc{{color:var(--w)}} .tag.comm{{color:var(--c)}}
 </style></head><body><h1>{html.escape(title)} viewership</h1>{body}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
