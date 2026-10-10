@@ -1766,17 +1766,11 @@ async def cmd_scout(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # What people see on the bot's profile ("About") and on the empty chat screen before they press Start.
-BOT_ABOUT = os.getenv("BOT_ABOUT") or ("Your AI assistant: answers with sources, summaries of links and files, "
-                                       "news on your topics, video downloads.")
+BOT_ABOUT = os.getenv("BOT_ABOUT") or "Your AI assistant on Telegram. Ask anything, anytime."
 BOT_DESCRIPTION = os.getenv("BOT_DESCRIPTION") or (
-    "Ask anything, like ChatGPT, Claude, Gemini or Perplexity, right inside Telegram.\n\n"
-    "• Answers with sources from the web\n"
-    "• Send a link, PDF, doc, photo or voice note: get a summary or ask about it\n"
-    "• News on topics you pick (cricket, F1, AI, markets...), no repeats\n"
-    "• Follow Telegram channels and get them summarised\n"
-    "• Download videos from Instagram, X, TikTok and YouTube\n"
-    "• Use it in any chat: type @{bot} and your question\n\n"
-    "Free to use with a daily limit. Tap Start.")
+    "Your AI assistant on Telegram.\n\n"
+    "Ask questions, get answers with sources, summarise links and files, and stay updated on what you care about.\n\n"
+    "Free to use. Tap Start.")
 PUBLIC_COMMANDS = [("new", "Start a fresh conversation"), ("search", "Web answer with sources"),
                    ("news", "Your news now"), ("interests", "Pick topics for updates"),
                    ("updates", "How often you get updates"), ("channels", "Follow Telegram channels"),
