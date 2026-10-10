@@ -26,49 +26,50 @@ def build_html(key: str = None) -> str:
     step = max(1, len(series) // 1500)
     series = series[::step]
     live_total = sum(s["viewers"] for s in st["live_now"])
-    kpis = [("Peak viewers", n(st["peak"]), events._when(st["peak_at"])),
-            ("Average viewers", n(st["avg"]), "over airtime"),
-            ("Hours watched", n(st["hours_watched"]), "all streams"),
-            ("Airtime", f"{st['airtime_h']:.1f} h", f"{len(st['channels'])} channels"),
-            ("Live now", n(live_total) if st["live_now"] else "Offline",
-             f"{len(st['live_now'])} streams" if st["live_now"] else "")]
-    kpi_html = "".join(f"<div class='kpi'><div class='k'>{html.escape(a)}</div><div class='v'>{html.escape(b)}</div>"
-                       f"<div class='s'>{html.escape(c)}</div></div>" for a, b, c in kpis)
+    esc = html.escape
+    link = lambda vid, text: (f"<a href='{events.yt_link(vid)}' target='_blank' rel='noopener'>{esc(text)}</a>")
+    tag = lambda k: f"<span class='tag {k[:4]}'>{k}</span>"
+    clock = lambda ts: datetime.fromtimestamp(ts, events.REPORT_TZ).strftime("%d %b, %I:%M %p")
+    kpis = [("Peak concurrent viewers", n(st["peak"]), events._when(st["peak_at"])),
+            ("Average concurrent", n(st["avg_broadcast"]), "while the official broadcast was live"),
+            ("Official peak", n(st["peak_official"]), f"average {n(st['avg_official'])}"),
+            ("Watch parties peak", n(st["peak_watch"]), "all watch parties combined"),
+            ("Watching now", n(live_total) if st["live_now"] else "Offline",
+             f"{len(st['live_now'])} live streams" if st["live_now"] else "")]
+    kpi_html = "".join(f"<div class='kpi'><div class='k'>{esc(a)}</div><div class='v'>{esc(b)}</div>"
+                       f"<div class='s'>{esc(c)}</div></div>" for a, b, c in kpis)
+    pk_total = st["peak"] or 1
+    at_peak = "".join(f"<tr><td>{i}</td><td>{esc(s['channel'])}</td><td class='title'>{link(s['vid'], s['title'][:80])}</td>"
+                      f"<td>{tag(s['kind'])}</td><td><b>{n(s['viewers'])}</b></td><td>{100 * s['viewers'] / pk_total:.1f}%</td></tr>"
+                      for i, s in enumerate(st["at_peak"][:25], 1) if s["viewers"] > 0)
+    peaks = "".join(f"<tr><td>{i}</td><td>{esc(p['channel'])}</td><td class='title'>{link(p['vid'], p['title'][:80])}</td>"
+                    f"<td>{tag(p['kind'])}</td><td><b>{n(p['peak'])}</b></td><td>{clock(p['peak_at']) if p['peak_at'] else ''}</td></tr>"
+                    for i, p in enumerate(st["stream_peaks"][:100], 1))
+    live = "".join(f"<tr><td>{esc(s['channel'])}</td><td class='title'>{link(s['vid'], s['title'][:90])}</td>"
+                   f"<td>{tag(s['kind'])}</td><td><b>{n(s['viewers'])}</b></td></tr>" for s in st["live_now"][:40]) or \
+        "<tr><td colspan=4 class='muted'>Nothing live right now</td></tr>"
+    days = "".join(f"<tr><td>{esc(d['day'])}</td><td><b>{n(d['peak'])}</b></td>"
+                   f"<td>{datetime.fromtimestamp(d['peak_at'], events.REPORT_TZ).strftime('%I:%M %p') if d.get('peak_at') else ''}</td>"
+                   f"<td>{n(d['avg_broadcast'])}</td></tr>" for d in st["days"])
     sp = st["peak_split"]
-    kh = st["by_kind_hw"]
-    tot = sum(kh.values()) or 1
-    split = "".join(f"<tr><td>{k}</td><td>{n(sp[s])}</td><td>{n(kh[k])} ({100 * kh[k] / tot:.0f}%)</td></tr>"
-                    for k, s in (("official", "official"), ("watch party", "watch"), ("community", "community")))
-    days = "".join(f"<tr><td>{html.escape(d['day'])}</td><td>{n(d['peak'])}</td><td>{n(d['avg'])}</td>"
-                   f"<td>{n(d['hw'])}</td><td>{d['air'] / 3600:.1f} h</td></tr>" for d in st["days"])
-    live_ch = {s["channel"] for s in st["live_now"]}
-    st["channels"] = [c for c in st["channels"] if c["channel"] not in live_ch]  # table below = ended streams only
-    chans = "".join(f"<tr><td>{i}</td><td><a href='{html.escape(c['url'], quote=True)}' target='_blank' rel='noopener'>"
-                    f"{html.escape(c['channel'])}</a></td><td><span class='tag {c['kind'][:4]}'>"
-                    f"{c['kind']}</span></td><td>{n(c['peak'])}</td><td>{n(c['avg'])}</td><td>{n(c['hw'])}</td></tr>"
-                    for i, c in enumerate(st["channels"][:100], 1))
-    live = "".join(f"<tr><td>{html.escape(s['channel'])}</td><td class='title'><a href='{events.yt_link(s['vid'])}' "
-                   f"target='_blank' rel='noopener'>{html.escape(s['title'][:90])}</a></td>"
-                   f"<td>{n(s['viewers'])}</td></tr>" for s in st["live_now"][:30]) or \
-        "<tr><td colspan=3 class='muted'>Nothing live right now</td></tr>"
     body = f"""
 <div class="kpis">{kpi_html}</div>
-<div class="card"><h2>Viewers over time (IST)</h2><div class="chart"><canvas id="c"></canvas></div></div>
-<div class="grid">
- <div class="card"><h2>Live now</h2><table><tr><th>Channel</th><th>Stream</th><th>Viewers</th></tr>{live}</table></div>
- <div class="card"><h2>By stream type</h2><table><tr><th>Type</th><th>At peak</th><th>Hours watched</th></tr>{split}</table></div>
-</div>
-<div class="card"><h2>By day</h2><table><tr><th>Day (IST)</th><th>Peak</th><th>Average</th><th>Hours watched</th><th>Airtime</th></tr>{days}</table></div>
-<details class="card"><summary class="muted">Ended streams, for the record</summary><table><tr><th>#</th><th>Channel</th><th>Type</th><th>Peak</th><th>Average</th><th>Hours watched</th></tr>{chans}</table></details>
-{"".join(f'<p><a href="{html.escape(u, quote=True)}" target="_blank" rel="noopener">{html.escape(l)}</a></p>' for l, u in (ev.get("links") or {}).items())}
-<p class="muted">YouTube only. Counts every {events.POLL_SEC}s across official, watch-party and community streams.
-Average viewers = hours watched / airtime. Updated {events._when(st['last']['ts'])}.</p>"""
+<div class="card"><h2>Concurrent viewers over time (IST)</h2><div class="chart"><canvas id="c"></canvas></div></div>
+<div class="card"><h2>At the peak: {n(st['peak'])} concurrent at {esc(events._when(st['peak_at']))}</h2>
+<p class="muted">Official {n(sp['official'])}, watch parties {n(sp['watch'])}, community {n(sp['community'])}</p>
+<table><tr><th>#</th><th>Channel</th><th>Stream</th><th>Type</th><th>Concurrent</th><th>Share</th></tr>{at_peak}</table></div>
+<div class="card"><h2>Watching now</h2><table><tr><th>Channel</th><th>Stream</th><th>Type</th><th>Concurrent</th></tr>{live}</table></div>
+<div class="card"><h2>Peak concurrent viewers by stream</h2><table><tr><th>#</th><th>Channel</th><th>Stream</th><th>Type</th><th>Peak</th><th>When (IST)</th></tr>{peaks}</table></div>
+<div class="card"><h2>By day</h2><table><tr><th>Day (IST)</th><th>Peak concurrent</th><th>At</th><th>Average concurrent (broadcast)</th></tr>{days}</table></div>
+{"".join(f'<p><a href="{esc(u, quote=True)}" target="_blank" rel="noopener">{esc(l)}</a></p>' for l, u in (ev.get("links") or {}).items())}
+<p class="muted">YouTube only. Concurrent viewers = people watching at the same moment, summed across every live stream
+(official, watch parties, community), checked every {events.POLL_SEC}s. Updated {events._when(st['last']['ts'])}.</p>"""
     return _page(ev["name"], body, json.dumps(series))
 
 
 def _page(title: str, body: str, data: str) -> str:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(title)} viewership</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(title)} concurrent viewers</title>
 <style>
 :root{{--bg:#0f1115;--card:#171a21;--ink:#e8eaf0;--muted:#8b93a7;--line:#262b36;--acc:#5b8cff;--o:#f5a524;--w:#17c964;--c:#5b8cff}}
 @media (prefers-color-scheme: light){{:root{{--bg:#f6f7fb;--card:#fff;--ink:#141821;--muted:#5d6577;--line:#e3e6ee}}}}
@@ -81,7 +82,7 @@ h1{{font-size:20px;margin:4px 0 14px}} h2{{font-size:14px;margin:0 0 10px;color:
 .chart{{position:relative;height:300px}} table{{width:100%;border-collapse:collapse}} th,td{{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}}
 th{{color:var(--muted);font-weight:600;font-size:12px}} td.title{{white-space:normal;min-width:180px}} .muted{{color:var(--muted)}}
 a{{color:var(--acc);text-decoration:none}} .tag{{font-size:11px;padding:2px 6px;border-radius:6px;background:var(--line)}} .tag.offi{{color:var(--o)}} .tag.watc{{color:var(--w)}} .tag.comm{{color:var(--c)}}
-</style></head><body><h1>{html.escape(title)} viewership</h1>{body}
+</style></head><body><h1>{html.escape(title)}: concurrent viewers</h1>{body}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 const d={data};
@@ -120,9 +121,9 @@ def chart_png(key: str = None):
                                   (3, "Watch parties", "#17c964", 1.4), (4, "Community", "#5b8cff", 1.4)):
         ax.plot(xs, [s[idx] for s in st["series"]], label=label, color=color, linewidth=lw)
     pk = max(st["series"], key=lambda s: s[1])
-    ax.annotate(f"Peak {events.fmt_n(pk[1])}", (datetime.fromtimestamp(pk[0], events.REPORT_TZ), pk[1]),
+    ax.annotate(f"Peak {events.fmt_n(pk[1])} concurrent", (datetime.fromtimestamp(pk[0], events.REPORT_TZ), pk[1]),
                 textcoords="offset points", xytext=(0, 8), ha="center", fontsize=9)
-    ax.set_title(f"{ev['name']}: YouTube viewers (IST)", fontsize=12, loc="left")
+    ax.set_title(f"{ev['name']}: concurrent viewers on YouTube (IST)", fontsize=12, loc="left")
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%d %b\n%H:%M", tz=events.REPORT_TZ))
     ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: events.fmt_n(v)))
     ax.grid(alpha=.25)
