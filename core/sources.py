@@ -75,7 +75,7 @@ def _cached(key, fn):
             from core import alerts
             hint = ""
             if kind in ("reddit", "subreddit") and ("403" in err or "429" in err):
-                hint = " Reddit is blocking this network on every free route; add REDDIT_CLIENT_ID/SECRET to .env."
+                hint = ""
             alerts.notify(f"source:{kind}", f"{SOURCE_NAMES.get(kind, kind)} has failed {fails} times in a row "
                           f"({err[:120]}). News still works from the other sources.{hint}", 360)
     with _lock:
@@ -204,8 +204,23 @@ def _reddit_rss(path: str, params: dict) -> list:
     return out
 
 
+class RedditBlocked(Exception):
+    pass
+
+
+REDDIT_RETRY_HOURS = 12        # after Reddit blocks every free route, wait this long before trying again
+REDDIT_VIA_GOOGLE = os.getenv("REDDIT_VIA_GOOGLE", "true").lower() == "true"
+
+
+def _reddit_blocked() -> bool:
+    from core import store
+    return time.time() < (store.kv_get("reddit_blocked_until") or 0)
+
+
 def _reddit_get(path: str, params: dict) -> list:
     token = _reddit_oauth()
+    if not token and _reddit_blocked():
+        raise RedditBlocked("Reddit blocks free access from this network")
     if token:
         r = requests.get(f"https://oauth.reddit.com{path}", params=params,
                          headers={"User-Agent": UA, "Authorization": f"bearer {token}"}, timeout=15)
@@ -227,26 +242,60 @@ def _reddit_get(path: str, params: dict) -> list:
             last = e
             if e.response is None or e.response.status_code not in (403, 429):
                 raise
-    raise last
+    from core import store, alerts
+    store.kv_set("reddit_blocked_until", time.time() + REDDIT_RETRY_HOURS * 3600)
+    alerts.notify("reddit_closed", "Reddit blocks free access (it closed its free API in 2025-26). "
+                  + ("I'm reading Reddit through Google's index instead (uses Serper credits). Nothing to do."
+                     if REDDIT_VIA_GOOGLE and os.getenv("SERPER_API_KEY") else
+                     "Reddit posts are skipped; news still comes from the other sources."), 7 * 24 * 60)
+    raise RedditBlocked(str(last))
 
 
-def reddit(query: str) -> list:
-    """Newest matching posts across all of Reddit, plus what's rising today."""
+def _reddit_google(q: str) -> list:
+    """Reddit posts from Google's index of the last day (one Serper credit)."""
+    out = []
+    for o in _serper("search", q, "us"):
+        url = o.get("link", "")
+        m = re.search(r"reddit\.com/r/([^/]+)", url)
+        if not m:
+            continue
+        title = re.sub(r"\s*:\s*r/\w+\s*$", "", o.get("title", "")).replace(" - Reddit", "")
+        out.append(_item(title, url, f"r/{m.group(1)}", "Reddit", _relative_date(o.get("date")), o.get("snippet", "")))
+    return out
+
+
+def _google_ok() -> bool:
+    return REDDIT_VIA_GOOGLE and bool(os.getenv("SERPER_API_KEY"))
+
+
+def reddit(query: str, allow_paid: bool = True) -> list:
+    """Newest matching posts across Reddit. Direct when Reddit allows it, otherwise from Google's index
+    (only when allow_paid, since that uses a Serper credit). Blocked + not paid: quietly nothing."""
     def fetch():
+        if not _reddit_oauth() and _reddit_blocked():
+            return _reddit_google(f"site:reddit.com {query}") if allow_paid and _google_ok() else []
         base = {"q": query, "t": "day", "limit": 20, "type": "link"}
-        newest = _reddit_get("/search", {**base, "sort": "new"})
+        try:
+            newest = _reddit_get("/search", {**base, "sort": "new"})
+        except RedditBlocked:
+            return _reddit_google(f"site:reddit.com {query}") if allow_paid and _google_ok() else []
         try:
             rising = _reddit_get("/search", {**base, "sort": "hot", "limit": 10})
         except Exception:
             rising = []
         return newest + rising
-    return _cached(("reddit", query, ""), fetch)
+    return _cached(("reddit", query, "paid" if allow_paid else "free"), fetch)
 
 
 def subreddit_latest(sub: str, limit: int = 15) -> list:
     """Newest posts in one subreddit, plus its current hot posts."""
     def fetch():
-        newest = _reddit_get(f"/r/{sub}/new", {"limit": limit})
+        if not _reddit_oauth() and _reddit_blocked():
+            return _reddit_google(f"site:reddit.com/r/{sub}") if _google_ok() else []
+        try:
+            newest = _reddit_get(f"/r/{sub}/new", {"limit": limit})
+        except RedditBlocked:
+            return _reddit_google(f"site:reddit.com/r/{sub}") if _google_ok() else []
         try:
             hot = _reddit_get(f"/r/{sub}/hot", {"limit": 8})
         except Exception:
@@ -397,9 +446,9 @@ def gather(topic: str, keywords: list, region: str = "us", limit: int = 6, free_
     # Search with the two strongest phrasings; match against all keywords.
     queries = keywords[:2]
     items = []
-    for q in queries:
+    for n, q in enumerate(queries):
         items += google_news(q, region)
-        items += reddit(q)
+        items += reddit(q, allow_paid=not free_only and n == 0)  # Google route: one credit per topic at most
     items += hacker_news(keywords[0])
     if not free_only:  # X/IG/Threads and YouTube cost Serper credits
         items += social(" OR ".join(f'"{k}"' for k in keywords[:3]), region)
