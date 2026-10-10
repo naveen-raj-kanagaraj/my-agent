@@ -160,6 +160,17 @@ def collect_live(u: dict, seed: bool = False) -> list:
         new = seen.filter_new(seen.scopes_for(u["uid"]), fresh)
         new = [i for i in new if not any(seen.same_story(i["title"], p["title"]) for _, p in picked)]
         picked += [(topic, i) for i in new[:PER_TOPIC]]
+    if u["uid"] != "owner":  # public channels this person follows count as one more topic
+        try:
+            import time as _t
+            from core import channels
+            posts = channels.posts_for(u["uid"], _t.time() - LIVE_MAX_AGE_HOURS * 3600)
+            everything += posts
+            new = [i for i in seen.filter_new(seen.scopes_for(u["uid"]), posts)
+                   if not any(seen.same_story(i["title"], p["title"]) for _, p in picked)]
+            picked += [("Your channels", i) for i in new[:3]]
+        except Exception as e:
+            print(f"Channel posts for {u['uid']} failed: {e}")
     if seed:
         seen.remember(u["uid"], everything)
         return []
@@ -194,7 +205,8 @@ def run_live(send):
     for n, u in enumerate(users):
         if u.get("blocked") or not u.get("news_on") or u.get("news_mode") != "live":
             continue
-        if u.get("state") != "active" or not u.get("chat_id") or not store.interests(u):
+        if u.get("state") != "active" or not u.get("chat_id") or \
+                not (store.interests(u) or store.kv_get(f"tgchannels:{u['uid']}")):
             continue
         local = datetime.now(store.user_tz(u))
         if local.hour >= QUIET_START or local.hour < QUIET_END:
