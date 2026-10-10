@@ -153,14 +153,17 @@ def is_owner(update: Update) -> bool:
     return store.is_owner("telegram", str(update.effective_user.id))
 
 
-async def send_long(update: Update, text: str, rich: bool = False, markup=None):
+async def send_long(update: Update, text: str, rich: bool = False, markup=None, preview: bool = True):
     """Send a reply in Telegram-sized pieces. rich=True renders Markdown (bold, lists, code, links).
     markup (buttons) goes under the last piece."""
     text = text or "(no response)"
     if not rich:
         parts = [text[i:i + 4096] for i in range(0, len(text), 4096)]
         for n, part in enumerate(parts):
-            await update.message.reply_text(part, **({"reply_markup": markup} if markup and n == len(parts) - 1 else {}))
+            extra = {"reply_markup": markup} if markup and n == len(parts) - 1 else {}
+            if not preview:
+                extra["disable_web_page_preview"] = True
+            await update.message.reply_text(part, **extra)
         return
     from core import tg_format
     chunks = tg_format.split_for_telegram(text)
@@ -1572,8 +1575,8 @@ async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif action == "top":
         st = await asyncio.to_thread(events.stats, key)
         rows = [f"{i}. {c['channel']} ({c['kind']}): {events.fmt_n(c['hw'])} h watched, peak {events.fmt_n(c['peak'])}, "
-                f"avg {events.fmt_n(c['avg'])}" for i, c in enumerate(st.get("channels", [])[:60], 1)]
-        await send_long(update, "\n".join(rows) or "No channels yet.")
+                f"avg {events.fmt_n(c['avg'])}\n   {c['url']}" for i, c in enumerate(st.get("channels", [])[:60], 1)]
+        await send_long(update, "\n".join(rows) or "No channels yet.", preview=False)
     elif action == "add" and rest:
         vid = re.search(r"(?:v=|youtu\.be/|/live/)([A-Za-z0-9_-]{11})", rest)
         if vid:
@@ -1598,7 +1601,7 @@ async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(EVENT_HELP)
     else:
         text = await asyncio.to_thread(events.summary, key)
-        await send_long(update, text)
+        await send_long(update, text, preview=False)
 
 
 # ---------- Telegram channels ----------

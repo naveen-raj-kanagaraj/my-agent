@@ -37,8 +37,14 @@ PRESETS = {
                   "bgmi show down", "bm showdown"],
         "queries": ["BMSD", "BMSD 2026", "BGMI Showdown", "Battlegrounds Mobile India Showdown", "BMSD watch party"],
         "official": ["krafton india esports", "battlegrounds mobile india"],
+        "links": {"Esports Charts (official numbers, all platforms)":
+                  "https://escharts.com/tournaments/bgmi/battlegrounds-mobile-india-showdown-2026-bgmi"},
     },
 }
+
+
+def yt_link(vid: str) -> str:
+    return f"https://youtu.be/{vid}"
 
 
 # ---------- storage ----------
@@ -57,7 +63,12 @@ def _db():
 
 
 def events() -> dict:
-    return store.kv_get("events", {})
+    evs = store.kv_get("events", {})
+    for k, ev in evs.items():  # events created before a preset gained new fields get them
+        for field, val in PRESETS.get(k, {}).items():
+            if field == "links" and not ev.get("links"):
+                ev["links"] = dict(val)
+    return evs
 
 
 def save_events(evs: dict):
@@ -79,6 +90,7 @@ def create(key: str, name: str = None, match: list = None, queries: list = None,
           "match": [m.lower() for m in (match or preset.get("match") or [key])],
           "queries": queries or preset.get("queries") or [key],
           "official": [o.lower() for o in (official or preset.get("official") or [])],
+          "links": dict(preset.get("links") or {}),
           "channels": [], "videos": [], "excluded": [], "active": True, "created": time.time()}
     evs = events()
     if key in evs:
@@ -331,6 +343,8 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     for p in per.values():
         ch = chans.setdefault(p["channel"], {"channel": p["channel"], "kind": p["kind"], "peak": 0, "hw": 0.0,
                                              "streams": 0, "air": 0})
+        if p["hw"] >= ch.get("best_hw", -1):
+            ch["best_hw"], ch["url"], ch["title"] = p["hw"], yt_link(p["vid"]), p["title"]
         ch["peak"] = max(ch["peak"], p["peak"])
         ch["hw"] += p["hw"]
         ch["streams"] += 1
@@ -386,8 +400,8 @@ def summary(key: str = None, top: int = 10) -> str:
     if st["live_now"]:
         lines.append(f"\nLIVE NOW: {fmt_n(sum(s['viewers'] for s in st['live_now']))} viewers across "
                      f"{len(st['live_now'])} streams")
-        for s in st["live_now"][:5]:
-            lines.append(f"  {fmt_n(s['viewers'])}  {s['channel']} ({s['kind']})")
+        for s in st["live_now"][:8]:
+            lines.append(f"  {fmt_n(s['viewers'])}  {s['channel']} ({s['kind']})\n     {yt_link(s['vid'])}")
     else:
         lines.append("\nNothing live right now.")
     sp = st["peak_split"]
@@ -405,8 +419,12 @@ def summary(key: str = None, top: int = 10) -> str:
             lines.append(f"  {d['day']}: {fmt_n(d['peak'])} / {fmt_n(d['avg'])} / {fmt_n(d['hw'])}")
     lines.append(f"\nTop channels by hours watched (peak):")
     for n, ch in enumerate(st["channels"][:top], 1):
-        lines.append(f"  {n}. {ch['channel']} ({ch['kind']}): {fmt_n(ch['hw'])} h, peak {fmt_n(ch['peak'])}")
-    lines.append(f"\n{len(st['channels'])} channels tracked. Checked every {POLL_SEC}s. /event page for the dashboard.")
+        lines.append(f"  {n}. {ch['channel']} ({ch['kind']}): {fmt_n(ch['hw'])} h, peak {fmt_n(ch['peak'])}"
+                     f"\n     {ch['url']}")
+    lines.append(f"\n{len(st['channels'])} channels tracked on YouTube, checked every {POLL_SEC}s. "
+                 "/event page for the dashboard.")
+    for label, url in (ev.get("links") or {}).items():
+        lines.append(f"{label}: {url}")
     return "\n".join(lines)
 
 
