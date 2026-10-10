@@ -116,11 +116,16 @@ def gnews():
 
 def reddit():
     from core import sources
-    items = sources._reddit_get("/search", {"q": "India", "sort": "new", "t": "day", "limit": 5})
+    items = sources.reddit("India")
     if not items:
         raise RuntimeError("no posts returned")
-    route = {"json": "public JSON", "rss": "RSS feed (no vote counts)", "old": "old.reddit"}[sources._REDDIT_MODE["value"]]
-    return f"{len(items)} posts via {'official API' if os.getenv('REDDIT_CLIENT_ID') else route}"
+    if os.getenv("REDDIT_CLIENT_ID"):
+        how = "official API"
+    elif sources._reddit_blocked():
+        how = "Google's index (Reddit blocks free access; uses Serper credits)"
+    else:
+        how = {"json": "public JSON", "rss": "RSS feed", "old": "old.reddit"}[sources._REDDIT_MODE["value"]]
+    return f"{len(items)} posts via {how}"
 
 
 def hn():
@@ -221,8 +226,8 @@ if __name__ == "__main__":
     check("Telegram bot", telegram, "get a new token from @BotFather (/mybots > API Token)")
     check("Serper web search", serper, "check credits at serper.dev")
     check("Google News", gnews, "check your internet connection")
-    check("Reddit", reddit, "every free route is blocked on this network; add REDDIT_CLIENT_ID/SECRET "
-          "(reddit.com/prefs/apps, 'script' app)", warn_only=True)
+    check("Reddit", reddit, "Reddit closed free access and SERPER_API_KEY is missing or out of credits; "
+          "news still works without Reddit", warn_only=True)
     check("Hacker News", hn, "", warn_only=True)
     check("X/Instagram/Threads", social, "needs Serper credits; or set NEWS_SOCIAL=false", warn_only=True)
     check("Read links", read_link, "check your internet connection")
