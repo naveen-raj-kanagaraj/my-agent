@@ -24,9 +24,9 @@ def build_html(refresh: int = 0) -> str:
     step = max(1, len(series) // 2000)
     series = series[::step]
     live_total = sum(s["viewers"] for s in st["live"])
-    kpis = [("Peak viewers", n(st["peak"]), T.when(st["peak_at"])), ("Average viewers", n(st["avg"]), "over airtime"),
-            ("Hours watched", n(st["hw"]), "all streams"), ("Airtime", f"{st['air_h']:.1f} h", f"{len(st['channels'])} channels"),
-            ("Live now", n(live_total) if st["live"] else "Offline", f"{len(st['live'])} streams" if st["live"] else "")]
+    kpis = [("Live now", n(live_total) if st["live"] else "Offline", f"{len(st['live'])} streams" if st["live"] else ""),
+            ("Peak viewers", n(st["peak"]), T.when(st["peak_at"])), ("Average viewers", n(st["avg"]), "over airtime"),
+            ("Hours watched", n(st["hw"]), "event so far"), ("Airtime", f"{st['air_h']:.1f} h", "event so far")]
     kpi = "".join(f"<div class='kpi'><div class='k'>{html.escape(a)}</div><div class='v'>{html.escape(b)}</div>"
                   f"<div class='s'>{html.escape(c)}</div></div>" for a, b, c in kpis)
     sp, kh = st["peak_split"], st["kinds_hw"]
@@ -35,19 +35,22 @@ def build_html(refresh: int = 0) -> str:
                     for k in ("official", "watch party", "community"))
     days = "".join(f"<tr><td>{html.escape(d['day'])}</td><td>{n(d['peak'])}</td><td>{n(d['avg'])}</td><td>{n(d['hw'])}</td>"
                    f"<td>{d['air'] / 3600:.1f} h</td></tr>" for d in st["days"])
+    live_ch = {s["channel"] for s in st["live"]}
+    ended = [c for c in st["channels"] if c["channel"] not in live_ch]
     chans = "".join(f"<tr><td>{i}</td><td><a href='{html.escape(c['url'], quote=True)}' target='_blank' rel='noopener'>"
                     f"{html.escape(c['channel'])}</a></td><td><span class='tag {c['kind'][:4]}'>{c['kind']}</span></td>"
                     f"<td>{n(c['peak'])}</td><td>{n(c['avg'])}</td><td>{n(c['hw'])}</td></tr>"
-                    for i, c in enumerate(st["channels"][:150], 1))
-    live = "".join(f"<tr><td>{html.escape(s['channel'])}</td><td class='title'><a href='{T.yt(s['vid'])}' target='_blank' "
-                   f"rel='noopener'>{html.escape(s['title'][:90])}</a></td><td>{n(s['viewers'])}</td></tr>"
-                   for s in st["live"][:40]) or "<tr><td colspan=3 class='muted'>Nothing live right now</td></tr>"
+                    for i, c in enumerate(ended[:150], 1))
+    live = "".join(f"<tr><td>{i}</td><td>{html.escape(s['channel'])}</td><td class='title'><a href='{T.yt(s['vid'])}' "
+                   f"target='_blank' rel='noopener'>{html.escape(s['title'][:90])}</a></td><td><span class='tag "
+                   f"{s['kind'][:4]}'>{s['kind']}</span></td><td><b>{n(s['viewers'])}</b></td></tr>"
+                   for i, s in enumerate(st["live"], 1)) or "<tr><td colspan=5 class='muted'>Nothing live right now</td></tr>"
     body = f"""<div class="kpis">{kpi}</div>
+<div class="card"><h2>Live now: {n(live_total)} viewers across {len(st['live'])} streams</h2><table><tr><th>#</th><th>Channel</th><th>Stream</th><th>Type</th><th>Watching now</th></tr>{live}</table></div>
 <div class="card"><h2>Viewers over time (IST)</h2><div class="chart"><canvas id="c"></canvas></div></div>
-<div class="grid"><div class="card"><h2>Live now</h2><table><tr><th>Channel</th><th>Stream</th><th>Viewers</th></tr>{live}</table></div>
-<div class="card"><h2>By stream type</h2><table><tr><th>Type</th><th>At peak</th><th>Hours watched</th></tr>{split}</table></div></div>
-<div class="card"><h2>By day</h2><table><tr><th>Day (IST)</th><th>Peak</th><th>Average</th><th>Hours watched</th><th>Airtime</th></tr>{days}</table></div>
-<div class="card"><h2>Channels</h2><table><tr><th>#</th><th>Channel</th><th>Type</th><th>Peak</th><th>Average</th><th>Hours watched</th></tr>{chans}</table></div>
+<div class="grid"><div class="card"><h2>By stream type (event so far)</h2><table><tr><th>Type</th><th>At peak</th><th>Hours watched</th></tr>{split}</table></div>
+<div class="card"><h2>By day</h2><table><tr><th>Day (IST)</th><th>Peak</th><th>Average</th><th>Hours watched</th><th>Airtime</th></tr>{days}</table></div></div>
+<details class="card"><summary class="muted">Ended streams ({len(ended)}), for the record</summary><table><tr><th>#</th><th>Channel</th><th>Type</th><th>Peak</th><th>Average</th><th>Hours watched</th></tr>{chans}</table></details>
 <p>{links}</p><p class="muted">YouTube only. Every live stream counted every {T.FAST_SEC}s; new streams found every
 {T.DISCOVER_SEC}s. Average viewers = hours watched / airtime. Updated {T.when(st['last_ts'])}.</p>"""
     return _page(cfg["name"], body, json.dumps(series), refresh)
@@ -69,7 +72,7 @@ h1{{font-size:20px;margin:4px 0 14px}} h2{{font-size:14px;margin:0 0 10px;color:
 .chart{{position:relative;height:320px}} table{{width:100%;border-collapse:collapse}}
 th,td{{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}} th{{color:var(--muted);font-size:12px}}
 td.title{{white-space:normal;min-width:180px}} .muted{{color:var(--muted)}} .pill{{display:inline-block;margin:0 8px 8px 0}}
-.tag{{font-size:11px;padding:2px 6px;border-radius:6px;background:var(--line)}} .tag.offi{{color:#f5a524}} .tag.watc{{color:#17c964}} .tag.comm{{color:#7aa2ff}}
+details summary{{cursor:pointer}} .tag{{font-size:11px;padding:2px 6px;border-radius:6px;background:var(--line)}} .tag.offi{{color:#f5a524}} .tag.watc{{color:#17c964}} .tag.comm{{color:#7aa2ff}}
 </style></head><body><h1>{html.escape(title)} viewership</h1>{body}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>

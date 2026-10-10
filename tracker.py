@@ -122,7 +122,8 @@ def search_live(query: str) -> list:
         info = y.extract_info(url, download=False)
     out = []
     for e in info.get("entries") or []:
-        if e and e.get("live_status") == "is_live" and e.get("id"):
+        # only streams that are live right now and carry a live "watching" count (never total views of ended ones)
+        if e and e.get("live_status") == "is_live" and e.get("id") and e.get("concurrent_view_count") is not None:
             out.append({"vid": e["id"], "title": e.get("title") or "", "channel": e.get("channel") or "",
                         "channel_id": e.get("channel_id") or "", "viewers": int(e.get("concurrent_view_count") or 0)})
     return out
@@ -428,23 +429,15 @@ def summary(top: int = 10) -> str:
         return head + f"\n\nNo data yet. Searching every {DISCOVER_SEC}s; numbers start when a stream is live."
     lines = [head]
     if st["live"]:
-        lines.append(f"\nLIVE NOW: {fmt_n(sum(s['viewers'] for s in st['live']))} across {len(st['live'])} streams")
-        for s in st["live"][:8]:
+        lines.append(f"\nLIVE NOW: {fmt_n(sum(s['viewers'] for s in st['live']))} viewers across {len(st['live'])} streams")
+        for s in st["live"]:
             lines.append(f"  {fmt_n(s['viewers'])}  {s['channel']} ({s['kind']})\n     {yt(s['vid'])}")
     else:
         lines.append("\nNothing live right now.")
     sp = st["peak_split"]
-    lines += [f"\nPeak viewers: {fmt_n(st['peak'])} at {when(st['peak_at'])}",
-              f"  official {fmt_n(sp['official'])}, watch parties {fmt_n(sp['watch party'])}, community {fmt_n(sp['community'])}",
-              f"Average viewers: {fmt_n(st['avg'])}", f"Hours watched: {fmt_n(st['hw'])}", f"Airtime: {st['air_h']:.1f} h"]
-    tot = sum(st["kinds_hw"].values()) or 1
-    lines.append("Hours watched share: " + ", ".join(f"{k} {100 * v / tot:.0f}%" for k, v in st["kinds_hw"].items()))
-    if len(st["days"]) > 1:
-        lines.append("\nBy day (IST): peak / average / hours watched")
-        lines += [f"  {d['day']}: {fmt_n(d['peak'])} / {fmt_n(d['avg'])} / {fmt_n(d['hw'])}" for d in st["days"]]
-    lines.append("\nTop channels by hours watched:")
-    for n, c in enumerate(st["channels"][:top], 1):
-        lines.append(f"  {n}. {c['channel']} ({c['kind']}): {fmt_n(c['hw'])} h, peak {fmt_n(c['peak'])}\n     {c['url']}")
+    lines += [f"\nEvent so far: peak {fmt_n(st['peak'])} at {when(st['peak_at'])}",
+              f"  (official {fmt_n(sp['official'])}, watch parties {fmt_n(sp['watch party'])}, community {fmt_n(sp['community'])})",
+              f"  average {fmt_n(st['avg'])}, hours watched {fmt_n(st['hw'])}, airtime {st['air_h']:.1f} h"]
     lines.append(f"\nCounted every {FAST_SEC}s ({_method['value'] or 'starting'}), new streams found every {DISCOVER_SEC}s.")
     lines += [f"{k}: {v}" for k, v in cfg.get("links", {}).items()]
     return "\n".join(lines)

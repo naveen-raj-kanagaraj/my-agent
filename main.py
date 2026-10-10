@@ -80,8 +80,9 @@ async def cmd_live(update, context):
 @owner_only
 async def cmd_top(update, context):
     st = await asyncio.to_thread(T.stats)
-    rows = [f"{i}. {c['channel']} ({c['kind']}): {T.fmt_n(c['hw'])} h, peak {T.fmt_n(c['peak'])}, avg {T.fmt_n(c['avg'])}"
-            f"\n   {c['url']}" for i, c in enumerate(st.get("channels", [])[:80], 1)]
+    live = {s["channel"] for s in st.get("live", [])}
+    rows = [f"{i}. {c['channel']} ({c['kind']}{', LIVE' if c['channel'] in live else ', ended'}): {T.fmt_n(c['hw'])} h, "
+            f"peak {T.fmt_n(c['peak'])}\n   {c['url']}" for i, c in enumerate(st.get("channels", [])[:80], 1)]
     await reply(update, "\n".join(rows) or "No channels yet.")
 
 
