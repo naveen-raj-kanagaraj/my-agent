@@ -109,6 +109,21 @@ OWNER_HELP = HELP + (
 
 # ---------- helpers ----------
 
+def action_kb(ctx):
+    """Link buttons the agent's tools asked for (Open in Gmail, Add to Calendar, Send on WhatsApp)."""
+    if not getattr(ctx, "buttons", None):
+        return None
+    rows, row = [], []
+    for label, url in ctx.buttons[:8]:
+        row.append(InlineKeyboardButton(label, url=url))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(rows)
+
+
 def links_kb(uid: str):
     from core import newslinks
     key = newslinks.last_key(uid)
@@ -191,7 +206,10 @@ async def send_outbox(update: Update, ctx: agent_context.Ctx):
     for item in ctx.outbox:
         try:
             with open(item["path"], "rb") as f:
-                if item["kind"] == "video":
+                if item["kind"] == "document":
+                    await update.message.reply_document(document=f, filename=os.path.basename(item["path"]),
+                                                        caption=item.get("caption"))
+                elif item["kind"] == "video":
                     await update.message.reply_video(
                         video=f, duration=item.get("duration") or None, width=item.get("width") or None,
                         height=item.get("height") or None, supports_streaming=True,
@@ -203,6 +221,12 @@ async def send_outbox(update: Update, ctx: agent_context.Ctx):
         finally:
             if item.get("dir"):
                 downloader.cleanup(item)
+            elif item["kind"] == "document":
+                try:
+                    os.unlink(item["path"])
+                    os.rmdir(os.path.dirname(item["path"]))
+                except OSError:
+                    pass
             else:
                 try:
                     os.unlink(item["path"])
@@ -306,7 +330,7 @@ async def execute_chat(update, context, text: str, model_key: str, status_msg=No
             pass
     footer = (f"\n\n_{ctx.model_label} · /switch to change_" if ctx.rich else f"\n\n({ctx.model_label} · /switch to change)") \
         if ctx.model_label and model_key not in ("auto", "") else ""
-    await send_long(update, reply + footer, rich=ctx.rich)
+    await send_long(update, reply + footer, rich=ctx.rich, markup=action_kb(ctx))
     had_files = bool(ctx.outbox)
     await send_outbox(update, ctx)
     if not had_files:
@@ -1440,7 +1464,7 @@ async def handle_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                         {"id": chat.id, "title": chat.title})
     finally:
         await live.stop()
-    await send_long(update, reply, rich=ctx.rich)
+    await send_long(update, reply, rich=ctx.rich, markup=action_kb(ctx))
     had_files = bool(ctx.outbox)
     await send_outbox(update, ctx)
     if not had_files:
@@ -1480,7 +1504,7 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await asyncio.to_thread(chat_fn, raw, "telegram", text, ctx, name, username, raw, "auto", None, group)
     finally:
         await live.stop()
-    await send_long(update, reply, rich=ctx.rich)
+    await send_long(update, reply, rich=ctx.rich, markup=action_kb(ctx))
     await send_outbox(update, ctx)
 
 
@@ -1701,6 +1725,14 @@ async def on_inline_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         answer = f"Something went wrong: {str(e)[:150]}"
     answer = answer if len(answer) < 3300 else answer[:3300].rsplit("\n", 1)[0] + "\n…"
     from core import tg_format
+    extra = action_kb(ctx)
+    if extra:
+        kb = InlineKeyboardMarkup(list(extra.inline_keyboard) + list(kb.inline_keyboard))
+    for item in ctx.outbox:  # files can't be posted inline; drop them
+        try:
+            os.unlink(item["path"])
+        except OSError:
+            pass
     await show(tg_format.to_html(answer), plain=answer)
     store.log_activity(uid, "telegram_inline", "inline", q)
 
