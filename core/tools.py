@@ -289,10 +289,13 @@ ALL_TOOLS = [
     _schema("get_datetime", "Current date and time in the user's timezone."),
     _schema("generate_image", "Create an image from a text description and send it to the user (thumbnails, mockups, "
             "concept art). Write a detailed visual prompt.", {"prompt": S}, ["prompt"]),
+    _schema("event_stats", "Live viewership of a tracked event (e.g. BMSD) across all YouTube streams: live now, peak "
+            "viewers so far and when, average viewers, hours watched, airtime, by day, top channels, official vs watch "
+            "parties vs community. Use for any question about the event's viewership.", {"name": S}),
 ]
 
 TALENT_TOOLS = {"save_creator", "find_creators", "save_deal", "pipeline", "scout_creator",
-                "get_brand_voice", "save_brand_voice"}
+                "get_brand_voice", "save_brand_voice", "event_stats"}
 OWNER_ONLY = TALENT_TOOLS | ({"generate_image"} if not PUBLIC_IMAGE_GEN else set())
 
 
@@ -336,6 +339,8 @@ def execute_tool(name: str, inputs: dict) -> str:
         "get_brand_voice": lambda: _talent_only() or __import__("core.scout", fromlist=["x"]).get_brand_voice(),
         "save_brand_voice": lambda: _talent_only() or __import__("core.scout", fromlist=["x"]).save_brand_voice(inputs["sample"]),
         "video_transcript": lambda: __import__("core.scout", fromlist=["x"]).timestamped_transcript(inputs["url"]),
+        "event_stats": lambda: _talent_only() or __import__("core.events", fromlist=["x"]).tool_event_stats(
+            inputs.get("name", "")),
     }
     fn = handlers.get(name)
     return fn() if fn else "Unknown tool."
