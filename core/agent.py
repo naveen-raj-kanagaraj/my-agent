@@ -96,7 +96,7 @@ def build_system(uid: str, is_owner: bool, platform: str, group: dict = None, sp
         dynamic += ("\n\nINLINE MODE: your answer is being posted into a chat between the user and other people "
                     "(they typed @ and your name in that chat). Write a standalone answer the whole chat can read: "
                     "direct, under 120 words unless the question needs more, no follow-up questions, no greetings. "
-                    "Don't use download_video, generate_image, reminders or memory tools here.")
+                    "Don't use download_video, generate_image, calendar_event, reminders or memory tools here.")
     elif group:
         dynamic += (f"\n\nYou are in a Telegram group chat called '{group.get('title') or 'a group'}'. Several people talk "
                     f"here and you only see messages where someone mentions you or replies to you. The person asking now "
