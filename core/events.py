@@ -291,10 +291,11 @@ def fast_tick(ev: dict, now: float = None) -> dict:
         big = (f["viewers"] if f else st.get("viewers", 0)) >= MINOR_VIEWERS or st.get("kind") == "official"
         if not f or now - f["ts"] >= (FAST_SEC if big else MINOR_SEC):
             due.append(vid)
-    methods = []
+    methods, errs = [], 0
     for vid, n, how in _fast_pool.map(_count_one, due):
         if n == "err":
             _FASTSTATE["errors"] += 1
+            errs += 1
             continue
         if n is None:
             f = fast.setdefault(vid, {"viewers": 0, "ts": now, "misses": 0})
@@ -309,6 +310,11 @@ def fast_tick(ev: dict, now: float = None) -> dict:
         methods.append(how)
     if methods:
         _FASTSTATE.update(method=max(set(methods), key=methods.count), ok_ts=now)
+    # if YouTube starts refusing (rate limit), slow down automatically; speed back up once it's fine
+    if due and errs > len(due) // 2:
+        _FASTSTATE["slow"] = min(_FASTSTATE.get("slow", 0) + 1, 3)
+    elif due and not errs:
+        _FASTSTATE["slow"] = max(_FASTSTATE.get("slow", 0) - 1, 0)
     rows = []
     for vid, st in live.items():
         f = fast.get(vid)
@@ -342,7 +348,7 @@ def fast_tick(ev: dict, now: float = None) -> dict:
 
 
 def fast_healthy() -> bool:
-    return time.time() - _FASTSTATE["ok_ts"] < max(FAST_SEC * 5, 20)
+    return time.time() - _FASTSTATE["ok_ts"] < max(FAST_SEC * 2 ** _FASTSTATE.get("slow", 0) * 5, 20)
 
 
 def run_fast_forever():
@@ -355,7 +361,7 @@ def run_fast_forever():
                     fast_tick(ev)
                 except Exception as e:
                     print(f"Live counter failed for {ev['key']}: {str(e)[:150]}")
-        time.sleep(max(0.3, FAST_SEC - (time.time() - t0)))
+        time.sleep(max(0.3, FAST_SEC * 2 ** _FASTSTATE.get("slow", 0) - (time.time() - t0)))
 
 
 def poll(ev: dict, now: int = None) -> dict:
@@ -536,7 +542,7 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     if _LIVE.get(key) and fast_healthy():
         out["live_now"] = sorted(({**st, "viewers": fl[v]["viewers"]} for v, st in _LIVE[key].items()
                                   if v in fl and fl[v]["viewers"] > 0), key=lambda s: -s["viewers"])
-    out["method"] = (f"{_FASTSTATE['method']}, every {FAST_SEC:g}s" if fast_healthy()
+    out["method"] = (f"{_FASTSTATE['method']}, every {FAST_SEC * 2 ** _FASTSTATE.get('slow', 0):g}s" if fast_healthy()
                      else f"search results, every {POLL_SEC}s")
     with store._lock:
         out["stream_peaks"] = [dict(r) for r in _db().execute(
