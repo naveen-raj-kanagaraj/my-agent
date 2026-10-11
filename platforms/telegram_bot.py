@@ -1549,8 +1549,8 @@ async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ev = events.get()
     if action == "start":
         ev = events.create(rest.split()[0] if rest else "bmsd")
-        await update.message.reply_text(f"Tracking {ev['name']}: searching YouTube for live streams every "
-                                        f"{events.POLL_SEC}s.\nPhrases: {', '.join(ev['match'])}\n\n{EVENT_HELP}")
+        await update.message.reply_text(f"Tracking {ev['name']}: finding new live streams every "
+                                        f"{events.POLL_SEC}s, counting each one every {events.FAST_SEC:g}s.\nPhrases: {', '.join(ev['match'])}\n\n{EVENT_HELP}")
         return
     if not ev:
         await update.message.reply_text("No event yet. Start with: /event start bmsd")
