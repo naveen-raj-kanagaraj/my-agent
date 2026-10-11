@@ -107,7 +107,8 @@ h2{font-size:13px;margin:0;color:var(--muted);font-weight:700;text-transform:upp
 .seg button{all:unset;cursor:pointer;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;color:var(--muted)}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.2)}
 input.q{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;color:var(--ink);font:inherit;font-size:12px;width:170px;max-width:100%}
-.chart{position:relative;height:300px}
+.chart{position:relative;height:340px}.cv{margin-top:4px;font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.cv .delta{font-size:14px;margin-left:6px}@media(max-width:600px){.chart{height:260px}}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
 th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
 td.t{white-space:normal;min-width:200px}td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}th.num{text-align:right}
@@ -135,7 +136,7 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}tr.new td{animatio
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 const LIVE=__LIVE__, EVERY=__REFRESH__*1000;
-let D=__DATA__, prev={}, prevTotal=null, chart=null, range=localGet('range')||'1h', kind=localGet('kind')||'all', q='', skew=0, lastFetch=Date.now(), failing=false;
+let split=localGet('split')==='1', D=__DATA__, prev={}, prevTotal=null, chart=null, range=localGet('range')||'1h', kind=localGet('kind')||'all', q='', skew=0, lastFetch=Date.now(), failing=false;
 function localGet(k){try{return localStorage.getItem('ev_'+k)}catch(e){return null}}
 function localSet(k,v){try{localStorage.setItem('ev_'+k,v)}catch(e){}}
 const fmt=n=>{n=+n||0;return n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e4?(n/1e3).toFixed(1)+'K':Math.round(n).toLocaleString('en-IN')};
@@ -162,8 +163,10 @@ function render(){
     <div class="kpi"><div class="k">Official peak</div><div class="v" id="ko"></div><div class="s">official broadcasts combined</div></div>
     <div class="kpi"><div class="k">Watch parties peak</div><div class="v" id="kw"></div><div class="s">all watch parties combined</div></div>
    </div></div>
-  <div class="card"><div class="head"><h2>Concurrent viewers over time (IST)</h2>
-   <div class="seg" id="rg">${['15m','1h','6h','all'].map(r=>`<button data-r="${r}">${r==='all'?'All':r}</button>`).join('')}</div></div>
+  <div class="card"><div class="head"><div style="margin-right:auto"><h2>Total concurrent (IST)</h2>
+    <div class="cv"><span id="cv"></span> <span id="cc" class="delta"></span></div></div>
+   <div class="seg" id="sp"><button data-s="0">Total</button><button data-s="1">Split</button></div>
+   <div class="seg" id="rg">${['15m','1h','6h','all'].map(r=>`<button data-r="${r}">${r==='all'?'All':r.toUpperCase()}</button>`).join('')}</div></div>
    <div class="chart"><canvas id="c"></canvas></div></div>
   <div class="grid2">
   <div class="card"><div class="head"><h2 id="lh">Live streams</h2>
@@ -174,6 +177,7 @@ function render(){
   </div>
   <div class="foot" id="foot"></div>`;
   document.querySelectorAll('#rg button').forEach(b=>b.onclick=()=>{range=b.dataset.r;localSet('range',range);drawChart();mark()});
+  document.querySelectorAll('#sp button').forEach(b=>b.onclick=()=>{split=b.dataset.s==='1';localSet('split',split?'1':'0');if(chart){chart.destroy();chart=null}drawChart();mark()});
   document.querySelectorAll('#kf button').forEach(b=>b.onclick=()=>{kind=b.dataset.k;localSet('kind',kind);rows();mark()});
   document.getElementById('q').oninput=e=>{q=e.target.value.toLowerCase();rows()};
  }
@@ -203,19 +207,36 @@ function rows(){
   <td class="hide-m"><span class="tag ${K[s.kind]}">${esc(s.kind)}</span></td><td class="num">${full(s.viewers)}</td><td class="num muted hide-m">${(100*s.viewers/tot).toFixed(1)}%</td></tr>`}).join('')||'<tr><td colspan=5 class="muted">Nothing live right now</td></tr>';
  prev={};(D.live||[]).forEach(s=>prev[s.vid]=s.viewers);
 }
+const cross={id:'cross',afterDraw(c){const a=c.tooltip&&c.tooltip.getActiveElements();if(!a||!a.length)return;const x=a[0].element.x,ctx=c.ctx,ar=c.chartArea;
+ ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle=css('--muted');ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,ar.top);ctx.lineTo(x,ar.bottom);ctx.stroke();ctx.restore()}};
 function drawChart(){
  if(!window.Chart||!document.getElementById('c'))return;
  const src=range==='all'?(D.series_all||[]):(D.series_recent||[]);const span={'15m':900,'1h':3600,'6h':21600}[range];
  const last=src.length?src[src.length-1][0]:0;const s=span?src.filter(r=>r[0]>=last-span):src;
- const lab=s.map(r=>new Date(r[0]*1000).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:range==='15m'?'2-digit':undefined,day:range==='all'?'2-digit':undefined,month:range==='all'?'short':undefined}));
- const ds=[['Total',1,css('--ink'),2.2],['Official',2,css('--off'),1.4],['Watch parties',3,css('--wp'),1.4],['Community',4,css('--com'),1.4]]
-  .map(([l,i,c,w])=>({label:l,data:s.map(r=>r[i]),borderColor:c,backgroundColor:i===1?c+'14':'transparent',fill:i===1,borderWidth:w,pointRadius:0,tension:.25}));
- if(chart){chart.data.labels=lab;chart.data.datasets.forEach((d,i)=>{d.data=ds[i].data});chart.update('none');return}
- chart=new Chart(document.getElementById('c'),{type:'line',data:{labels:lab,datasets:ds},options:{responsive:true,maintainAspectRatio:false,animation:false,
-  interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:css('--ink'),boxWidth:10}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${full(c.parsed.y)}`}}},
-  scales:{x:{ticks:{maxTicksLimit:7,color:css('--muted')},grid:{display:false}},y:{beginAtZero:true,ticks:{color:css('--muted'),callback:v=>fmt(v)},grid:{color:css('--line')}}}}});
+ const first=s.length?s[0][1]:0,cur=s.length?s[s.length-1][1]:0,ch=cur-first,up=ch>=0;
+ const col=up?css('--up'):css('--down');
+ document.getElementById('cv').textContent=full(cur);
+ const cc=document.getElementById('cc');cc.className='delta '+(ch>0?'up':ch<0?'down':'flat');
+ cc.textContent=`${ch>=0?'+':'\u2212'}${fmt(Math.abs(ch))} (${first?(100*ch/first).toFixed(2):'0.00'}%) ${range==='all'?'event':'past '+range.toUpperCase()}`;
+ const lab=s.map(r=>r[0]*1000);
+ const tf=t=>new Date(t).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',
+  second:range==='15m'?'2-digit':undefined,day:range==='all'?'2-digit':undefined,month:range==='all'?'short':undefined});
+ const grad=c=>{const {ctx,chartArea:a}=c.chart;if(!a)return col+'33';const g=ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,col+'55');g.addColorStop(1,col+'00');return g};
+ const n=s.length;
+ const ds=[{label:'Total',data:s.map(r=>r[1]),borderColor:col,backgroundColor:grad,fill:true,borderWidth:2,tension:.15,
+   pointRadius:s.map((_,i)=>i===n-1?4:0),pointBackgroundColor:col,pointBorderColor:css('--card'),pointBorderWidth:2,pointHoverRadius:5}];
+ if(split)[['Official',2,css('--off')],['Watch parties',3,css('--wp')],['Community',4,css('--com')]].forEach(([l,i,c])=>
+   ds.push({label:l,data:s.map(r=>r[i]),borderColor:c,borderWidth:1.3,pointRadius:0,pointHoverRadius:3,tension:.15,fill:false}));
+ if(chart){chart.data.labels=lab;chart.data.datasets.forEach((d,i)=>{Object.assign(d,ds[i])});chart.update('none');return}
+ chart=new Chart(document.getElementById('c'),{type:'line',data:{labels:lab,datasets:ds},plugins:[cross],options:{responsive:true,maintainAspectRatio:false,animation:false,
+  interaction:{mode:'index',intersect:false},layout:{padding:{top:6}},
+  plugins:{legend:{display:split,position:'bottom',labels:{color:css('--muted'),boxWidth:8,boxHeight:8,usePointStyle:true}},
+   tooltip:{backgroundColor:css('--card2'),borderColor:css('--line'),borderWidth:1,titleColor:css('--muted'),bodyColor:css('--ink'),padding:10,displayColors:split,
+    callbacks:{title:i=>tf(i[0].parsed.x!==undefined?lab[i[0].dataIndex]:0),label:c=>`${c.dataset.label}: ${full(c.parsed.y)}`}}},
+  scales:{x:{type:'category',ticks:{maxTicksLimit:6,color:css('--muted'),maxRotation:0,callback:(v,i)=>tf(lab[i])},grid:{display:false},border:{display:false}},
+   y:{position:'right',grace:'8%',ticks:{color:css('--muted'),maxTicksLimit:6,callback:v=>fmt(v)},grid:{color:css('--line'),drawTicks:false},border:{display:false,dash:[3,4]}}}}});
 }
-function mark(){document.querySelectorAll('#rg button').forEach(b=>b.classList.toggle('on',b.dataset.r===range));
+function mark(){document.querySelectorAll('#sp button').forEach(b=>b.classList.toggle('on',(b.dataset.s==='1')===split));document.querySelectorAll('#rg button').forEach(b=>b.classList.toggle('on',b.dataset.r===range));
  document.querySelectorAll('#kf button').forEach(b=>b.classList.toggle('on',b.dataset.k===kind))}
 function status(){
  const now=Date.now()/1000-skew, age=D.updated?Math.max(0,now-D.updated):null;
