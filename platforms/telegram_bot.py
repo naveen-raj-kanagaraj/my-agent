@@ -1528,10 +1528,11 @@ async def cmd_bot_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ---------- event viewership tracker (owner) ----------
 
-EVENT_HELP = ("/event - live now, peak, average, hours watched, top channels\n"
+EVENT_HELP = ("/event - live now, peak, average concurrent\n"
+              "/event link - live dashboard that opens on any device (updates every 2s)\n"
               "/event chart - viewers-over-time chart\n"
-              "/event page - full dashboard (open the file)\n"
-              "/event top - all channels ranked\n"
+              "/event page - dashboard snapshot as a file\n"
+              "/event top - live streams ranked\n"
               "/event add <YouTube link or @channel> - always track this stream or channel\n"
               "/event official <@channel or name> - mark a channel as official\n"
               "/event exclude <link, video id or channel name> - drop a stream that isn't about the event\n"
@@ -1572,13 +1573,21 @@ async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_document(document=_io.BytesIO(page.encode()), filename=f"{key}-viewership.html",
                                             caption="Open in your browser for the full dashboard (live data is a "
                                                     "snapshot; send /event page again for fresh numbers).")
+    elif action in ("link", "live", "url"):
+        from core import tunnel
+        url = tunnel.public_url()
+        if url and tunnel.status() == "on":
+            await update.message.reply_text(f"Live dashboard (any device, updates every 2s):\n{url}",
+                                            disable_web_page_preview=True)
+        else:
+            await update.message.reply_text(f"The public link isn't up right now ({tunnel.status()}). "
+                                            "On this computer: http://localhost:8092")
     elif action == "top":
         st = await asyncio.to_thread(events.stats, key)
-        live = {s["channel"] for s in st.get("live_now", [])}
-        rows = [f"{i}. {c['channel']} ({c['kind']}{', LIVE' if c['channel'] in live else ', ended'}): "
-                f"{events.fmt_n(c['hw'])} h watched, peak {events.fmt_n(c['peak'])}\n   {c['url']}"
-                for i, c in enumerate(st.get("channels", [])[:60], 1)]
-        await send_long(update, "\n".join(rows) or "No channels yet.", preview=False)
+        live = st.get("live_now", [])
+        rows = [f"{i}. {events.fmt_n(s['viewers'])}  {s['channel']} ({s['kind']})\n   {events.yt_link(s['vid'])}"
+                for i, s in enumerate(live[:60], 1)]
+        await send_long(update, ("LIVE NOW\n" + "\n".join(rows)) if rows else "Nothing live right now.", preview=False)
     elif action == "add" and rest:
         vid = re.search(r"(?:v=|youtu\.be/|/live/)([A-Za-z0-9_-]{11})", rest)
         if vid:

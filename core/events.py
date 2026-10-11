@@ -515,9 +515,15 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     out["by_kind_hw"] = {k: sum(c["hw"] for c in chans.values() if c["kind"] == k)
                          for k in ("official", "watch party", "community")}
     # per day (event's local time)
-    days = {}
+    days, dayname = {}, {}
+
+    def tday(t):   # one date conversion per half hour (IST is +5:30), not per 2s reading
+        h = int(t["ts"]) // 1800
+        if h not in dayname:
+            dayname[h] = datetime.fromtimestamp(h * 1800, REPORT_TZ).strftime("%a %d %b")
+        return dayname[h]
     for i, t in enumerate(ticks):
-        d = datetime.fromtimestamp(t["ts"], REPORT_TZ).strftime("%a %d %b")
+        d = tday(t)
         dd = days.setdefault(d, {"day": d, "peak": 0, "hw": 0.0, "air": 0})
         dt = min((ticks[i + 1]["ts"] - t["ts"]) if i + 1 < len(ticks) else POLL_SEC, gap_cap)
         dd["peak"] = max(dd["peak"], t["total"])
@@ -556,10 +562,10 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     out["peak_official"] = max((t["official"] for t in ticks), default=0)
     out["peak_watch"] = max((t["watch"] for t in ticks), default=0)
     for d in out["days"]:
-        day_bc = [(t, dt) for t, dt in bc if datetime.fromtimestamp(t["ts"], REPORT_TZ).strftime("%a %d %b") == d["day"]]
+        day_bc = [(t, dt) for t, dt in bc if tday(t) == d["day"]]
         ds = sum(dt for _, dt in day_bc)
         d["avg_broadcast"] = sum(t["total"] * dt for t, dt in day_bc) / ds if ds else d["avg"]
-        day_ticks = [t for t in ticks if datetime.fromtimestamp(t["ts"], REPORT_TZ).strftime("%a %d %b") == d["day"]]
+        day_ticks = [t for t in ticks if tday(t) == d["day"]]
         top = max(day_ticks, key=lambda t: t["total"]) if day_ticks else None
         d["peak_at"] = top["ts"] if top else None
     out["series"] = [(t["ts"], t["total"], t["official"], t["watch"], t["community"]) for t in ticks]
@@ -598,18 +604,13 @@ def summary(key: str = None, top: int = 10) -> str:
     sp = st["peak_split"]
     lines += [f"\nPEAK CONCURRENT: {fmt_n(st['peak'])} at {_when(st['peak_at'])}",
               f"  official {fmt_n(sp['official'])}, watch parties {fmt_n(sp['watch'])}, community {fmt_n(sp['community'])}"]
-    for s in [x for x in st["at_peak"] if x["viewers"] > 0][:5]:
-        lines.append(f"  {fmt_n(s['viewers'])}  {s['channel']}\n     {yt_link(s['vid'])}")
     lines += [f"\nAverage concurrent while the official broadcast was live: {fmt_n(st['avg_broadcast'])}",
               f"Official streams: peak {fmt_n(st['peak_official'])}, average {fmt_n(st['avg_official'])}",
               f"Watch parties combined: peak {fmt_n(st['peak_watch'])}"]
     if len(st["days"]) > 1:
         lines.append("\nBy day (IST): peak / average concurrent")
         lines += [f"  {d['day']}: {fmt_n(d['peak'])} / {fmt_n(d['avg_broadcast'])}" for d in st["days"]]
-    lines.append("\nPeak concurrent by stream:")
-    for i, p in enumerate(st["stream_peaks"][:top], 1):
-        lines.append(f"  {i}. {fmt_n(p['peak'])}  {p['channel']} ({p['kind']})\n     {yt_link(p['vid'])}")
-    lines.append(f"\nYouTube, counted from: {st.get('method')}. /event page for the dashboard, /event chart for the graph.")
+    lines.append(f"\nYouTube, counted from: {st.get('method')}. /event link for the live dashboard, /event chart for the graph.")
     for label, url in (ev.get("links") or {}).items():
         lines.append(f"{label}: {url}")
     return "\n".join(lines)
