@@ -424,6 +424,7 @@ def start_digest_scheduler():
         ev_mod.create("bmsd")  # Battlegrounds Mobile India Showdown, tracking from the start
         store.kv_set("events_seeded", True)
     schedule.every(ev_mod.POLL_SEC).seconds.do(_poll_events)
+    threading.Thread(target=ev_mod.run_fast_forever, daemon=True).start()  # live counters every EVENT_FAST_SEC
     from core import channels
     if channels.CHANNEL_EVERY_MIN > 0:
         schedule.every(channels.CHANNEL_EVERY_MIN).minutes.do(lambda: _pool.submit(channels.sync))

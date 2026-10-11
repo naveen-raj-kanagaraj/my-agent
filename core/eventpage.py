@@ -63,7 +63,7 @@ def build_html(key: str = None) -> str:
 <div class="card"><h2>By day</h2><table><tr><th>Day (IST)</th><th>Peak concurrent</th><th>At</th><th>Average concurrent (broadcast)</th></tr>{days}</table></div>
 {"".join(f'<p><a href="{esc(u, quote=True)}" target="_blank" rel="noopener">{esc(l)}</a></p>' for l, u in (ev.get("links") or {}).items())}
 <p class="muted">YouTube only. Concurrent viewers = people watching at the same moment, summed across every live stream
-(official, watch parties, community), checked every {events.POLL_SEC}s. Updated {events._when(st['last']['ts'])}.</p>"""
+(official, watch parties, community). Counted from: {esc(st.get('method', ''))}. Updated {events._when(st['last']['ts'])}.</p>"""
     return _page(ev["name"], body, json.dumps(series))
 
 
