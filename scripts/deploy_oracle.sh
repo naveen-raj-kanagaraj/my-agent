@@ -41,6 +41,7 @@ if pgrep -f "python[0-9.]* (-u )?main\.py" >/dev/null; then
     sleep 3
     echo "    Stopped the running agent."
 fi
+pkill -f "cloudflared tunnel" 2>/dev/null && echo "    Stopped this Mac's dashboard tunnel." || true   # the server takes over the link
 if command -v sqlite3 >/dev/null && [ -f data/agent.db ]; then
     sqlite3 data/agent.db "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1 || true   # one clean file to copy
 fi
@@ -50,6 +51,12 @@ rsync -az -e "ssh -i $KEY -o StrictHostKeyChecking=accept-new" \
     --exclude venv --exclude __pycache__ --exclude .git --exclude .server --exclude '*.pyc' \
     --exclude data/backups --exclude data/server-backups --exclude 'data/agent.lock' --exclude 'data/agent.log*' --exclude '.DS_Store' \
     ./ "ubuntu@$IP:~/my-agent/"
+
+if [ -d "$HOME/.cloudflared" ]; then   # the live.letsgrowesports.com tunnel login, so the server can serve that link
+    rsync -az -e "ssh -i $KEY -o StrictHostKeyChecking=accept-new" "$HOME/.cloudflared/" "ubuntu@$IP:~/.cloudflared/"
+    $SSH 'chmod 700 ~/.cloudflared && chmod 600 ~/.cloudflared/*'
+    echo "    Copied the dashboard tunnel login."
+fi
 
 echo "==> 4/5 Installing on the server (5-10 minutes the first time)..."
 $SSH 'cd ~/my-agent && bash setup_server.sh'
