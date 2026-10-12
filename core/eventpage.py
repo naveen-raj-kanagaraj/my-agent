@@ -5,6 +5,7 @@ Only streams that are live right now are listed; ended streams only count toward
 import html
 import io
 import json
+import os
 import threading
 import time
 from datetime import datetime
@@ -26,6 +27,23 @@ def _thin(rows, limit):
     if rows and out[-1] is not rows[-1]:
         out.append(rows[-1])
     return out
+
+
+BRAND = os.getenv("EVENT_BRAND", "Let's Grow Esports")
+BRAND_URL = os.getenv("EVENT_BRAND_URL", "https://letsgrowesports.com")
+
+
+def live_data(key: str = None) -> dict:
+    """What the page polls every few seconds: numbers + live streams + the last ~3 minutes of the chart (~2-5 KB)."""
+    d = data(key)
+    out = {k: v for k, v in d.items() if k not in ("series_all", "series_recent")}
+    out["tail"] = (d.get("series_recent") or [])[-90:]
+    return out
+
+
+def series_data(key: str = None) -> dict:
+    d = data(key)
+    return {"series_all": d.get("series_all", []), "series_recent": d.get("series_recent", [])}
 
 
 def data(key: str = None) -> dict:
@@ -52,7 +70,8 @@ def data(key: str = None) -> dict:
             days=[{"day": d["day"], "peak": d["peak"], "avg": round(d["avg_broadcast"]),
                    "at": datetime.fromtimestamp(d["peak_at"], events.REPORT_TZ).strftime("%I:%M %p") if d.get("peak_at") else ""}
                   for d in st["days"]],
-            series_all=_thin(series, 1500), series_recent=_thin(recent, 2500), official_live=st.get("official_live", False))
+            series_all=_thin(series, 1500),
+            series_recent=_thin([t for t in recent if t[0] < series[-1][0] - 200], 2400) + [t for t in recent if t[0] >= series[-1][0] - 200], official_live=st.get("official_live", False))
         lb = st.get("last_broadcast")
         if lb:
             tf = lambda ts: datetime.fromtimestamp(ts, events.REPORT_TZ)
@@ -75,7 +94,8 @@ def build_html(key: str = None, live: bool = False) -> str:
     return (PAGE.replace("__TITLE__", html.escape(d.get("name", "Event")))
                 .replace("__DATA__", payload)
                 .replace("__LIVE__", "true" if live else "false")
-                .replace("__REFRESH__", str(REFRESH_SEC)))
+                .replace("__REFRESH__", str(REFRESH_SEC))
+                .replace("__BRAND__", html.escape(BRAND)).replace("__BRANDURL__", html.escape(BRAND_URL, quote=True)))
 
 
 PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -128,14 +148,15 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 .mini{height:4px;border-radius:3px;background:var(--acc);opacity:.75;margin-top:5px;transition:width .6s ease}
 tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}tr.new td{animation:nw 2s}
 @keyframes fu{0%{color:var(--up)}100%{}}@keyframes fd{0%{color:var(--down)}100%{}}@keyframes nw{0%{background:rgba(124,156,255,.18)}100%{}}
-.ch{font-weight:600}.muted{color:var(--muted)}.scroll{overflow-x:auto}.foot{font-size:12px;color:var(--muted);margin-top:14px}
+.brand{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin-bottom:1px}
+.disc{font-size:11px;color:var(--muted);border-top:1px solid var(--line);margin-top:14px;padding-top:10px}.ch{font-weight:600}.muted{color:var(--muted)}.scroll{overflow-x:auto}.foot{font-size:12px;color:var(--muted);margin-top:14px}
 .grid2{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
 .mt{display:none;margin-left:6px}
 @media(max-width:600px){.big .v{font-size:42px}.hide-m{display:none}.mt{display:inline}th,td{padding:8px 5px}td.t{min-width:0}
  .bar .in{gap:6px}.title{width:100%}.pill{font-size:11px;padding:3px 8px}input.q{width:100%}}
 </style></head><body>
 <div class="bar"><div class="in">
- <div class="title">__TITLE__ <span class="muted" style="font-weight:600">concurrent viewers</span></div>
+ <div class="title"><a class="brand" href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>__TITLE__ <span class="muted" style="font-weight:600">live viewership</span></div>
  <span id="st" class="pill"><span class="dot"></span><span id="stt">Live</span></span>
  <span class="pill mono" title="Time since the newest reading">Updated <span id="ago">-</span></span>
  <span class="pill mono" id="nx" title="The page checks for new numbers every few seconds">
@@ -213,7 +234,7 @@ function render(){
  document.getElementById('kw').textContent=fmt(D.peak_watch);
  document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
  const links=Object.entries(D.links||{}).map(([l,u])=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(l)}</a>`).join(' &middot; ');
- document.getElementById('foot').innerHTML=`YouTube only. Concurrent viewers = people watching at the same moment, summed across every live stream. Recorded only while the official broadcast is live (watch parties included). Counted from: ${esc(D.method)}.${links?'<br>'+links:''}`;
+ document.getElementById('foot').innerHTML=`<div class="disc">Unofficial tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included, so totals are lower than all-platform figures.</div>`+`YouTube only. Concurrent viewers = people watching at the same moment, summed across every live stream. Recorded only while the official broadcast is live (watch parties included). Counted from: ${esc(D.method)}.${links?'<br>'+links:''}`;
  rows();drawChart();mark();
 }
 function rows(){
@@ -272,11 +293,18 @@ function status(){
  const left=Math.max(0,EVERY-(Date.now()-lastFetch));document.getElementById('nxt').textContent=(left/1000).toFixed(1)+'s';
  document.getElementById('rp').setAttribute('stroke-dashoffset',44*(left/EVERY));
 }
+function merge(arr,tail){if(!arr)arr=[];const last=arr.length?arr[arr.length-1][0]:0;for(const r of tail||[])if(r[0]>last)arr.push(r);return arr}
+let lastSeries=Date.now();
 async function tick(){
  if(document.hidden){lastFetch=Date.now();return}
  lastFetch=Date.now();
- try{const r=await fetch('data',{cache:'no-store'});if(!r.ok)throw 0;D=await r.json();skew=Date.now()/1000-D.now;failing=false;render()}
- catch(e){failing=true}
+ try{const r=await fetch('data');if(!r.ok)throw 0;const j=await r.json();
+  const sr=merge(D.series_recent,j.tail), sa=D.series_all||[];
+  if(j.tail&&j.tail.length&&(!sa.length||j.tail[j.tail.length-1][0]-sa[sa.length-1][0]>60))sa.push(j.tail[j.tail.length-1]);
+  const cut=(sr.length?sr[sr.length-1][0]:0)-6*3600;while(sr.length&&sr[0][0]<cut)sr.shift();
+  D={...j,series_recent:sr,series_all:sa};skew=Date.now()/1000-D.now;failing=false;render();
+  if(Date.now()-lastSeries>300000){lastSeries=Date.now();fetch('series').then(x=>x.json()).then(x=>{D.series_all=x.series_all;D.series_recent=x.series_recent}).catch(()=>{})}
+ }catch(e){failing=true}
 }
 skew=Date.now()/1000-(D.now||Date.now()/1000);
 render();setInterval(status,100);
