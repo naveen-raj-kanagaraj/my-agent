@@ -29,8 +29,10 @@ def _thin(rows, limit):
     return out
 
 
-BRAND = os.getenv("EVENT_BRAND", "Let's Grow Esports")
+BRAND = os.getenv("EVENT_BRAND", "letsgrowesports")
 BRAND_URL = os.getenv("EVENT_BRAND_URL", "https://letsgrowesports.com")
+SOCIAL = [("X", "https://x.com/letsgrowesports", "@letsgrowesports"),
+          ("Instagram", "https://www.instagram.com/letsgrowesports.igc/", "@letsgrowesports.igc")]
 
 
 def live_data(key: str = None) -> dict:
@@ -77,6 +79,7 @@ def data(key: str = None) -> dict:
             tf = lambda ts: datetime.fromtimestamp(ts, events.REPORT_TZ)
             out["last_broadcast"] = {
                 "when": f"{tf(lb['start']).strftime('%a %d %b, %I:%M %p')} to {tf(lb['end']).strftime('%I:%M %p')} IST",
+                "start": lb["start"], "end": lb["end"],
                 "peak": lb["peak"], "peak_when": tf(lb["peak_at"]).strftime("%I:%M %p IST"),
                 "split": lb["split"],
                 "streams": [{"vid": x["vid"], "channel": x["channel"], "title": x["title"], "kind": x["kind"],
@@ -87,6 +90,11 @@ def data(key: str = None) -> dict:
     return out
 
 
+def _social() -> str:
+    return "".join(f'<a class="soc" href="{html.escape(u, quote=True)}" target="_blank" rel="noopener">'
+                   f'<b>{html.escape(n)}</b><span>{html.escape(h)}</span></a>' for n, u, h in SOCIAL)
+
+
 def build_html(key: str = None, live: bool = False) -> str:
     """live=True: the page re-reads ./data every REFRESH_SEC seconds. Otherwise a snapshot (e.g. a file sent on Telegram)."""
     d = data(key)
@@ -95,6 +103,7 @@ def build_html(key: str = None, live: bool = False) -> str:
                 .replace("__DATA__", payload)
                 .replace("__LIVE__", "true" if live else "false")
                 .replace("__REFRESH__", str(REFRESH_SEC))
+                .replace("__SOCIAL__", _social())
                 .replace("__BRAND__", html.escape(BRAND)).replace("__BRANDURL__", html.escape(BRAND_URL, quote=True)))
 
 
@@ -117,7 +126,7 @@ PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}70%{box-shadow:0 0 0 8px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
 .mono{font-family:"JetBrains Mono",ui-monospace,monospace}
 .ring{width:16px;height:16px}.ring circle{fill:none;stroke:var(--line);stroke-width:3}.ring .p{stroke:var(--acc);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%}
-.hero{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin:16px 0 12px}
+.hero{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin:10px 0 12px}
 @media(max-width:760px){.hero{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
 .big .k{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
@@ -137,8 +146,13 @@ h2{font-size:13px;margin:0;color:var(--muted);font-weight:700;text-transform:upp
 .seg button{all:unset;cursor:pointer;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;color:var(--muted)}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.2)}
 input.q{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;color:var(--ink);font:inherit;font-size:12px;width:170px;max-width:100%}
-.chart{position:relative;height:340px}.cv{margin-top:4px;font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.cv .delta{font-size:14px;margin-left:6px}@media(max-width:600px){.chart{height:260px}}
+.chart{position:relative;height:300px}.chart canvas{width:100%;height:100%;display:block;touch-action:pan-y}
+.mon{background:radial-gradient(120% 140% at 100% 0%,rgba(34,197,94,.06),transparent 60%),var(--card)}
+.seg button:disabled{opacity:.4;cursor:default}
+.more{all:unset;cursor:pointer;display:block;margin:10px auto 0;padding:6px 14px;border:1px solid var(--line);border-radius:999px;font-size:12px;font-weight:600;color:var(--muted)}
+@media(max-width:600px){.lt td{padding:7px 4px}.lt .st{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52vw;color:var(--muted)}
+ .lt .ch{font-size:13px}.lt .mini{display:none}.lt td.num{font-size:13px}}.cv{margin-top:4px;font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+@media(max-width:600px){.chart{height:220px}}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
 th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
 td.t{white-space:normal;min-width:200px}td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}th.num{text-align:right}
@@ -148,7 +162,12 @@ a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
 .mini{height:4px;border-radius:3px;background:var(--acc);opacity:.75;margin-top:5px;transition:width .6s ease}
 tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}tr.new td{animation:nw 2s}
 @keyframes fu{0%{color:var(--up)}100%{}}@keyframes fd{0%{color:var(--down)}100%{}}@keyframes nw{0%{background:rgba(124,156,255,.18)}100%{}}
-.brand{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin-bottom:1px}
+.brand{display:block;font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--acc);margin-bottom:1px}
+.follow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:var(--muted)}
+.follow>span{margin-right:auto}
+.soc{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:12px}
+.soc b{font-weight:700}.soc span{color:var(--muted)}.soc:hover{border-color:var(--acc);text-decoration:none}
+@media(max-width:600px){.follow>span{width:100%}.soc span{display:none}}
 .disc{font-size:11px;color:var(--muted);border-top:1px solid var(--line);margin-top:14px;padding-top:10px}.ch{font-weight:600}.muted{color:var(--muted)}.scroll{overflow-x:auto}.foot{font-size:12px;color:var(--muted);margin-top:14px}
 .grid2{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
 .mt{display:none;margin-left:6px}
@@ -163,11 +182,11 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}tr.new td{animatio
   <svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle class="p" id="rp" cx="10" cy="10" r="7" stroke-dasharray="44" stroke-dashoffset="0"/></svg>
   Next in <span id="nxt">-</span></span>
 </div></div>
+<div class="wrap"><div class="follow"><span>Follow for live esports numbers</span>__SOCIAL__</div></div>
 <div class="wrap" id="app"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 const LIVE=__LIVE__, EVERY=__REFRESH__*1000;
-let split=localGet('split')==='1', D=__DATA__, prev={}, prevTotal=null, chart=null, range=localGet('range')||'1h', kind=localGet('kind')||'all', q='', skew=0, lastFetch=Date.now(), failing=false;
+let D=__DATA__, prev={}, prevTotal=null, chart=null, range='live', kind=localGet('kind')||'all', q='', skew=0, lastFetch=Date.now(), failing=false;
 function localGet(k){try{return localStorage.getItem('ev_'+k)}catch(e){return null}}
 function localSet(k,v){try{localStorage.setItem('ev_'+k,v)}catch(e){}}
 const fmt=n=>{n=+n||0;return n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e4?(n/1e3).toFixed(1)+'K':Math.round(n).toLocaleString('en-IN')};
@@ -182,7 +201,7 @@ function render(){
  const app=document.getElementById('app');
  if(!D.ticks){app.innerHTML='<div class="card" style="margin-top:16px">No data yet. Numbers are recorded only while the official broadcast is live.</div>';return}
  const off=!D.official_live&&D.last_broadcast, LB=D.last_broadcast||{};
- const m=off?'off':'on'; if(mode!==m){mode=m;app.innerHTML='';if(chart){chart.destroy();chart=null}prev={};prevTotal=null}
+ const m=off?'off':'on'; if(mode!==m){mode=m;app.innerHTML='';prev={};prevTotal=null;showAll=false;range=off?'full':'live'}
  const live=off?LB.streams:(D.live||[]), tot=off?LB.peak:live.reduce((a,s)=>a+s.viewers,0);
  const by=off?{official:LB.split.official,'watch party':LB.split.watch,community:LB.split.community}:{official:0,'watch party':0,community:0};
  if(!off)live.forEach(s=>by[s.kind]=(by[s.kind]||0)+s.viewers);
@@ -198,24 +217,27 @@ function render(){
     <div class="kpi"><div class="k">Official peak</div><div class="v" id="ko"></div><div class="s">official broadcasts combined</div></div>
     <div class="kpi"><div class="k">Watch parties peak</div><div class="v" id="kw"></div><div class="s">all watch parties combined</div></div>
    </div></div>
-  <div class="card"><div class="head"><div style="margin-right:auto"><h2>Total concurrent (IST)</h2>
-    <div class="cv"><span id="cv"></span> <span id="cc" class="delta"></span></div></div>
-   <div class="seg" id="sp"><button data-s="0">Total</button><button data-s="1">Split</button></div>
-   <div class="seg" id="rg">${['15m','1h','6h','all'].map(r=>`<button data-r="${r}">${r==='all'?'All':r.toUpperCase()}</button>`).join('')}</div></div>
+  <div class="card mon"><div class="head"><div style="margin-right:auto"><h2 id="chh">Live concurrent viewers</h2>
+    <div class="cv"><span id="cv"></span><span id="cs" class="muted" style="font-size:12px;font-weight:600;margin-left:8px"></span></div></div>
+   <div class="seg" id="rg"><button data-r="live">Live</button><button data-r="full">Full broadcast</button></div></div>
    <div class="chart"><canvas id="c"></canvas></div></div>
   <div class="grid2">
   <div class="card"><div class="head"><h2 id="lh">Live streams</h2>
    <div class="seg" id="kf">${[['all','All'],['official','Official'],['watch party','Watch parties'],['community','Community']].map(([k,l])=>`<button data-k="${k}">${l}</button>`).join('')}</div>
    <input class="q" id="q" placeholder="Search channel or title"></div>
-   <div class="scroll"><table><thead><tr><th>#</th><th>Channel / stream</th><th class="hide-m">Type</th><th class="num" id="cth">Concurrent</th><th class="num hide-m" id="sth">Share</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+   <div class="scroll"><table class="lt"><thead><tr><th>#</th><th>Channel / stream</th><th class="hide-m">Type</th><th class="num" id="cth">Concurrent</th><th class="num hide-m" id="sth">Share</th></tr></thead><tbody id="rows"></tbody></table></div><button class="more" id="more"></button></div>
   <div class="card"><div class="head"><h2>By day</h2></div><div class="scroll"><table><thead><tr><th>Day (IST)</th><th class="num">Peak</th><th>At</th><th class="num">Average</th></tr></thead><tbody id="days"></tbody></table></div></div>
   </div>
   <div class="foot" id="foot"></div>`;
   document.getElementById('bk').textContent=off?`Official broadcast offline. Last broadcast peak (${LB.when})`:'Watching now, all live streams';
   document.getElementById('cth').textContent=off?'Peak concurrent':'Concurrent';
   document.getElementById('sth').textContent=off?'At (IST)':'Share';
-  document.querySelectorAll('#rg button').forEach(b=>b.onclick=()=>{range=b.dataset.r;localSet('range',range);drawChart();mark()});
-  document.querySelectorAll('#sp button').forEach(b=>b.onclick=()=>{split=b.dataset.s==='1';localSet('split',split?'1':'0');if(chart){chart.destroy();chart=null}drawChart();mark()});
+  document.querySelectorAll('#rg button').forEach(b=>b.onclick=()=>{if(b.disabled)return;range=b.dataset.r;hover=null;drawChart();mark()});
+  const cv=document.getElementById('c');
+  const mv=e=>{const r=cv.getBoundingClientRect(),p=e.touches?e.touches[0]:e;hover=p.clientX-r.left;if(range!=='live')drawChart()};
+  cv.addEventListener('mousemove',mv);cv.addEventListener('touchstart',mv,{passive:true});cv.addEventListener('touchmove',mv,{passive:true});
+  cv.addEventListener('mouseleave',()=>{hover=null;if(range!=='live')drawChart()});
+  document.getElementById('more').onclick=()=>{showAll=!showAll;rows()};
   document.querySelectorAll('#kf button').forEach(b=>b.onclick=()=>{kind=b.dataset.k;localSet('kind',kind);rows();mark()});
   document.getElementById('q').oninput=e=>{q=e.target.value.toLowerCase();rows()};
  }
@@ -233,50 +255,85 @@ function render(){
  document.getElementById('ka').textContent=fmt(D.avg);document.getElementById('ko').textContent=fmt(D.peak_official);
  document.getElementById('kw').textContent=fmt(D.peak_watch);
  document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
- const links=Object.entries(D.links||{}).map(([l,u])=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(l)}</a>`).join(' &middot; ');
- document.getElementById('foot').innerHTML=`<div class="disc">Unofficial tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included, so totals are lower than all-platform figures.</div>`+`YouTube only. Concurrent viewers = people watching at the same moment, summed across every live stream. Recorded only while the official broadcast is live (watch parties included). Counted from: ${esc(D.method)}.${links?'<br>'+links:''}`;
+ document.getElementById('foot').innerHTML=`<div class="disc">Unofficial tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included, so totals are lower than all-platform figures.</div>`+`YouTube only. Concurrent viewers = people watching at the same moment, summed across every live stream. Recorded only while the official broadcast is live (watch parties included). Counted from: ${esc(D.method)}.<div class="follow" style="margin-top:10px"><span>Follow __BRAND__</span>__SOCIAL__</div>`;
  rows();drawChart();mark();
 }
+let showAll=false, hover=null;
 function rows(){
  const off=!D.official_live&&D.last_broadcast, src=off?D.last_broadcast.streams:(D.live||[]);
- const live=src.filter(s=>(kind==='all'||s.kind===kind)&&(!q||(s.channel+' '+s.title).toLowerCase().includes(q)));
+ const all=src.filter(s=>(kind==='all'||s.kind===kind)&&(!q||(s.channel+' '+s.title).toLowerCase().includes(q)));
+ const lim=window.innerWidth<600?8:15, live=showAll||q?all:all.slice(0,lim);
+ const mb=document.getElementById('more');mb.style.display=all.length>lim&&!q?'block':'none';
+ mb.textContent=showAll?'Show fewer':`Show all ${all.length}`;
  const tot=src.reduce((a,s)=>a+s.viewers,0)||1, top=Math.max(1,...live.map(s=>s.viewers));
- document.getElementById('lh').textContent=off?`Streams in the last broadcast (${live.length})`:`Live streams (${live.length})`;
+ document.getElementById('lh').textContent=off?`Last broadcast streams (${all.length})`:`Live streams (${all.length})`;
  document.getElementById('rows').innerHTML=live.map((s,i)=>{const p=prev[s.vid];const cl=p===undefined&&Object.keys(prev).length?'new':p<s.viewers?'fu':p>s.viewers?'fd':'';
-  return `<tr class="${cl}"><td class="muted">${i+1}</td><td class="t"><div class="ch">${esc(s.channel)}<span class="tag mt ${K[s.kind]}">${esc(s.kind)}</span></div><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title.slice(0,100))}</a><div class="mini" style="width:${100*s.viewers/top}%"></div></td>
+  return `<tr class="${cl}"><td class="muted">${i+1}</td><td class="t"><div class="ch">${esc(s.channel)}<span class="tag mt ${K[s.kind]}">${esc(s.kind)}</span></div><a class="st" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title.slice(0,100))}</a><div class="mini" style="width:${100*s.viewers/top}%"></div></td>
   <td class="hide-m"><span class="tag ${K[s.kind]}">${esc(s.kind)}</span></td><td class="num">${full(s.viewers)}</td><td class="num muted hide-m">${off?esc(s.at):(100*s.viewers/tot).toFixed(1)+'%'}</td></tr>`}).join('')||'<tr><td colspan=5 class="muted">Nothing live right now</td></tr>';
  prev={};src.forEach(s=>prev[s.vid]=s.viewers);
 }
-const cross={id:'cross',afterDraw(c){const a=c.tooltip&&c.tooltip.getActiveElements();if(!a||!a.length)return;const x=a[0].element.x,ctx=c.ctx,ar=c.chartArea;
- ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle=css('--muted');ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,ar.top);ctx.lineTo(x,ar.bottom);ctx.stroke();ctx.restore()}};
-function drawChart(){
- if(!window.Chart||!document.getElementById('c'))return;
- const src=range==='all'?(D.series_all||[]):(D.series_recent||[]);const span={'15m':900,'1h':3600,'6h':21600}[range];
- const last=src.length?src[src.length-1][0]:0;const s=span?src.filter(r=>r[0]>=last-span):src;
- const first=s.length?s[0][1]:0,cur=s.length?s[s.length-1][1]:0,ch=cur-first,up=ch>=0;
- const col=up?css('--up'):css('--down');
- document.getElementById('cv').textContent=full(cur);
- const cc=document.getElementById('cc');cc.className='delta '+(ch>0?'up':ch<0?'down':'flat');
- cc.textContent=`${ch>=0?'+':'\u2212'}${fmt(Math.abs(ch))} (${first?(100*ch/first).toFixed(2):'0.00'}%) ${range==='all'?'event':'past '+range.toUpperCase()}`;
- const lab=s.map(r=>r[0]*1000);
- const tf=t=>new Date(t).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',
-  second:range==='15m'?'2-digit':undefined,day:range==='all'?'2-digit':undefined,month:range==='all'?'short':undefined});
- const grad=c=>{const {ctx,chartArea:a}=c.chart;if(!a)return col+'33';const g=ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,col+'55');g.addColorStop(1,col+'00');return g};
- const n=s.length;
- const ds=[{label:'Total',data:s.map(r=>r[1]),borderColor:col,backgroundColor:grad,fill:true,borderWidth:2,tension:.15,
-   pointRadius:s.map((_,i)=>i===n-1?4:0),pointBackgroundColor:col,pointBorderColor:css('--card'),pointBorderWidth:2,pointHoverRadius:5}];
- if(split)[['Official',2,css('--off')],['Watch parties',3,css('--wp')],['Community',4,css('--com')]].forEach(([l,i,c])=>
-   ds.push({label:l,data:s.map(r=>r[i]),borderColor:c,borderWidth:1.3,pointRadius:0,pointHoverRadius:3,tension:.15,fill:false}));
- if(chart){chart.data.labels=lab;chart.data.datasets.forEach((d,i)=>{Object.assign(d,ds[i])});chart.update('none');return}
- chart=new Chart(document.getElementById('c'),{type:'line',data:{labels:lab,datasets:ds},plugins:[cross],options:{responsive:true,maintainAspectRatio:false,animation:false,
-  interaction:{mode:'index',intersect:false},layout:{padding:{top:6}},
-  plugins:{legend:{display:split,position:'bottom',labels:{color:css('--muted'),boxWidth:8,boxHeight:8,usePointStyle:true}},
-   tooltip:{backgroundColor:css('--card2'),borderColor:css('--line'),borderWidth:1,titleColor:css('--muted'),bodyColor:css('--ink'),padding:10,displayColors:split,
-    callbacks:{title:i=>tf(i[0].parsed.x!==undefined?lab[i[0].dataIndex]:0),label:c=>`${c.dataset.label}: ${full(c.parsed.y)}`}}},
-  scales:{x:{type:'category',ticks:{maxTicksLimit:6,color:css('--muted'),maxRotation:0,callback:(v,i)=>tf(lab[i])},grid:{display:false},border:{display:false}},
-   y:{position:'right',grace:'8%',ticks:{color:css('--muted'),maxTicksLimit:6,callback:v=>fmt(v)},grid:{color:css('--line'),drawTicks:false},border:{display:false,dash:[3,4]}}}}});
+const WIN=180, LAG=4;
+let ys=null, raf=null;
+function seriesFor(){
+ const sr=D.series_recent||[], LB=D.last_broadcast;
+ if(range==='live')return sr;
+ let src=(D.series_all||[]);
+ if(LB&&!D.official_live)src=src.filter(r=>r[0]>=LB.start-60&&r[0]<=LB.end+60);
+ else if(sr.length)src=src.filter(r=>r[0]>=sr[sr.length-1][0]-6*3600).concat(sr.filter(r=>!src.length||r[0]>src[src.length-1][0]));
+ return src;
 }
-function mark(){document.querySelectorAll('#sp button').forEach(b=>b.classList.toggle('on',(b.dataset.s==='1')===split));document.querySelectorAll('#rg button').forEach(b=>b.classList.toggle('on',b.dataset.r===range));
+function drawChart(){
+ const cv=document.getElementById('c');if(!cv)return;
+ const dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=cv.clientHeight;
+ if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+ const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+ const live=range==='live', all=seriesFor();
+ const now=Date.now()/1000-skew-LAG;
+ let t0,t1,pts;
+ if(live){t1=now;t0=now-WIN;const i=all.findIndex(r=>r[0]>=t0);pts=i<0?[]:all.slice(Math.max(0,i-1))}
+ else{pts=all;t0=pts.length?pts[0][0]:0;t1=pts.length?pts[pts.length-1][0]:1;if(t1===t0)t1=t0+1}
+ const padR=58,padB=22,padT=10,cw=W-padR,ch=H-padB-padT;
+ const head=document.getElementById('chh'), cvv=document.getElementById('cv'), cs=document.getElementById('cs');
+ if(!pts.length){ctx.fillStyle=css('--muted');ctx.font='13px Inter,sans-serif';ctx.textAlign='center';
+  ctx.fillText(live?'Waiting for the official broadcast to go live':'No readings yet',cw/2,H/2);cvv.textContent='';cs.textContent='';return}
+ const vals=pts.filter(r=>r[0]>=t0-5).map(r=>r[1]);let lo=Math.min(...vals),hi=Math.max(...vals);
+ const pad=Math.max((hi-lo)*.25,hi*.02,50);let tgt=[Math.max(0,lo-pad),hi+pad];
+ if(!ys||!live)ys=tgt;else ys=[ys[0]+(tgt[0]-ys[0])*.06,ys[1]+(tgt[1]-ys[1])*.06];
+ const X=t=>(t-t0)/(t1-t0)*cw, Y=v=>padT+ch-(v-ys[0])/(ys[1]-ys[0])*ch;
+ // grid
+ ctx.strokeStyle=css('--line');ctx.lineWidth=1;ctx.fillStyle=css('--muted');ctx.font='11px Inter,sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';
+ const hy=live?Y(pts[pts.length-1][1]):-99;
+ for(let k=0;k<=4;k++){const v=ys[0]+(ys[1]-ys[0])*k/4,y=Y(v);ctx.globalAlpha=.6;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(cw,y);ctx.stroke();ctx.globalAlpha=1;if(Math.abs(y-hy)>16)ctx.fillText(fmt(v),cw+8,y)}
+ if(live){ctx.globalAlpha=.25;for(let t=Math.ceil(t0/10)*10;t<t1;t+=10){const x=X(t);ctx.beginPath();ctx.moveTo(x,padT);ctx.lineTo(x,padT+ch);ctx.stroke()}ctx.globalAlpha=1}
+ ctx.textAlign='center';ctx.textBaseline='alphabetic';
+ if(live){[[180,'3m ago'],[120,'2m'],[60,'1m'],[0,'now']].forEach(([s,l])=>{const x=X(t1-s);ctx.fillText(l,Math.min(Math.max(x,18),cw-14),H-5)})}
+ else{const tf=t=>new Date(t*1000).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'});for(let k=0;k<=4;k++){const t=t0+(t1-t0)*k/4;ctx.fillText(tf(t),Math.min(Math.max(X(t),24),cw-24),H-5)}}
+ // line
+ const col=css('--up');ctx.save();ctx.beginPath();ctx.rect(0,0,cw,H);ctx.clip();
+ ctx.beginPath();pts.forEach((r,i)=>{const x=X(r[0]),y=Y(r[1]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+ const lastP=pts[pts.length-1];
+ ctx.lineTo(X(lastP[0]),padT+ch);ctx.lineTo(X(pts[0][0]),padT+ch);ctx.closePath();
+ const g=ctx.createLinearGradient(0,padT,0,padT+ch);g.addColorStop(0,col+'30');g.addColorStop(1,col+'00');ctx.fillStyle=g;ctx.fill();
+ ctx.beginPath();pts.forEach((r,i)=>{const x=X(r[0]),y=Y(r[1]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+ ctx.strokeStyle=col;ctx.lineWidth=2;ctx.lineJoin='round';ctx.shadowColor=col;ctx.shadowBlur=live?10:0;ctx.stroke();ctx.shadowBlur=0;ctx.restore();
+ if(live){const x=X(lastP[0]),y=Y(lastP[1]),ph=(Date.now()%1200)/1200;
+  ctx.beginPath();ctx.arc(x,y,4+ph*10,0,7);ctx.fillStyle=col+Math.round((1-ph)*90).toString(16).padStart(2,'0');ctx.fill();
+  ctx.beginPath();ctx.arc(x,y,4,0,7);ctx.fillStyle=col;ctx.fill();
+  ctx.setLineDash([3,4]);ctx.strokeStyle=col+'88';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(cw,y);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle=col;ctx.fillRect(cw+2,y-10,padR-4,20);ctx.fillStyle='#04120a';ctx.font='700 11px Inter,sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(fmt(lastP[1]),cw+7,y)}
+ // hover
+ if(hover!==null&&hover<cw){let best=pts[0];for(const r of pts)if(Math.abs(X(r[0])-hover)<Math.abs(X(best[0])-hover))best=r;
+  const x=X(best[0]),y=Y(best[1]);ctx.strokeStyle=css('--muted');ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(x,padT);ctx.lineTo(x,padT+ch);ctx.stroke();ctx.setLineDash([]);
+  ctx.beginPath();ctx.arc(x,y,4,0,7);ctx.fillStyle=col;ctx.fill();
+  const lbl=`${full(best[1])}  ${new Date(best[0]*1000).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}`;ctx.font='600 12px Inter,sans-serif';
+  const w=ctx.measureText(lbl).width+16,bx=Math.min(Math.max(x-w/2,0),cw-w);ctx.fillStyle=css('--card2');ctx.strokeStyle=css('--line');ctx.fillRect(bx,padT,w,24);ctx.strokeRect(bx,padT,w,24);
+  ctx.fillStyle=css('--ink');ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(lbl,bx+8,padT+12)}
+ head.textContent=live?'Live concurrent viewers':(D.official_live?'Concurrent viewers, last 6 hours':`Last broadcast, ${D.last_broadcast?D.last_broadcast.when:''}`);
+ cvv.textContent=full(live?lastP[1]:Math.max(...pts.map(r=>r[1])));cs.textContent=live?'updating every few seconds':'peak';
+}
+function loop(){if(range==='live'&&!document.hidden)drawChart();raf=requestAnimationFrame(loop)}
+window.addEventListener('resize',()=>drawChart());
+function mark(){document.querySelectorAll('#rg button').forEach(b=>{b.classList.toggle('on',b.dataset.r===range);if(b.dataset.r==='live')b.disabled=!D.official_live});
  document.querySelectorAll('#kf button').forEach(b=>b.classList.toggle('on',b.dataset.k===kind))}
 function status(){
  const now=Date.now()/1000-skew, age=D.updated?Math.max(0,now-D.updated):null;
@@ -307,7 +364,13 @@ async function tick(){
  }catch(e){failing=true}
 }
 skew=Date.now()/1000-(D.now||Date.now()/1000);
-render();setInterval(status,100);
+render();setInterval(status,100);loop();
+(function(){let sid=null;try{sid=sessionStorage.getItem('lg_sid')}catch(e){}
+ if(!sid){sid=Math.random().toString(36).slice(2)+Date.now().toString(36);try{sessionStorage.setItem('lg_sid',sid)}catch(e){}}
+ let ref='';try{ref=document.referrer?new URL(document.referrer).hostname:''}catch(e){}
+ const hit=()=>{if(document.hidden||!LIVE)return;try{fetch('hit',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({sid,ref,w:window.innerWidth})}).catch(()=>{})}catch(e){}};
+ hit();setInterval(hit,30000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)hit()})})();
 if(LIVE)setInterval(tick,EVERY);
 </script></body></html>"""
 
