@@ -426,12 +426,12 @@ function dayStreams(){const LB=D.last_broadcast||{};return(LB.streams||[])}
 function wpByPeak(){const live={};(D.live||[]).forEach(s=>live[s.vid]=s.viewers);
  return dayStreams().filter(s=>s.kind==='watch party').map(s=>({vid:s.vid,channel:s.channel,peak:s.viewers,at:s.at,now:D.official_live?(live[s.vid]||0):null})).sort((a,b)=>b.peak-a.peak)}
 function card(type,vid){
- const W=1080,H=1350,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+ const W=1080,H=1350,SC=2,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);x.imageSmoothingQuality='high';
  const g=x.createRadialGradient(W*.8,0,40,W*.8,0,1200);g.addColorStop(0,'#1f1a3d');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,W,H);
  x.fillStyle='rgba(255,255,255,.02)';for(let yy=0;yy<H;yy+=4)x.fillRect(0,yy,W,1);
  x.strokeStyle='#b6f23a';x.lineWidth=5;x.beginPath();x.moveTo(40,80);x.lineTo(40,40);x.lineTo(80,40);x.stroke();
- const LB=D.last_broadcast||{},live=!!D.official_live,wp=wpByPeak();
- const nowTot=(D.live||[]).reduce((a,s)=>a+s.viewers,0);
+ const LB=D.last_broadcast||{},wp=wpByPeak();
+ const nowTot=(D.live||[]).reduce((a,s)=>a+s.viewers,0),live=!!D.official_live||nowTot>0;
  const T=(t,X,Y,font,col,al)=>{x.font=font;x.fillStyle=col;x.textAlign=al||'left';x.fillText(t,X,Y)};
  const M=s=>`${s}px "Share Tech Mono",monospace`,B=s=>`700 ${s}px "Chakra Petch",sans-serif`;
  x.textBaseline='top';
