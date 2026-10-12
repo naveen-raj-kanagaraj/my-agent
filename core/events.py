@@ -787,6 +787,7 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
         day_ticks = [t for t in ticks if tday(t) == d["day"]]
         top = max(day_ticks, key=lambda t: t["total"]) if day_ticks else None
         d["peak_at"] = top["ts"] if top else None
+        d["split"] = {k: top[k] for k in ("official", "watch")} if top else {"official": 0, "watch": 0}
     out["series"] = [(t["ts"], t["total"], t["official"], t["watch"], t["community"]) for t in ticks]
     return out
 
