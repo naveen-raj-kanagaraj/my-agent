@@ -308,7 +308,7 @@ def fast_tick(ev: dict, now: float = None) -> dict:
             continue
         f = fast.get(vid)
         base = f["viewers"] if f else live.get(vid, {}).get("viewers", 0)
-        if base >= 500 and n > base * 2.5:
+        if (base >= 500 and n > base * 2.5) or (base > 0 and n >= 20000 and n > base * 2.5):
             # impossible jump in a few seconds: almost always the stream ending and the counter turning into total views
             f = fast.setdefault(vid, {"viewers": base, "ts": now, "misses": 0})
             f["misses"] += 1
@@ -377,9 +377,12 @@ def repair(key: str) -> dict:
         def mark(rid, vid, ts, v):
             bad.append(rid)
             badv.setdefault(vid, []).append((ts, v))
+        last_ts = {}
         for rid, ts, vid, v in rows:
             p = prev.get(vid)
-            if p and p >= 500 and v >= 20000 and v > p * 2.5:   # jump = total views after the stream ended
+            gap = ts - last_ts.get(vid, ts)
+            last_ts[vid] = ts
+            if p is not None and v >= 20000 and v > max(p, 1) * 2.5 and gap <= 180:   # jump = total views after the stream ended
                 mark(rid, vid, ts, v)
                 continue
             # a live count always moves; the same big number 4+ readings in a row is a finished video's view count
@@ -417,6 +420,26 @@ def repair(key: str) -> dict:
                     fixed += 1
         dropped = 0
         dropped += c.execute("DELETE FROM ev_ticks WHERE event=? AND official<=0", (key,)).rowcount
+        # single readings far above their neighbours (a counter blip between two per-stream samples)
+        tk = c.execute("SELECT rowid, ts, total FROM ev_ticks WHERE event=? ORDER BY ts", (key,)).fetchall()
+        spikes, j0 = [], 0
+        for i, (rid, ts, tot) in enumerate(tk):
+            while tk[j0][1] < ts - 60:
+                j0 += 1
+            near = []
+            j = j0
+            while j < len(tk) and tk[j][1] <= ts + 60:
+                if j != i:
+                    near.append(tk[j][2])
+                j += 1
+            if len(near) >= 4:
+                near.sort()
+                med = near[len(near) // 2]
+                if tot > med * 1.6 and tot - med > 20000:
+                    spikes.append(rid)
+        for i in range(0, len(spikes), 500):
+            c.execute(f"DELETE FROM ev_ticks WHERE rowid IN ({','.join('?' * len(spikes[i:i + 500]))})", spikes[i:i + 500])
+        dropped += len(spikes)
         # samples taken when no official reading exists close by
         c.execute("""DELETE FROM ev_samples WHERE event=? AND NOT EXISTS (SELECT 1 FROM ev_ticks t WHERE t.event=ev_samples.event
                      AND t.ts BETWEEN ev_samples.ts - 40 AND ev_samples.ts + 40)""", (key,))
@@ -431,7 +454,7 @@ def repair(key: str) -> dict:
 
 def repair_once():
     for k, ev in events().items():
-        flag = f"event_repair_v1:{k}"
+        flag = f"event_repair_v2:{k}"
         if not store.kv_get(flag):
             try:
                 print(f"Event {k} cleanup: {repair(k)}")
@@ -647,10 +670,10 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     out["official_live"] = any(x["kind"] == "official" for x in out["live_now"])
     if not out["official_live"]:
         out["live_now"] = []          # only show streams while the official broadcast is on
-    # broadcasts: runs of readings with no gap over 15 min (readings only exist while official was live)
+    # broadcasts: runs of readings with no gap over 1 hour (restarts leave short gaps) (readings only exist while official was live)
     sess, cur = [], None
     for t in ticks:
-        if cur and t["ts"] - cur["end"] <= 900:
+        if cur and t["ts"] - cur["end"] <= 3600:
             cur["end"] = t["ts"]
             if t["total"] > cur["peak"]:
                 cur.update(peak=t["total"], peak_at=t["ts"], split={k: t[k] for k in ("official", "watch", "community")})
