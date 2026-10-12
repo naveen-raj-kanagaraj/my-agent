@@ -426,7 +426,7 @@ function dayStreams(){const LB=D.last_broadcast||{};return(LB.streams||[])}
 function wpByPeak(){const live={};(D.live||[]).forEach(s=>live[s.vid]=s.viewers);
  return dayStreams().filter(s=>s.kind==='watch party').map(s=>({vid:s.vid,channel:s.channel,peak:s.viewers,at:s.at,now:D.official_live?(live[s.vid]||0):null})).sort((a,b)=>b.peak-a.peak)}
 function card(type,vid){
- const W=1080,H=1350,SC=2,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);x.imageSmoothingQuality='high';
+ const W=1080,H=1350,SC=3,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);x.imageSmoothingQuality='high';
  const g=x.createRadialGradient(W*.8,0,40,W*.8,0,1200);g.addColorStop(0,'#1f1a3d');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,W,H);
  x.fillStyle='rgba(255,255,255,.02)';for(let yy=0;yy<H;yy+=4)x.fillRect(0,yy,W,1);
  x.strokeStyle='#b6f23a';x.lineWidth=5;x.beginPath();x.moveTo(40,80);x.lineTo(40,40);x.lineTo(80,40);x.stroke();
@@ -443,7 +443,6 @@ function card(type,vid){
  if(type==='total'){
   T('// PEAK CONCURRENT VIEWERS',80,205,M(30),'#ff4d5e');
   x.shadowColor='rgba(182,242,58,.35)';x.shadowBlur=30;T(full(LB.peak||D.peak),72,245,B(170),'#ffffff');x.shadowBlur=0;
-  T(`at ${LB.peak_when||''} on YouTube, all streams`,80,430,M(28),'#8d8ca3');
   const sp=LB.split||{},bw=(W-160-40)/3;
   box(80,490,bw,170,'WATCHING NOW',live?fmt(nowTot):'OFFLINE',live?'at time of sharing':'broadcast ended',live?'#b6f23a':'#8d8ca3');
   box(80+bw+20,490,bw,170,'OFFICIAL AT PEAK',fmt(sp.official),'official streams','#ff8a3d');
@@ -458,7 +457,7 @@ function card(type,vid){
   T(type==='streamer'?`// #${i+1} WATCH PARTY OF THE DAY`:'// WATCH PARTY BATTLE: LED BY',80,205,M(30),'#ff4d5e');
   T(me.channel.toUpperCase().slice(0,22),80,248,B(72),'#b6f23a');
   x.shadowColor='rgba(182,242,58,.35)';x.shadowBlur=30;T(full(me.peak),72,330,B(150),'#ffffff');x.shadowBlur=0;
-  T(`peak concurrent viewers${me.at?' at '+me.at+' IST':''}`,80,490,M(28),'#8d8ca3');
+  T('peak concurrent viewers',80,490,M(28),'#8d8ca3');
   const bw=(W-160-20)/2;
   box(80,545,bw,170,'WATCHING NOW',live&&me.now!=null?fmt(me.now):'OFFLINE',live?'at time of sharing':'stream ended',live?'#b6f23a':'#8d8ca3');
   box(80+bw+20,545,bw,170,'DAY PEAK, ALL STREAMS',fmt(LB.peak),LB.peak_when||'','#ff8a3d');
@@ -472,7 +471,7 @@ function card(type,vid){
  x.fillStyle='#b6f23a';x.fillRect(0,H-130,W,130);
  T('LIVE.LETSGROWESPORTS.COM',80,H-108,B(44),'#0a0a14');
  const when=new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
- T(`${when} IST // @letsgrowesports // unofficial, YouTube only`,80,H-52,M(22),'#0a0a14');
+ T(`${when} IST // @letsgrowesports`,80,H-52,M(24),'#0a0a14');
  return c;
 }
 function dayTotal(){const LB=D.last_broadcast;let src=(D.series_all||[]).concat((D.series_recent||[]));
