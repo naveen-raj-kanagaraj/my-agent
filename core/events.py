@@ -14,6 +14,7 @@ Each poll stores one sample per live stream and one total ("tick").
 import os
 import re
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from urllib.parse import quote_plus
@@ -31,6 +32,7 @@ SAMPLE_EVERY = 30                                           # per-stream history
 _LIVE = {}      # event -> {vid: stream dict} from the latest discovery
 _FAST = {}      # event -> {vid: {"viewers", "ts", "misses"}}
 _FASTSTATE = {"method": "", "ok_ts": 0.0, "errors": 0}
+_HIST = {}      # event -> {vid: deque[(ts, viewers)]} every live-counter reading (last ~3h), for streamer graphs
 _ENDED = {}     # vid -> time the live counter saw it end (search results lag, so don't re-add it)
 RECHECK_MIN = 15          # re-check streams seen live within this many minutes that vanished from search
 MAX_DIRECT_CHECKS = 20
@@ -341,6 +343,10 @@ def fast_tick(ev: dict, now: float = None) -> dict:
     by = {k: sum(r["viewers"] for r in rows if r["kind"] == k) for k in ("official", "watch party", "community")}
     if by["official"] <= 0:
         return {"total": total, "live": len(rows), "official_live": False}   # only record while the official broadcast is live
+    hist = _HIST.setdefault(key, {})
+    for r in rows:
+        if r["viewers"] > 0:
+            hist.setdefault(r["vid"], deque(maxlen=5400)).append((int(now), r["viewers"]))
     write_samples = now - store.kv_get(f"event_last_sample:{key}", 0) >= SAMPLE_EVERY
     with store._lock:
         c = _db()
@@ -712,6 +718,27 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
         d["peak_at"] = top["ts"] if top else None
     out["series"] = [(t["ts"], t["total"], t["official"], t["watch"], t["community"]) for t in ticks]
     return out
+
+
+def stream_series(key: str, vids: list, t0: float, t1: float, limit: int = 600) -> dict:
+    """Per-stream viewer history (stored every ~30s) for the given streams."""
+    if not vids:
+        return {}
+    with store._lock:
+        rows = _db().execute(f"SELECT vid, ts, viewers FROM ev_samples WHERE event=? AND ts BETWEEN ? AND ? "
+                             f"AND vid IN ({','.join('?' * len(vids))}) ORDER BY ts", (key, t0, t1, *vids)).fetchall()
+    out = {}
+    for vid, ts, v in rows:
+        out.setdefault(vid, []).append([ts, v])
+    for vid, pts in out.items():
+        step = max(1, len(pts) // limit)
+        out[vid] = pts[::step] + (pts[-1:] if (len(pts) - 1) % step else [])
+    return out
+
+
+def stream_tail(key: str, vids: list, n: int = 90) -> dict:
+    h = _HIST.get(key, {})
+    return {v: [list(x) for x in list(h[v])[-n:]] for v in vids if v in h}
 
 
 def fmt_n(n) -> str:
