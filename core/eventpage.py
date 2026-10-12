@@ -214,7 +214,15 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 .grid2{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
 .muted{color:var(--muted)}.scroll{overflow-x:auto}
 .foot{font-size:12px;color:var(--muted);margin-top:14px}.disc{font-size:11px;border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
-@media(max-width:600px){.hide-m{display:none}.st{max-width:56vw}td{padding:7px 5px}.title h1{font-size:16px}.bar .in{gap:6px}.title{width:100%}}
+@media(max-width:600px){.hide-m{display:none}.st{max-width:52vw;font-size:11px}td{padding:6px 5px}th{padding:5px}.title h1{font-size:15px}
+ .bar .in{gap:5px;padding:7px 12px}.title{width:100%}.pill{font-size:11px;padding:3px 7px}#nx{display:none!important}
+ .wrap{padding:0 10px 30px}.follow{margin-top:8px;gap:6px}.follow>span{display:none}.soc{padding:4px 9px}
+ .card{padding:10px}.hero{gap:8px;margin:8px 0}.kpis{gap:8px}.kpi .v{font-size:19px}.kpi .s{display:none}.lbl{font-size:11px}
+ .big .v{font-size:40px;margin:4px 0}.split{margin:10px 0 6px}.legend{gap:8px;font-size:11px}
+ .tabs button{padding:8px 9px;font-size:12px}.tabs{margin-bottom:8px}.cv{font-size:22px}.head{gap:6px;margin-bottom:6px}
+ .seg button{padding:4px 8px;font-size:11px}.btn.sm{padding:4px 8px}.chips{gap:4px}.chip{font-size:11px;padding:3px 7px}
+ td.num{font-size:14px}.rk{width:26px;font-size:13px}.lg{width:18px;height:18px;margin-right:5px}.ch{font-size:13px}.tag{display:none}
+ .grid2{gap:8px;margin-top:8px}.q{width:100%}.foot{font-size:11px}}
 .modal{position:fixed;inset:0;z-index:60;background:rgba(3,2,12,.82);display:none;align-items:center;justify-content:center;padding:16px}
 .modal.on{display:flex}.mbox{background:var(--bg2);border:1px solid var(--line);padding:14px;max-width:440px;width:100%;max-height:94vh;overflow:auto}
 .mbox img{width:100%;display:block;border:1px solid var(--line);margin:10px 0}.mrow{display:flex;gap:8px;flex-wrap:wrap}
@@ -225,14 +233,14 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
  <span class="pill" title="Time since the newest reading">UPDATED <span id="ago">-</span></span>
  <span class="pill" id="nx"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle class="p" id="rp" cx="10" cy="10" r="7" stroke-dasharray="44" stroke-dashoffset="0"/></svg>NEXT <span id="nxt">-</span></span>
 </div></div>
-<div class="wrap"><div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
+<div class="wrap" style="padding-bottom:0"><div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
 <div class="wrap" id="app"></div>
 <div class="modal" id="modal"><div class="mbox"><div class="head"><div><h2 id="mt">Share</h2></div><button class="btn ghost sm" id="mclose">Close</button></div>
  <img id="mimg" alt="Share card"><div class="mrow"><button class="btn" id="mig">Instagram</button><button class="btn" id="mxb">X</button><button class="btn ghost" id="mdl">Download</button></div>
  <p class="muted" id="mhint" style="font-size:12px;margin:10px 0 0">On your phone, Instagram and X open the share menu with the image attached: pick Instagram (Story or Post) or X.</p></div></div>
 <script>
 const LIVE=__LIVE__, EVERY=__REFRESH__*1000, URLX='https://live.letsgrowesports.com', BRAND='__BRAND__', TITLE='__TITLE__';
-let D=__DATA__, prev={}, prevTotal=null, view='total', range='live', kind='all', q='', skew=0, lastFetch=Date.now(), failing=false, mode=null, showAll=false, hover=null, hidden={};
+let D=__DATA__, prev={}, prevTotal=null, view='total', range='full', kind='all', q='', skew=0, lastFetch=Date.now(), failing=false, mode=null, showAll=false, hover=null, hidden={};
 const PAL=['#b6f23a','#4cc9f0','#ff8a3d','#ff5fa2','#a78bfa','#ffd23f','#2dd4bf','#ff6b6b'];
 const fmt=n=>{n=+n||0;return n>=1e7?(n/1e7).toFixed(2)+' Cr':n>=1e5?(n/1e5).toFixed(2)+' L':n>=1e3?(n/1e3).toFixed(1)+'K':Math.round(n)+''};
 const full=n=>Math.round(+n||0).toLocaleString('en-IN');
@@ -247,7 +255,7 @@ function render(){
  const app=document.getElementById('app');
  if(!D.ticks){app.innerHTML='<div class="card" style="margin-top:12px">No data yet. Numbers are recorded only while the official broadcast is live.</div>';return}
  const off=isOff(),LB=D.last_broadcast||{};
- const m=off?'off':'on';if(mode!==m){mode=m;app.innerHTML='';prev={};prevTotal=null;showAll=false;range=off?'full':'live'}
+ const m=off?'off':'on';if(mode!==m){mode=m;app.innerHTML='';prev={};prevTotal=null;showAll=false;range='full'}
  const live=off?LB.streams:(D.live||[]),tot=off?LB.peak:live.reduce((a,s)=>a+s.viewers,0);
  const by=off?{official:LB.split.official,'watch party':LB.split.watch,community:LB.split.community}:{official:0,'watch party':0,community:0};
  if(!off)live.forEach(s=>by[s.kind]=(by[s.kind]||0)+s.viewers);
@@ -263,7 +271,7 @@ function render(){
     <div class="card kpi"><div class="lbl">Watch parties peak</div><div class="v" id="kw"></div><div class="s">all watch parties combined</div></div></div></div>
   <div class="card"><div class="tabs" id="tabs"><button data-v="total">Total viewers</button><button data-v="split">Official vs watch parties</button><button data-v="wp">Watch party battle</button></div>
    <div class="head"><div><div class="lbl" id="chh"></div><div class="cv" id="cv"></div></div>
-    <div class="seg" id="rg"><button data-r="live">LIVE</button><button data-r="full">FULL BROADCAST</button></div>
+    <div class="seg" id="rg"><button data-r="full">FULL BROADCAST</button><button data-r="live">LAST 3 MIN</button></div>
     <button class="btn sm" id="shareChart">Share</button></div>
    <div class="chart"><canvas id="c"></canvas></div><div class="chips" id="chips"></div></div>
   <div class="grid2">
@@ -304,7 +312,7 @@ function render(){
  document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
  document.getElementById('foot').innerHTML=`Concurrent viewers = people watching at the same moment, summed across every live YouTube stream (official, watch parties, community). Recorded only while the official broadcast is live. Counted from: ${esc(D.method)}.
   <div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div>
-  <div class="disc">Unofficial fan tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included.</div>`;
+  <div class="disc">Unofficial viewership tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included.</div>`;
  rows();wpRows();chips();drawChart();mark();
 }
 function wpRows(){
@@ -363,17 +371,17 @@ function plot(ctx,W,H,L,o){
  if(live){ctx.globalAlpha=.3;for(let t=Math.ceil(t0/10)*10;t<t1;t+=10){const x=X(t);ctx.beginPath();ctx.moveTo(x,padT);ctx.lineTo(x,padT+ch);ctx.stroke()}ctx.globalAlpha=1}
  ctx.textAlign='center';ctx.textBaseline='alphabetic';
  if(live)[[180,'-3:00'],[120,'-2:00'],[60,'-1:00'],[0,'NOW']].forEach(([s,l])=>ctx.fillText(l,Math.min(Math.max(X(t1-s),18*fs),cw-14*fs),H-5));
- else{const tf=t=>new Date(t*1000).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'});for(let k=0;k<=4;k++){const t=t0+(t1-t0)*k/4;ctx.fillText(tf(t),Math.min(Math.max(X(t),30*fs),cw-30*fs),H-5)}}
+ else{const tf=t=>new Date(t*1000).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'});const nk=W<500?2:4;for(let k=0;k<=nk;k++){const t=t0+(t1-t0)*k/nk;ctx.fillText(tf(t),Math.min(Math.max(X(t),30*fs),cw-30*fs),H-5)}}
  ctx.save();ctx.beginPath();ctx.rect(0,0,cw,H);ctx.clip();
  L.forEach((l,li)=>{const p=vis[li];if(!p.length)return;
   if(l.fill){ctx.beginPath();p.forEach((r,i)=>{i?ctx.lineTo(X(r[0]),Y(r[1])):ctx.moveTo(X(r[0]),Y(r[1]))});ctx.lineTo(X(p[p.length-1][0]),padT+ch);ctx.lineTo(X(p[0][0]),padT+ch);ctx.closePath();
    const g=ctx.createLinearGradient(0,padT,0,padT+ch);g.addColorStop(0,'rgba(182,242,58,.18)');g.addColorStop(1,'rgba(124,92,255,0)');ctx.fillStyle=g;ctx.fill()}
   ctx.beginPath();p.forEach((r,i)=>{i?ctx.lineTo(X(r[0]),Y(r[1])):ctx.moveTo(X(r[0]),Y(r[1]))});
-  ctx.strokeStyle=l.color;ctx.lineWidth=l.w;ctx.lineJoin='round';ctx.shadowColor=l.color;ctx.shadowBlur=live?12:4;ctx.stroke();ctx.shadowBlur=0});
+  ctx.strokeStyle=l.color;ctx.lineWidth=l.w;ctx.lineJoin='round';ctx.shadowColor=l.color;ctx.shadowBlur=live||o.head?12:4;ctx.stroke();ctx.shadowBlur=0});
  ctx.restore();
  // heads + end labels
  const ends=[];L.forEach((l,li)=>{const p=vis[li];if(!p.length)return;const r=p[p.length-1];ends.push({x:X(r[0]),y:Y(r[1]),v:r[1],c:l.color,label:l.label})});
- if(live){const ph=(Date.now()%1200)/1200;ends.forEach(e=>{ctx.beginPath();ctx.arc(e.x,e.y,4+ph*10,0,7);ctx.globalAlpha=(1-ph)*.5;ctx.fillStyle=e.c;ctx.fill();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(e.x,e.y,4,0,7);ctx.fill()})}
+ if(live||o.head){const ph=(Date.now()%1200)/1200;ends.forEach(e=>{ctx.beginPath();ctx.arc(e.x,e.y,4+ph*10,0,7);ctx.globalAlpha=(1-ph)*.5;ctx.fillStyle=e.c;ctx.fill();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(e.x,e.y,4,0,7);ctx.fill()})}
  ends.sort((a,b)=>a.y-b.y);let lastY=-99;ends.forEach(e=>{e.ly=Math.max(e.y,lastY+(o.multi?15:22)*fs);lastY=e.ly});
  ctx.textBaseline='middle';ctx.textAlign='left';
  ends.forEach(e=>{if(o.multi||L.length>1){ctx.fillStyle=e.c;ctx.font=F(12);ctx.fillText(fmt(e.v),cw+6,e.ly)}
@@ -392,15 +400,15 @@ function drawChart(){
  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
  const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
  const L=lines(),live=range==='live';
- plot(ctx,W,H,L,{live,hover,multi:view==='wp',key:view+range,padR:view==='wp'?52:62});
+ plot(ctx,W,H,L,{live,head:!!D.official_live,hover,multi:view==='wp',key:view+range,padR:view==='wp'?52:62});
  const h=document.getElementById('chh'),c=document.getElementById('cv'),LB=D.last_broadcast;
  const lastOf=l=>l.pts.length?l.pts[l.pts.length-1][1]:0,peakOf=l=>l.pts.reduce((a,r)=>Math.max(a,r[1]),0);
- const tag=live?'// live, last 3 minutes':(isOff()&&LB?`// last broadcast, ${LB.when}`:'// last 6 hours');
- if(view==='total'){h.textContent=tag;c.innerHTML=L[0]&&L[0].pts.length?`${full(live?lastOf(L[0]):peakOf(L[0]))}<small>${live?'TOTAL WATCHING':'PEAK'}</small>`:''}
- else if(view==='split'){h.textContent=tag;c.innerHTML=L[0].pts.length?`<span style="color:var(--orange)">${fmt(live?lastOf(L[0]):peakOf(L[0]))}</span> <small>OFFICIAL</small> <span style="color:var(--cyan)">${fmt(live?lastOf(L[1]):peakOf(L[1]))}</span> <small>WATCH PARTIES</small>`:''}
+ const tag=live?'// live, last 3 minutes':(isOff()&&LB?`// ${LB.when}`:'// this broadcast, updating live');
+ if(view==='total'){h.textContent=tag;const nowv=live||D.official_live;c.innerHTML=L[0]&&L[0].pts.length?`${full(nowv?lastOf(L[0]):peakOf(L[0]))}<small>${nowv?'WATCHING NOW':'PEAK'}</small>`:''}
+ else if(view==='split'){h.textContent=tag;const nv=live||D.official_live;c.innerHTML=L[0].pts.length?`<span style="color:var(--orange)">${fmt(nv?lastOf(L[0]):peakOf(L[0]))}</span> <small>OFFICIAL</small> <span style="color:var(--cyan)">${fmt(nv?lastOf(L[1]):peakOf(L[1]))}</span> <small>WATCH PARTIES</small>`:''}
  else{h.textContent=tag+' // tap a name to hide it';const w=(D.wp||[])[0];c.innerHTML=w?`${esc(w.channel)}<small>#1 WATCH PARTY ${fmt(w.viewers)}</small>`:''}
 }
-function loop(){if(range==='live'&&!document.hidden)drawChart();requestAnimationFrame(loop)}
+let lf=0;function loop(t){if(!document.hidden&&(range==='live'||(D.official_live&&t-lf>50))){lf=t;drawChart()}requestAnimationFrame(loop)}
 window.addEventListener('resize',()=>drawChart());
 function mark(){document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
  document.querySelectorAll('#rg button').forEach(b=>{b.classList.toggle('on',b.dataset.r===range);if(b.dataset.r==='live')b.disabled=!D.official_live});
@@ -488,7 +496,7 @@ async function tick(){
  }catch(e){failing=true}
 }
 skew=Date.now()/1000-(D.now||Date.now()/1000);
-render();setInterval(status,100);loop();
+render();setInterval(status,100);requestAnimationFrame(loop);
 if(LIVE)setInterval(tick,EVERY);
 (function(){let sid=null;try{sid=sessionStorage.getItem('lg_sid')}catch(e){}
  if(!sid){sid=Math.random().toString(36).slice(2)+Date.now().toString(36);try{sessionStorage.setItem('lg_sid',sid)}catch(e){}}

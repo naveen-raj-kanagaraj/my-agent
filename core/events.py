@@ -45,6 +45,7 @@ PRESETS = {
         "name": "BMSD 2026",
         # only these watch-party channels are permitted to restream; everyone else is ignored (with official channels kept)
         "allowed": ["snax", "neyoo", "lolzz", "zgod"],
+        "always_check": ["@NEYOOGAMINGYT"],     # checked directly every minute, even if search misses it
         "match": ["bmsd", "bgmi showdown", "battlegrounds mobile india showdown", "battlegrounds mobile showdown",
                   "bgmi show down", "bm showdown"],
         "queries": ["BMSD", "BMSD 2026", "BGMI Showdown", "Battlegrounds Mobile India Showdown", "BMSD watch party"],
@@ -566,7 +567,7 @@ def poll(ev: dict, now: int = None) -> dict:
         except Exception as e:
             errors += 1
             print(f"Event search '{q}' failed: {str(e)[:120]}")
-    for ch in ev.get("channels", [])[:30]:
+    for ch in (ev.get("channels", []) + PRESETS.get(ev["key"], {}).get("always_check", []))[:30]:
         s = check_channel(ch)
         if s and s["vid"] not in found and relevant(ev, s):
             found[s["vid"]] = s
