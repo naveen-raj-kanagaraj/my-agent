@@ -43,6 +43,8 @@ WATCH_PARTY = re.compile(r"watch\s*-?\s*party|co-?\s*stream|watch\s*-?\s*along|r
 PRESETS = {
     "bmsd": {
         "name": "BMSD 2026",
+        # only these watch-party channels are permitted to restream; everyone else is ignored (with official channels kept)
+        "allowed": ["snax", "neyoo", "lolzz", "zgod"],
         "match": ["bmsd", "bgmi showdown", "battlegrounds mobile india showdown", "battlegrounds mobile showdown",
                   "bgmi show down", "bm showdown"],
         "queries": ["BMSD", "BMSD 2026", "BGMI Showdown", "Battlegrounds Mobile India Showdown", "BMSD watch party"],
@@ -196,7 +198,29 @@ def api_counts(vids: list) -> dict:
 
 # ---------- classification ----------
 
+def _norm(x: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (x or "").lower())
+
+
+def allowed_list(ev: dict) -> list:
+    return ev.get("allowed") or PRESETS.get(ev.get("key", ""), {}).get("allowed") or []
+
+
+def permitted(ev: dict, s: dict) -> bool:
+    """With an allow-list: only official channels and the listed watch-party channels count."""
+    al = allowed_list(ev)
+    if not al:
+        return True
+    ch = s.get("channel", "").lower()
+    if any(o and o in ch for o in ev.get("official", [])) or (s.get("channel_id") or "").lower() in ev.get("official", []):
+        return True
+    n = _norm(s.get("channel", ""))
+    return any(_norm(a) in n for a in al)
+
+
 def relevant(ev: dict, s: dict) -> bool:
+    if not permitted(ev, s):
+        return False
     if s["vid"] in ev.get("excluded", []) or (s.get("channel_id") and s["channel_id"] in ev.get("excluded", [])) \
             or s.get("channel", "").lower() in ev.get("excluded", []):
         return False
@@ -215,7 +239,7 @@ def kind_of(ev: dict, s: dict) -> str:
     ch = s.get("channel", "").lower()
     if any(o and o in ch for o in ev.get("official", [])) or (s.get("channel_id") or "").lower() in ev.get("official", []):
         return "official"
-    if WATCH_PARTY.search(s.get("title", "")):
+    if allowed_list(ev) or WATCH_PARTY.search(s.get("title", "")):
         return "watch party"
     return "community"
 
@@ -283,7 +307,7 @@ def fast_tick(ev: dict, now: float = None) -> dict:
     tiny ones every MINOR_SEC. Returns {'total', 'live'} or {} if nothing is known to be live."""
     key = ev["key"]
     now = now or time.time()
-    live = dict(_LIVE.get(key, {}))
+    live = {v: x for v, x in _LIVE.get(key, {}).items() if permitted(ev, x)}
     if not live:
         return {}
     fast = _FAST.setdefault(key, {})
@@ -458,6 +482,41 @@ def repair(key: str) -> dict:
     return {"bad_samples": len(bad), "totals_fixed": fixed, "readings_without_official_dropped": dropped}
 
 
+def purge_unpermitted(key: str) -> dict:
+    ev = get(key)
+    if not ev or not allowed_list(ev):
+        return {}
+    with store._lock:
+        c = _db()
+        streams = c.execute("SELECT vid, channel, channel_id, kind FROM ev_streams WHERE event=?", (key,)).fetchall()
+        bad = {r[0]: r[3] for r in streams if not permitted(ev, {"vid": r[0], "channel": r[1], "channel_id": r[2]})}
+        col = {"official": "official", "watch party": "watch", "community": "community"}
+        fixed = 0
+        for vid, kind in bad.items():
+            pts = c.execute("SELECT ts, viewers FROM ev_samples WHERE event=? AND vid=? ORDER BY ts", (key, vid)).fetchall()
+            if not pts:
+                continue
+            k = col.get(kind, "community")
+            for tid, tts in c.execute("SELECT rowid, ts FROM ev_ticks WHERE event=? AND ts BETWEEN ? AND ?",
+                                      (key, pts[0][0] - 35, pts[-1][0] + 35)).fetchall():
+                near = min(pts, key=lambda q: abs(q[0] - tts))
+                if abs(near[0] - tts) <= 35 and near[1] > 0:
+                    c.execute(f"UPDATE ev_ticks SET total=MAX(0,total-?), {k}=MAX(0,{k}-?), live=MAX(0,live-1) WHERE rowid=?",
+                              (near[1], near[1], tid))
+                    fixed += 1
+        for vid in bad:
+            c.execute("DELETE FROM ev_samples WHERE event=? AND vid=?", (key, vid))
+            c.execute("DELETE FROM ev_streams WHERE event=? AND vid=?", (key, vid))
+        # the permitted ones are watch parties
+        for r in streams:
+            if r[0] not in bad and r[3] == "community":
+                c.execute("UPDATE ev_streams SET kind='watch party' WHERE event=? AND vid=?", (key, r[0]))
+        c.execute("UPDATE ev_ticks SET watch=watch+community, community=0 WHERE event=? AND community>0", (key,))
+        c.commit()
+    store.kv_set(f"event_peak_break:{key}", {})
+    return {"removed_streams": len(bad), "totals_fixed": fixed}
+
+
 def repair_once():
     for k, ev in events().items():
         flag = f"event_repair_v2:{k}"
@@ -466,6 +525,13 @@ def repair_once():
                 print(f"Event {k} cleanup: {repair(k)}")
             except Exception as e:
                 print(f"Event {k} cleanup failed: {str(e)[:150]}")
+            store.kv_set(flag, True)
+        flag = f"event_allow_v1:{k}"
+        if not store.kv_get(flag):
+            try:
+                print(f"Event {k} allow-list cleanup: {purge_unpermitted(k)}")
+            except Exception as e:
+                print(f"Event {k} allow-list cleanup failed: {str(e)[:150]}")
             store.kv_set(flag, True)
 
 
@@ -597,7 +663,7 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
         ticks = [dict(r) for r in c.execute("SELECT * FROM ev_ticks WHERE event=? AND ts>=? AND ts<=? ORDER BY ts",
                                              (key, since, until))]
         samples = [dict(r) for r in c.execute(
-            "SELECT s.ts, s.vid, s.viewers, t.channel, t.title, t.kind FROM ev_samples s JOIN ev_streams t "
+            "SELECT s.ts, s.vid, s.viewers, t.channel, t.title, t.kind, t.channel_id FROM ev_samples s JOIN ev_streams t "
             "ON t.event=s.event AND t.vid=s.vid WHERE s.event=? AND s.ts>=? AND s.ts<=? ORDER BY s.ts",
             (key, since, until))]
     out = {"ticks": len(ticks)}
@@ -673,6 +739,9 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     if _LIVE.get(key) and fast_healthy():
         out["live_now"] = sorted(({**st, "viewers": fl[v]["viewers"]} for v, st in _LIVE[key].items()
                                   if v in fl and fl[v]["viewers"] > 0), key=lambda s: -s["viewers"])
+    evx = get(key)
+    if evx:
+        out["live_now"] = [x for x in out["live_now"] if permitted(evx, x)]
     out["official_live"] = any(x["kind"] == "official" for x in out["live_now"])
     if not out["official_live"]:
         out["live_now"] = []          # only show streams while the official broadcast is on
@@ -693,6 +762,7 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
         for x in samples:
             if ls["start"] - 60 <= x["ts"] <= ls["end"] + 60 and x["viewers"] > per.get(x["vid"], {}).get("peak", 0):
                 per[x["vid"]] = {"vid": x["vid"], "channel": x["channel"], "title": x["title"], "kind": x["kind"],
+                                 "channel_id": x.get("channel_id") or "",
                                  "peak": x["viewers"], "peak_at": x["ts"]}
         ls["streams"] = sorted(per.values(), key=lambda p: -p["peak"])
         out["last_broadcast"] = ls
@@ -718,6 +788,29 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
         d["peak_at"] = top["ts"] if top else None
     out["series"] = [(t["ts"], t["total"], t["official"], t["watch"], t["community"]) for t in ticks]
     return out
+
+
+_AV_BUSY = set()
+
+
+def avatar(cid: str) -> str:
+    """Channel logo URL (cached). Unknown ones are fetched in the background."""
+    if not cid:
+        return ""
+    u = store.kv_get(f"ev_avatar:{cid}")
+    if u is None and cid not in _AV_BUSY:
+        _AV_BUSY.add(cid)
+
+        def fetch():
+            try:
+                r = _http.get(f"https://www.youtube.com/channel/{cid}", headers={"User-Agent": _UA, "Accept-Language": "en"}, timeout=10)
+                m = re.search(r'<meta property="og:image" content="([^"]+)"', r.text)
+                store.kv_set(f"ev_avatar:{cid}", re.sub(r"=s\d+.*$", "=s88-c-k-c0x00ffffff-no-rj", m.group(1)) if m else "")
+            except Exception:
+                pass
+            _AV_BUSY.discard(cid)
+        _fast_pool.submit(fetch)
+    return u or ""
 
 
 def stream_series(key: str, vids: list, t0: float, t1: float, limit: int = 600) -> dict:
