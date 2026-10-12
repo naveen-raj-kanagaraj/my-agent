@@ -247,17 +247,17 @@ def count_live(vid: str):
                 walk(v)
     walk(r.json())
     for vc in found:
-        if vc.get("isLive") is False:
-            return None
-        raw = vc.get("originalViewCount")
-        if raw is not None and str(raw).isdigit():
-            return int(raw)
         txt = (vc.get("viewCount") or {}).get("simpleText") or "".join(
             x.get("text", "") for x in (vc.get("viewCount") or {}).get("runs", []))
-        if "watching" in txt.lower():
-            digits = re.sub(r"[^\d]", "", txt)
-            return int(digits) if digits else 0
-        return None
+        # Only "N watching" is a live concurrent count. After a stream ends YouTube shows "N views" and
+        # originalViewCount becomes TOTAL views (that's how 2.3M got in), so anything else = not live.
+        if vc.get("isLive") is False or "watching" not in txt.lower():
+            return None
+        digits = re.sub(r"[^\d]", "", txt)
+        raw = vc.get("originalViewCount")
+        if raw is not None and str(raw).isdigit() and digits and abs(int(raw) - int(digits)) <= max(1000, int(digits) * .1):
+            return int(raw)
+        return int(digits) if digits else 0
     raise ValueError("no live counter in response")
 
 
@@ -306,6 +306,18 @@ def fast_tick(ev: dict, now: float = None) -> dict:
                 _LIVE.get(key, {}).pop(vid, None)
                 fast.pop(vid, None)
             continue
+        f = fast.get(vid)
+        base = f["viewers"] if f else live.get(vid, {}).get("viewers", 0)
+        if base >= 500 and n > base * 2.5:
+            # impossible jump in a few seconds: almost always the stream ending and the counter turning into total views
+            f = fast.setdefault(vid, {"viewers": base, "ts": now, "misses": 0})
+            f["misses"] += 1
+            if f["misses"] >= 3:
+                _ENDED[vid] = now
+                live.pop(vid, None)
+                _LIVE.get(key, {}).pop(vid, None)
+                fast.pop(vid, None)
+            continue
         fast[vid] = {"viewers": n, "ts": now, "misses": 0}
         methods.append(how)
     if methods:
@@ -318,12 +330,17 @@ def fast_tick(ev: dict, now: float = None) -> dict:
     rows = []
     for vid, st in live.items():
         f = fast.get(vid)
-        v = f["viewers"] if f and now - f["ts"] < MINOR_SEC * 3 else st.get("viewers", 0)
+        if f and f["misses"]:
+            v = 0                      # its counter says it's not live (ended or about to be dropped)
+        else:
+            v = f["viewers"] if f and now - f["ts"] < MINOR_SEC * 3 else st.get("viewers", 0)
         rows.append({**st, "viewers": v})
     if not rows:
         return {}
     total = sum(r["viewers"] for r in rows)
     by = {k: sum(r["viewers"] for r in rows if r["kind"] == k) for k in ("official", "watch party", "community")}
+    if by["official"] <= 0:
+        return {"total": total, "live": len(rows), "official_live": False}   # only record while the official broadcast is live
     write_samples = now - store.kv_get(f"event_last_sample:{key}", 0) >= SAMPLE_EVERY
     with store._lock:
         c = _db()
@@ -344,7 +361,83 @@ def fast_tick(ev: dict, now: float = None) -> dict:
         store.kv_set(f"event_peak_break:{key}", {"ts": int(now), "total": total, "streams": sorted(
             [{"vid": r["vid"], "viewers": r["viewers"], "channel": r.get("channel", ""), "title": r.get("title", ""),
               "kind": r["kind"]} for r in rows if r["viewers"] > 0], key=lambda x: -x["viewers"])})
-    return {"total": total, "live": len(rows)}
+    return {"total": total, "live": len(rows), "official_live": True}
+
+
+def repair(key: str) -> dict:
+    """One-time cleanup: drop readings where an ended stream's TOTAL views were counted as viewers, and every
+    reading taken while the official broadcast wasn't live. Then recompute each stream's peak."""
+    with store._lock:
+        c = _db()
+        rows = c.execute("SELECT rowid, ts, vid, viewers FROM ev_samples WHERE event=? ORDER BY vid, ts", (key,)).fetchall()
+        kinds = dict(c.execute("SELECT vid, kind FROM ev_streams WHERE event=?", (key,)).fetchall())
+        bad, badv, prev, run = [], {}, {}, {}
+        since_fast = 1791713000   # live-counter era (11 Oct 2026); older search-based counts often repeat while live
+
+        def mark(rid, vid, ts, v):
+            bad.append(rid)
+            badv.setdefault(vid, []).append((ts, v))
+        for rid, ts, vid, v in rows:
+            p = prev.get(vid)
+            if p and p >= 500 and v >= 20000 and v > p * 2.5:   # jump = total views after the stream ended
+                mark(rid, vid, ts, v)
+                continue
+            # a live count always moves; the same big number 4+ readings in a row is a finished video's view count
+            r = run.get(vid)
+            if r and r["v"] == v and v >= 1000 and ts >= since_fast:
+                r["items"].append((rid, ts))
+                if len(r["items"]) == 4:
+                    for x in r["items"]:
+                        mark(x[0], vid, x[1], v)
+                elif len(r["items"]) > 4:
+                    mark(rid, vid, ts, v)
+                continue
+            run[vid] = {"v": v, "items": [(rid, ts)]}
+            prev[vid] = v
+        badset = set(bad)
+        good = {}
+        for rid, ts, vid, v in rows:
+            if rid not in badset:
+                good.setdefault(vid, []).append(ts)
+        for i in range(0, len(bad), 500):
+            c.execute(f"DELETE FROM ev_samples WHERE rowid IN ({','.join('?' * len(bad[i:i + 500]))})", bad[i:i + 500])
+        # take those bogus numbers back out of the totals recorded at the same moments
+        col = {"official": "official", "watch party": "watch", "community": "community"}
+        fixed = 0
+        for vid, pts in badv.items():
+            k = col.get(kinds.get(vid, "community"), "community")
+            pts.sort()
+            for tid, tts in c.execute("SELECT rowid, ts FROM ev_ticks WHERE event=? AND ts BETWEEN ? AND ?",
+                                      (key, pts[0][0] - 35, pts[-1][0] + 35)).fetchall():
+                near = min(pts, key=lambda q: abs(q[0] - tts))
+                good_near = min((abs(g - tts) for g in good.get(vid, [])), default=10 ** 9)
+                if abs(near[0] - tts) <= 35 and abs(near[0] - tts) < good_near:   # this moment's reading was the bogus one
+                    c.execute(f"UPDATE ev_ticks SET total=MAX(0,total-?), {k}=MAX(0,{k}-?), live=MAX(0,live-1) WHERE rowid=?",
+                              (near[1], near[1], tid))
+                    fixed += 1
+        dropped = 0
+        dropped += c.execute("DELETE FROM ev_ticks WHERE event=? AND official<=0", (key,)).rowcount
+        # samples taken when no official reading exists close by
+        c.execute("""DELETE FROM ev_samples WHERE event=? AND NOT EXISTS (SELECT 1 FROM ev_ticks t WHERE t.event=ev_samples.event
+                     AND t.ts BETWEEN ev_samples.ts - 40 AND ev_samples.ts + 40)""", (key,))
+        c.execute("UPDATE ev_streams SET peak=0 WHERE event=?", (key,))
+        c.execute("""UPDATE ev_streams SET peak=(SELECT MAX(viewers) FROM ev_samples s WHERE s.event=ev_streams.event AND s.vid=ev_streams.vid),
+                     peak_at=(SELECT ts FROM ev_samples s WHERE s.event=ev_streams.event AND s.vid=ev_streams.vid ORDER BY viewers DESC LIMIT 1)
+                     WHERE event=? AND EXISTS (SELECT 1 FROM ev_samples s WHERE s.event=ev_streams.event AND s.vid=ev_streams.vid)""", (key,))
+        c.commit()
+    store.kv_set(f"event_peak_break:{key}", {})
+    return {"bad_samples": len(bad), "totals_fixed": fixed, "readings_without_official_dropped": dropped}
+
+
+def repair_once():
+    for k, ev in events().items():
+        flag = f"event_repair_v1:{k}"
+        if not store.kv_get(flag):
+            try:
+                print(f"Event {k} cleanup: {repair(k)}")
+            except Exception as e:
+                print(f"Event {k} cleanup failed: {str(e)[:150]}")
+            store.kv_set(flag, True)
 
 
 def fast_healthy() -> bool:
@@ -353,6 +446,7 @@ def fast_healthy() -> bool:
 
 def run_fast_forever():
     """Background thread: live counters for every active event."""
+    repair_once()
     while True:
         t0 = time.time()
         for ev in events().values():
@@ -424,6 +518,7 @@ def poll(ev: dict, now: int = None) -> dict:
     _LIVE[ev["key"]] = {s["vid"]: s for s in streams}
     total = sum(s["viewers"] for s in streams)
     by = {k: sum(s["viewers"] for s in streams if s["kind"] == k) for k in ("official", "watch party", "community")}
+    official_live = by["official"] > 0
     with store._lock:
         c = _db()
         for s in streams:
@@ -434,10 +529,11 @@ def poll(ev: dict, now: int = None) -> dict:
                          peak_at=CASE WHEN excluded.peak > ev_streams.peak THEN excluded.peak_at ELSE ev_streams.peak_at END,
                          peak=MAX(ev_streams.peak, excluded.peak)""",
                       (ev["key"], s["vid"], s["channel"], s["channel_id"], s["title"], s["kind"], now, now,
-                       s["viewers"], now))
-        if not fast_healthy():  # the live counter writes per-stream history and totals while it's working
+                       s["viewers"] if official_live else 0, now))
+        record = official_live and not fast_healthy()  # live counter records while it works; nothing when official is off
+        if record:
             c.executemany("INSERT INTO ev_samples VALUES (?,?,?,?)", [(ev["key"], now, s["vid"], s["viewers"]) for s in streams])
-        if not fast_healthy() and (streams or errors < len(ev["queries"][:8])):  # never a fake zero
+        if record and (streams or errors < len(ev["queries"][:8])):  # never a fake zero
             c.execute("INSERT OR REPLACE INTO ev_ticks VALUES (?,?,?,?,?,?,?)",
                       (ev["key"], now, total, len(streams), by["official"], by["watch party"], by["community"]))
         c.commit()
@@ -548,6 +644,29 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     if _LIVE.get(key) and fast_healthy():
         out["live_now"] = sorted(({**st, "viewers": fl[v]["viewers"]} for v, st in _LIVE[key].items()
                                   if v in fl and fl[v]["viewers"] > 0), key=lambda s: -s["viewers"])
+    out["official_live"] = any(x["kind"] == "official" for x in out["live_now"])
+    if not out["official_live"]:
+        out["live_now"] = []          # only show streams while the official broadcast is on
+    # broadcasts: runs of readings with no gap over 15 min (readings only exist while official was live)
+    sess, cur = [], None
+    for t in ticks:
+        if cur and t["ts"] - cur["end"] <= 900:
+            cur["end"] = t["ts"]
+            if t["total"] > cur["peak"]:
+                cur.update(peak=t["total"], peak_at=t["ts"], split={k: t[k] for k in ("official", "watch", "community")})
+        else:
+            cur = {"start": t["ts"], "end": t["ts"], "peak": t["total"], "peak_at": t["ts"],
+                   "split": {k: t[k] for k in ("official", "watch", "community")}}
+            sess.append(cur)
+    if sess:
+        ls = dict(sess[-1])
+        per = {}
+        for x in samples:
+            if ls["start"] - 60 <= x["ts"] <= ls["end"] + 60 and x["viewers"] > per.get(x["vid"], {}).get("peak", 0):
+                per[x["vid"]] = {"vid": x["vid"], "channel": x["channel"], "title": x["title"], "kind": x["kind"],
+                                 "peak": x["viewers"], "peak_at": x["ts"]}
+        ls["streams"] = sorted(per.values(), key=lambda p: -p["peak"])
+        out["last_broadcast"] = ls
     out["method"] = (f"{_FASTSTATE['method']}, every {FAST_SEC * 2 ** _FASTSTATE.get('slow', 0):g}s" if fast_healthy()
                      else f"search results, every {POLL_SEC}s")
     with store._lock:
@@ -600,7 +719,13 @@ def summary(key: str = None, top: int = 10) -> str:
         for s in st["live_now"]:
             lines.append(f"  {fmt_n(s['viewers'])}  {s['channel']} ({s['kind']})\n     {yt_link(s['vid'])}")
     else:
-        lines.append("\nNothing live right now.")
+        lines.append("\nOfficial broadcast is offline (numbers are recorded only while it's live).")
+        lb = st.get("last_broadcast")
+        if lb:
+            lines.append(f"\nLAST BROADCAST ({_when(lb['start'])} to {datetime.fromtimestamp(lb['end'], REPORT_TZ).strftime('%I:%M %p')}):"
+                         f"\n  peak {fmt_n(lb['peak'])} concurrent at {_when(lb['peak_at'])}")
+            for x in lb["streams"][:8]:
+                lines.append(f"  {fmt_n(x['peak'])}  {x['channel']} ({x['kind']})\n     {yt_link(x['vid'])}")
     sp = st["peak_split"]
     lines += [f"\nPEAK CONCURRENT: {fmt_n(st['peak'])} at {_when(st['peak_at'])}",
               f"  official {fmt_n(sp['official'])}, watch parties {fmt_n(sp['watch'])}, community {fmt_n(sp['community'])}"]
