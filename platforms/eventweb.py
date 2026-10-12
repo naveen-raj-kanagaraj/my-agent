@@ -10,7 +10,7 @@ import os
 
 from flask import Flask, Response, request
 
-from core import eventpage
+from core import eventpage, visitors
 
 PORT = int(os.getenv("EVENT_WEB_PORT", "8092"))
 app = Flask(__name__)
@@ -50,6 +50,17 @@ def data():
 @app.route("/series")
 def series():
     return _json(eventpage.series_data())
+
+
+@app.route("/hit", methods=["POST"])
+def hit():
+    j = request.get_json(silent=True) or {}
+    try:
+        visitors.hit(str(j.get("sid", "")), request.headers.get("CF-IPCountry", ""), str(j.get("ref", "")),
+                     request.headers.get("User-Agent", ""), int(j.get("w") or 0))
+    except Exception:
+        pass
+    return Response(status=204)
 
 
 @app.route("/robots.txt")
