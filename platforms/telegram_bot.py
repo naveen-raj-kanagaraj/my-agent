@@ -1581,6 +1581,12 @@ async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
         xl = await asyncio.to_thread(eventlog.export_xlsx, key)
         await update.message.reply_document(document=_io.BytesIO(xl), filename=f"{key}-viewership.xlsx",
                                             caption="Peaks, by day, broadcasts, every stream's peak, watch parties, per-minute readings.")
+    elif action in ("anomalies", "spikes", "bots"):
+        from core import eventlog
+        import io as _io
+        xl, n = await asyncio.to_thread(eventlog.anomalies_xlsx, key)
+        await update.message.reply_document(document=_io.BytesIO(xl), filename=f"{key}-anomalies.xlsx",
+                                            caption=f"{n} sudden jumps/drops logged (per stream, within ~15s).")
     elif action in ("visitors", "users", "traffic"):
         from core import visitors
         await update.message.reply_text(visitors.summary(), disable_web_page_preview=True)

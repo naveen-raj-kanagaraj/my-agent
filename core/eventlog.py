@@ -80,6 +80,45 @@ def export_xlsx(key: str = None) -> bytes:
     return buf.getvalue()
 
 
+def anomalies_xlsx(key: str, since: float = 0) -> tuple:
+    """(xlsx bytes, row count) of sudden viewer jumps/drops per stream."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    with store._lock:
+        rows = events._db().execute("SELECT ts, channel, kind, before, after, change, pct, seconds, vid FROM ev_anomalies "
+                                    "WHERE event=? AND ts>=? ORDER BY ts", (key, since)).fetchall()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Anomalies"
+    ws.append(["Time (IST)", "Channel", "Type", "Before", "After", "Change", "Change %", "Within (s)", "Link"])
+    for c in ws[1]:
+        c.font, c.fill = Font(bold=True), PatternFill("solid", fgColor="B6F23A")
+    for ts, ch, k, b, a, d, p, sec, vid in rows:
+        ws.append([_t(ts), ch, k, b, a, d, p, sec, events.yt_link(vid)])
+    for col, w in zip("ABCDEFGHI", (24, 26, 12, 10, 10, 10, 10, 10, 32)):
+        ws.column_dimensions[col].width = w
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue(), len(rows)
+
+
+def check_anomalies(ev: dict):
+    """Every 30 min, if new jumps/drops were logged, send the spreadsheet of today's anomalies."""
+    key = ev["key"]
+    last = store.kv_get(f"ev_anom_sent:{key}", 0)
+    if time.time() - last < 1800:
+        return
+    with store._lock:
+        n = events._db().execute("SELECT COUNT(*) FROM ev_anomalies WHERE event=? AND ts>?", (key, last)).fetchone()[0]
+    if not n:
+        return
+    store.kv_set(f"ev_anom_sent:{key}", time.time())
+    day0 = datetime.now(events.REPORT_TZ).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    xl, total = anomalies_xlsx(key, day0)
+    _send(f"{ev['name']}: {n} new sudden viewer jumps/drops ({total} today). Per stream, change within ~15s.",
+          xl, f"{key}-anomalies-{datetime.now(events.REPORT_TZ):%Y-%m-%d}.xlsx")
+
+
 def _send(text: str, doc: bytes = None, name: str = ""):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat = (os.getenv("OWNER_TELEGRAM_ID") or "").split(",")[0].strip()

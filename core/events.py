@@ -28,7 +28,9 @@ POLL_SEC = int(os.getenv("EVENT_POLL_SEC", "60"))          # discovery: search Y
 FAST_SEC = float(os.getenv("EVENT_FAST_SEC", "2"))          # live counter: re-count live streams this often
 MINOR_SEC = 30                                              # streams under MINOR_VIEWERS are re-counted less often
 MINOR_VIEWERS = 50
-SAMPLE_EVERY = 30                                           # per-stream history is stored every 30s
+SAMPLE_EVERY = 30
+ANOM_MIN = int(os.getenv("EVENT_ANOMALY_MIN", "2000"))      # a jump/drop this big ...
+ANOM_PCT = float(os.getenv("EVENT_ANOMALY_PCT", "0.15"))    # ... and at least this share of the stream, within ~15s                                           # per-stream history is stored every 30s
 _LIVE = {}      # event -> {vid: stream dict} from the latest discovery
 _FAST = {}      # event -> {vid: {"viewers", "ts", "misses"}}
 _FASTSTATE = {"method": "", "ok_ts": 0.0, "errors": 0}
@@ -69,6 +71,8 @@ def _db():
         first_seen REAL, last_seen REAL, peak INTEGER DEFAULT 0, peak_at REAL, PRIMARY KEY (event, vid));
     CREATE TABLE IF NOT EXISTS ev_samples (event TEXT, ts INTEGER, vid TEXT, viewers INTEGER);
     CREATE INDEX IF NOT EXISTS ev_samples_ix ON ev_samples(event, ts);
+    CREATE TABLE IF NOT EXISTS ev_anomalies (event TEXT, ts INTEGER, vid TEXT, channel TEXT, kind TEXT, before INTEGER,
+        after INTEGER, change INTEGER, pct REAL, seconds INTEGER);
     CREATE TABLE IF NOT EXISTS ev_ticks (event TEXT, ts INTEGER, total INTEGER, live INTEGER, official INTEGER,
         watch INTEGER, community INTEGER, PRIMARY KEY (event, ts));
     """)
@@ -318,7 +322,7 @@ def fast_tick(ev: dict, now: float = None) -> dict:
         big = (f["viewers"] if f else st.get("viewers", 0)) >= MINOR_VIEWERS or st.get("kind") == "official"
         if not f or now - f["ts"] >= (FAST_SEC if big else MINOR_SEC):
             due.append(vid)
-    methods, errs = [], 0
+    methods, errs, anomalies = [], 0, []
     for vid, n, how in _fast_pool.map(_count_one, due):
         if n == "err":
             _FASTSTATE["errors"] += 1
@@ -345,6 +349,11 @@ def fast_tick(ev: dict, now: float = None) -> dict:
                 _LIVE.get(key, {}).pop(vid, None)
                 fast.pop(vid, None)
             continue
+        if f and not f.get("misses") and now - f["ts"] <= 15 and f["viewers"]:
+            d = n - f["viewers"]
+            if abs(d) >= ANOM_MIN and abs(d) >= f["viewers"] * ANOM_PCT:   # sudden bulk jump or drop
+                anomalies.append((key, int(now), vid, live.get(vid, {}).get("channel", ""), live.get(vid, {}).get("kind", ""),
+                                  f["viewers"], n, d, round(100 * d / f["viewers"], 1), int(now - f["ts"])))
         fast[vid] = {"viewers": n, "ts": now, "misses": 0}
         methods.append(how)
     if methods:
@@ -368,6 +377,11 @@ def fast_tick(ev: dict, now: float = None) -> dict:
     by = {k: sum(r["viewers"] for r in rows if r["kind"] == k) for k in ("official", "watch party", "community")}
     if by["official"] <= 0:
         return {"total": total, "live": len(rows), "official_live": False}   # only record while the official broadcast is live
+    if anomalies:
+        with store._lock:
+            c = _db()
+            c.executemany("INSERT INTO ev_anomalies VALUES (?,?,?,?,?,?,?,?,?,?)", anomalies)
+            c.commit()
     hist = _HIST.setdefault(key, {})
     for r in rows:
         if r["viewers"] > 0:
@@ -552,6 +566,7 @@ def run_fast_forever():
                 for ev in events().values():
                     if ev.get("active"):
                         eventlog.check(ev)
+                        eventlog.check_anomalies(ev)
             except Exception as e:
                 print(f"Event log failed: {str(e)[:150]}")
         t0 = time.time()
