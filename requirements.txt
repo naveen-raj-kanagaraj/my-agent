@@ -18,3 +18,4 @@ faster-whisper
 openai
 telethon
 matplotlib
+waitress==3.0.2

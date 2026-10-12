@@ -74,11 +74,25 @@ def _notify(text: str):
         pass
 
 
+NAMED = os.getenv("EVENT_TUNNEL_NAME", "").strip()            # permanent tunnel (cloudflared tunnel create <name>)
+NAMED_URL = os.getenv("EVENT_PUBLIC_URL", "https://live.letsgrowesports.com").strip()
+
+
 def _run_once(binary: str, port: int):
-    proc = subprocess.Popen([binary, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{port}"],
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if NAMED:
+        cmd = [binary, "tunnel", "--no-autoupdate", "run", "--url", f"http://127.0.0.1:{port}", NAMED]
+    else:
+        cmd = [binary, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{port}"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     _state["status"] = "starting"
     for line in proc.stdout:
+        if NAMED and ("Registered tunnel connection" in line or "Connection registered" in line):
+            _state.update(status="on", url=NAMED_URL)
+            if public_url() != NAMED_URL:
+                store.kv_set("event_public_url", NAMED_URL)
+                print(f"Public event dashboard: {NAMED_URL}")
+                _notify(f"Live viewership dashboard is on your domain now:\n{NAMED_URL}\n\nThis link stays the same.")
+            continue
         m = URL_RE.search(line)
         if m:
             url = m.group(0)
