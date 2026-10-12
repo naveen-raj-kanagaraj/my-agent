@@ -56,8 +56,10 @@ def series():
 def hit():
     j = request.get_json(silent=True) or {}
     try:
+        from urllib.parse import unquote
         visitors.hit(str(j.get("sid", "")), request.headers.get("CF-IPCountry", ""), str(j.get("ref", "")),
-                     request.headers.get("User-Agent", ""), int(j.get("w") or 0))
+                     request.headers.get("User-Agent", ""), int(j.get("w") or 0),
+                     unquote(request.headers.get("cf-ipcity", "")), unquote(request.headers.get("cf-region", "")))
     except Exception:
         pass
     return Response(status=204)

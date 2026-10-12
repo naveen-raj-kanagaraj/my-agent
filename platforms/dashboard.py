@@ -111,6 +111,62 @@ def event_page(key=None):
     return eventpage.build_html(key)
 
 
+@app.route("/visitors")
+def visitors_page():
+    if not _authorised():
+        abort(403)
+    return app.response_class(VISITORS_PAGE, mimetype="text/html")
+
+
+@app.route("/api/visitors")
+def visitors_api():
+    if not _authorised():
+        abort(403)
+    from core import visitors
+    return jsonify(visitors.stats())
+
+
+VISITORS_PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard visitors</title><style>
+:root{--bg:#0b0d12;--card:#141821;--ink:#eef0f6;--muted:#8a93a8;--line:#242a37;--acc:#22c55e}
+@media (prefers-color-scheme: light){:root{--bg:#f4f5f9;--card:#fff;--ink:#121620;--muted:#5f6779;--line:#e3e6ee;--acc:#16a34a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,Inter,system-ui,sans-serif}
+.w{max-width:1000px;margin:0 auto;padding:18px 16px 40px}h1{font-size:18px;margin:0 0 4px}.m{color:var(--muted);font-size:12px}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.c{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+.c .l{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}.c .v{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.g{grid-template-columns:1fr}}
+h2{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px}
+.r{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}.r .n{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums}
+.bar{height:4px;background:var(--acc);border-radius:3px;margin-top:3px;opacity:.8}.r>div{flex:1;min-width:0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:6px;animation:p 1.6s infinite}
+@keyframes p{50%{opacity:.3}}
+</style></head><body><div class="w">
+<h1><span class="dot"></span>Who is on live.letsgrowesports.com</h1><div class="m">Only on this computer. Updates every 5s. No cookies or IP addresses are stored; one browser tab = one visitor.</div>
+<div class="k" id="k"></div>
+<div class="g"><div class="c"><h2>Countries, now</h2><div id="cn"></div></div><div class="c"><h2>Cities, now</h2><div id="pn"></div></div>
+<div class="c"><h2>Countries, today</h2><div id="ct"></div></div><div class="c"><h2>Cities, today</h2><div id="pt"></div></div>
+<div class="c"><h2>Came from, today</h2><div id="rf"></div></div><div class="c"><h2>Visitors per day</h2><div id="dy"></div></div></div>
+<p class="m" id="note"></p></div>
+<script>
+const dn=(()=>{try{return new Intl.DisplayNames(['en'],{type:'region'})}catch(e){return null}})();
+const cname=c=>c==='??'||c==='XX'?'Unknown':(dn?(dn.of(c)||c):c);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const list=(id,pairs,f=x=>x)=>{const top=Math.max(1,...pairs.map(p=>p[1]));document.getElementById(id).innerHTML=pairs.length?pairs.map(([k,v])=>
+ `<div class="r"><div>${esc(f(k))}<div class="bar" style="width:${100*v/top}%"></div></div><span class="n">${v.toLocaleString('en-IN')}</span></div>`).join(''):'<div class="m">Nobody yet</div>'};
+async function load(){try{const s=await (await fetch('api/visitors',{cache:'no-store'})).json();
+ const pk=s.peak||{};const when=pk.ts?new Date(pk.ts*1000).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'-';
+ document.getElementById('k').innerHTML=[['On the page now',s.active],['Visitors today',s.today],['Most at once',(pk.n||0)+'<div class="m">'+when+'</div>'],['Avg time on page',s.avg_min+' min']]
+  .map(([l,v])=>`<div class="c"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+ list('cn',s.active_all_countries,cname);list('ct',s.all_countries,cname);list('pn',s.active_places);list('pt',s.places);list('rf',s.refs);
+ list('dy',Object.entries(s.days).reverse().slice(0,14));
+ const noCity=(s.places||[]).every(p=>p[0]==='-');
+ document.getElementById('note').textContent=noCity&&s.today?'Cities show "-" until you turn on Cloudflare: Rules > Settings > Managed Transforms > "Add visitor location headers".':'';
+}catch(e){}}
+load();setInterval(load,5000);
+</script></body></html>"""
+
+
 @app.route("/api/activity")
 def activity():
     if not _authorised():

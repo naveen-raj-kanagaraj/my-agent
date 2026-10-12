@@ -22,7 +22,7 @@ def _day(ts=None):
     return datetime.fromtimestamp(ts or time.time(), TZ).strftime("%Y-%m-%d")
 
 
-def hit(sid: str, country: str = "", ref: str = "", ua: str = "", width: int = 0):
+def hit(sid: str, country: str = "", ref: str = "", ua: str = "", width: int = 0, city: str = "", region: str = ""):
     sid = (sid or "")[:40]
     ua_l = (ua or "").lower()
     if not sid or any(b in ua_l for b in BOTS):
@@ -38,7 +38,7 @@ def hit(sid: str, country: str = "", ref: str = "", ua: str = "", width: int = 0
             if "letsgrowesports" in ref:
                 ref = "direct"
             s = _sess[sid] = {"first": now, "last": now, "country": (country or "??").upper()[:2], "ref": ref,
-                              "device": device, "day": _day(now)}
+                              "device": device, "day": _day(now), "city": (city or "")[:40], "region": (region or "")[:40]}
         s["last"] = now
         active = sum(1 for x in _sess.values() if now - x["last"] < ACTIVE_SEC)
         best = store.kv_get("visitors_peak", {}) or {}
@@ -72,8 +72,12 @@ def stats() -> dict:
             "refs": Counter(x["ref"] for x in tod).most_common(8),
             "devices": Counter(x["device"] for x in tod).most_common(),
             "active_countries": Counter(x["country"] for x in act).most_common(5),
+            "places": Counter(", ".join(p for p in (x.get("city"), x.get("region")) if p) or "-" for x in tod).most_common(30),
+            "active_places": Counter(", ".join(p for p in (x.get("city"), x.get("region")) if p) or "-" for x in act).most_common(15),
+            "all_countries": Counter(x["country"] for x in tod).most_common(),
+            "active_all_countries": Counter(x["country"] for x in act).most_common(),
             "avg_min": round(sum(x["last"] - x["first"] for x in tod) / len(tod) / 60, 1) if tod else 0,
-            "days": store.kv_get("visitors_days", {}) or {}}
+            "days": store.kv_get("visitors_days", {}) or {}, "since": min((x["first"] for x in vals), default=now)}
 
 
 def summary() -> str:
