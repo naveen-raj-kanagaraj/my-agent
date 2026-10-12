@@ -52,7 +52,17 @@ def data(key: str = None) -> dict:
             days=[{"day": d["day"], "peak": d["peak"], "avg": round(d["avg_broadcast"]),
                    "at": datetime.fromtimestamp(d["peak_at"], events.REPORT_TZ).strftime("%I:%M %p") if d.get("peak_at") else ""}
                   for d in st["days"]],
-            series_all=_thin(series, 1500), series_recent=_thin(recent, 2500))
+            series_all=_thin(series, 1500), series_recent=_thin(recent, 2500), official_live=st.get("official_live", False))
+        lb = st.get("last_broadcast")
+        if lb:
+            tf = lambda ts: datetime.fromtimestamp(ts, events.REPORT_TZ)
+            out["last_broadcast"] = {
+                "when": f"{tf(lb['start']).strftime('%a %d %b, %I:%M %p')} to {tf(lb['end']).strftime('%I:%M %p')} IST",
+                "peak": lb["peak"], "peak_when": tf(lb["peak_at"]).strftime("%I:%M %p IST"),
+                "split": lb["split"],
+                "streams": [{"vid": x["vid"], "channel": x["channel"], "title": x["title"], "kind": x["kind"],
+                             "viewers": x["peak"], "at": tf(x["peak_at"]).strftime("%I:%M %p"), "url": events.yt_link(x["vid"])}
+                            for x in lb["streams"][:100]]}
     with _cache_lock:
         _cache[ev["key"]] = (time.time(), out)
     return out
@@ -146,15 +156,19 @@ const K={official:'official','watch party':'watch',community:'community'};
 const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 function tween(el,to){const from=+el.dataset.v||0;el.dataset.v=to;if(from===to){el.textContent=full(to);return}
  const t0=performance.now();const step=t=>{const k=Math.min(1,(t-t0)/600);el.textContent=full(from+(to-from)*(1-Math.pow(1-k,3)));if(k<1)requestAnimationFrame(step)};requestAnimationFrame(step)}
+let mode=null;
 function render(){
  const app=document.getElementById('app');
- if(!D.ticks){app.innerHTML='<div class="card" style="margin-top:16px">No data yet. Numbers appear once a live stream is found.</div>';return}
- const live=D.live||[], tot=live.reduce((a,s)=>a+s.viewers,0);
- const by={official:0,'watch party':0,community:0};live.forEach(s=>by[s.kind]=(by[s.kind]||0)+s.viewers);
+ if(!D.ticks){app.innerHTML='<div class="card" style="margin-top:16px">No data yet. Numbers are recorded only while the official broadcast is live.</div>';return}
+ const off=!D.official_live&&D.last_broadcast, LB=D.last_broadcast||{};
+ const m=off?'off':'on'; if(mode!==m){mode=m;app.innerHTML='';if(chart){chart.destroy();chart=null}prev={};prevTotal=null}
+ const live=off?LB.streams:(D.live||[]), tot=off?LB.peak:live.reduce((a,s)=>a+s.viewers,0);
+ const by=off?{official:LB.split.official,'watch party':LB.split.watch,community:LB.split.community}:{official:0,'watch party':0,community:0};
+ if(!off)live.forEach(s=>by[s.kind]=(by[s.kind]||0)+s.viewers);
  if(!document.getElementById('big')){
   app.innerHTML=`
   <div class="hero">
-   <div class="card big"><div class="k">Watching now, all live streams</div>
+   <div class="card big"><div class="k" id="bk"></div>
     <div class="v" id="big" data-v="0">0</div><div><span id="dl" class="delta flat"></span> <span class="muted" id="nlive"></span></div>
     <div class="split" id="split"></div><div class="legend" id="leg"></div></div>
    <div class="kpis">
@@ -172,10 +186,13 @@ function render(){
   <div class="card"><div class="head"><h2 id="lh">Live streams</h2>
    <div class="seg" id="kf">${[['all','All'],['official','Official'],['watch party','Watch parties'],['community','Community']].map(([k,l])=>`<button data-k="${k}">${l}</button>`).join('')}</div>
    <input class="q" id="q" placeholder="Search channel or title"></div>
-   <div class="scroll"><table><thead><tr><th>#</th><th>Channel / stream</th><th class="hide-m">Type</th><th class="num">Concurrent</th><th class="num hide-m">Share</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+   <div class="scroll"><table><thead><tr><th>#</th><th>Channel / stream</th><th class="hide-m">Type</th><th class="num" id="cth">Concurrent</th><th class="num hide-m" id="sth">Share</th></tr></thead><tbody id="rows"></tbody></table></div></div>
   <div class="card"><div class="head"><h2>By day</h2></div><div class="scroll"><table><thead><tr><th>Day (IST)</th><th class="num">Peak</th><th>At</th><th class="num">Average</th></tr></thead><tbody id="days"></tbody></table></div></div>
   </div>
   <div class="foot" id="foot"></div>`;
+  document.getElementById('bk').textContent=off?`Official broadcast offline. Last broadcast peak (${LB.when})`:'Watching now, all live streams';
+  document.getElementById('cth').textContent=off?'Peak concurrent':'Concurrent';
+  document.getElementById('sth').textContent=off?'At (IST)':'Share';
   document.querySelectorAll('#rg button').forEach(b=>b.onclick=()=>{range=b.dataset.r;localSet('range',range);drawChart();mark()});
   document.querySelectorAll('#sp button').forEach(b=>b.onclick=()=>{split=b.dataset.s==='1';localSet('split',split?'1':'0');if(chart){chart.destroy();chart=null}drawChart();mark()});
   document.querySelectorAll('#kf button').forEach(b=>b.onclick=()=>{kind=b.dataset.k;localSet('kind',kind);rows();mark()});
@@ -183,10 +200,11 @@ function render(){
  }
  tween(document.getElementById('big'),tot);
  const dl=document.getElementById('dl');
- if(prevTotal!==null&&prevTotal!==tot){const d=tot-prevTotal;dl.className='delta '+(d>0?'up':'down');dl.textContent=(d>0?'▲ +':'▼ ')+full(d)+' since last reading'}
+ if(off){dl.className='delta flat';dl.textContent='at '+LB.peak_when}
+ else if(prevTotal!==null&&prevTotal!==tot){const d=tot-prevTotal;dl.className='delta '+(d>0?'up':'down');dl.textContent=(d>0?'▲ +':'▼ ')+full(d)+' since last reading'}
  else if(prevTotal===null)dl.textContent='';
  prevTotal=tot;
- document.getElementById('nlive').textContent=live.length?`across ${live.length} live streams`:'Nothing live right now';
+ document.getElementById('nlive').textContent=off?`across ${live.length} streams (official + watch parties)`:live.length?`across ${live.length} live streams`:'Nothing live right now';
  const cols={official:css('--off'),'watch party':css('--wp'),community:css('--com')};
  document.getElementById('split').innerHTML=Object.keys(by).map(k=>`<div style="width:${tot?100*by[k]/tot:0}%;background:${cols[k]}"></div>`).join('');
  document.getElementById('leg').innerHTML=Object.keys(by).map(k=>`<span><span class="sw" style="background:${cols[k]}"></span>${k==='watch party'?'Watch parties':k[0].toUpperCase()+k.slice(1)} <b>${fmt(by[k])}</b>${tot?` (${(100*by[k]/tot).toFixed(0)}%)`:''}</span>`).join('');
@@ -195,17 +213,18 @@ function render(){
  document.getElementById('kw').textContent=fmt(D.peak_watch);
  document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
  const links=Object.entries(D.links||{}).map(([l,u])=>`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(l)}</a>`).join(' &middot; ');
- document.getElementById('foot').innerHTML=`YouTube only. Concurrent viewers = people watching at the same moment, summed across every live stream. Ended streams are not listed. Counted from: ${esc(D.method)}.${links?'<br>'+links:''}`;
+ document.getElementById('foot').innerHTML=`YouTube only. Concurrent viewers = people watching at the same moment, summed across every live stream. Recorded only while the official broadcast is live (watch parties included). Counted from: ${esc(D.method)}.${links?'<br>'+links:''}`;
  rows();drawChart();mark();
 }
 function rows(){
- const live=(D.live||[]).filter(s=>(kind==='all'||s.kind===kind)&&(!q||(s.channel+' '+s.title).toLowerCase().includes(q)));
- const tot=(D.live||[]).reduce((a,s)=>a+s.viewers,0)||1, top=Math.max(1,...live.map(s=>s.viewers));
- document.getElementById('lh').textContent=`Live streams (${live.length})`;
+ const off=!D.official_live&&D.last_broadcast, src=off?D.last_broadcast.streams:(D.live||[]);
+ const live=src.filter(s=>(kind==='all'||s.kind===kind)&&(!q||(s.channel+' '+s.title).toLowerCase().includes(q)));
+ const tot=src.reduce((a,s)=>a+s.viewers,0)||1, top=Math.max(1,...live.map(s=>s.viewers));
+ document.getElementById('lh').textContent=off?`Streams in the last broadcast (${live.length})`:`Live streams (${live.length})`;
  document.getElementById('rows').innerHTML=live.map((s,i)=>{const p=prev[s.vid];const cl=p===undefined&&Object.keys(prev).length?'new':p<s.viewers?'fu':p>s.viewers?'fd':'';
   return `<tr class="${cl}"><td class="muted">${i+1}</td><td class="t"><div class="ch">${esc(s.channel)}<span class="tag mt ${K[s.kind]}">${esc(s.kind)}</span></div><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title.slice(0,100))}</a><div class="mini" style="width:${100*s.viewers/top}%"></div></td>
-  <td class="hide-m"><span class="tag ${K[s.kind]}">${esc(s.kind)}</span></td><td class="num">${full(s.viewers)}</td><td class="num muted hide-m">${(100*s.viewers/tot).toFixed(1)}%</td></tr>`}).join('')||'<tr><td colspan=5 class="muted">Nothing live right now</td></tr>';
- prev={};(D.live||[]).forEach(s=>prev[s.vid]=s.viewers);
+  <td class="hide-m"><span class="tag ${K[s.kind]}">${esc(s.kind)}</span></td><td class="num">${full(s.viewers)}</td><td class="num muted hide-m">${off?esc(s.at):(100*s.viewers/tot).toFixed(1)+'%'}</td></tr>`}).join('')||'<tr><td colspan=5 class="muted">Nothing live right now</td></tr>';
+ prev={};src.forEach(s=>prev[s.vid]=s.viewers);
 }
 const cross={id:'cross',afterDraw(c){const a=c.tooltip&&c.tooltip.getActiveElements();if(!a||!a.length)return;const x=a[0].element.x,ctx=c.ctx,ar=c.chartArea;
  ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle=css('--muted');ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,ar.top);ctx.lineTo(x,ar.bottom);ctx.stroke();ctx.restore()}};
@@ -242,12 +261,12 @@ function status(){
  const now=Date.now()/1000-skew, age=D.updated?Math.max(0,now-D.updated):null;
  document.getElementById('ago').textContent=age===null?'-':age<60?`${age.toFixed(0)}s ago`:`${Math.floor(age/60)}m ago`;
  const st=document.getElementById('st'),t=document.getElementById('stt');
- const live=(D.live||[]).length>0;
+ const live=D.official_live&&(D.live||[]).length>0;
  if(!LIVE){st.className='pill off';t.textContent='Snapshot'}
  else if(failing){st.className='pill warn';t.textContent='Connection lost, retrying'}
  else if(age!==null&&age>Math.max(15,D.every*6)&&live){st.className='pill warn';t.textContent='Delayed'}
  else if(live){st.className='pill';t.textContent=`Live, counting every ${D.every}s`}
- else{st.className='pill off';t.textContent='Nothing live'}
+ else{st.className='pill off';t.textContent='Official offline, showing last broadcast'}
  const nx=document.getElementById('nx');
  if(!LIVE){nx.style.display='none';return}
  const left=Math.max(0,EVERY-(Date.now()-lastFetch));document.getElementById('nxt').textContent=(left/1000).toFixed(1)+'s';
