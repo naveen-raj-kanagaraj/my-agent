@@ -743,7 +743,15 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
     evx = get(key)
     if evx:
         out["live_now"] = [x for x in out["live_now"] if permitted(evx, x)]
-    out["official_live"] = any(x["kind"] == "official" for x in out["live_now"])
+    recent = time.time() - ticks[-1]["ts"] < 90 and not (_LIVE.get(key) and fast_healthy())
+    if not out["live_now"] and recent:   # between per-stream saves: use each stream's latest saved reading
+        lastv = {}
+        for x in samples:
+            if x["ts"] >= ticks[-1]["ts"] - 120:
+                lastv[x["vid"]] = x
+        out["live_now"] = sorted((x for x in lastv.values() if x["viewers"] > 0 and (not evx or permitted(evx, x))),
+                                 key=lambda x: -x["viewers"])
+    out["official_live"] = (recent and ticks[-1]["official"] > 0) or any(x["kind"] == "official" for x in out["live_now"])
     if not out["official_live"]:
         out["live_now"] = []          # only show streams while the official broadcast is on
     # broadcasts: runs of readings with no gap over 1 hour (restarts leave short gaps) (readings only exist while official was live)
