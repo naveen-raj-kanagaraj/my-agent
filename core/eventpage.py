@@ -484,14 +484,14 @@ let lastSeries=Date.now();
 async function tick(){
  if(document.hidden){lastFetch=Date.now();return}
  lastFetch=Date.now();
- try{const r=await fetch('data');if(!r.ok)throw 0;const j=await r.json();
+ try{const r=await fetch('data?t='+Math.floor(Date.now()/2000),{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();
   const sr=merge(D.series_recent,j.tail),sa=D.series_all||[];
   if(j.tail&&j.tail.length&&(!sa.length||j.tail[j.tail.length-1][0]-sa[sa.length-1][0]>60))sa.push(j.tail[j.tail.length-1]);
   const cut=(sr.length?sr[sr.length-1][0]:0)-6*3600;while(sr.length&&sr[0][0]<cut)sr.shift();
   const ws=D.wp_series||{};for(const [v,t] of Object.entries(j.wp_tail||{}))ws[v]=merge(ws[v],t);
   D={...j,series_recent:sr,series_all:sa,wp_series:ws};skew=Date.now()/1000-D.now;failing=false;render();
   const need=(D.wp||[]).some(w=>!ws[w.vid]);
-  if(need||Date.now()-lastSeries>300000){lastSeries=Date.now();fetch('series').then(x=>x.json()).then(x=>{D.series_all=x.series_all;D.series_recent=x.series_recent;
+  if(need||Date.now()-lastSeries>300000){lastSeries=Date.now();fetch('series?t='+Math.floor(Date.now()/60000),{cache:'no-store'}).then(x=>x.json()).then(x=>{D.series_all=x.series_all;D.series_recent=x.series_recent;
    const w2=x.wp_series||{};for(const [v,t] of Object.entries(D.wp_series||{}))w2[v]=merge(w2[v],t.filter(r=>!w2[v]||r[0]>w2[v][w2[v].length-1][0]));D.wp_series=w2}).catch(()=>{})}
  }catch(e){failing=true}
 }

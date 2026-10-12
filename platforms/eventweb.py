@@ -23,6 +23,8 @@ CACHE = {"/": 5, "/data": 2, "/series": 60}   # seconds Cloudflare (or any CDN) 
 def _headers(resp):
     secs = CACHE.get(request.path)
     resp.headers["Cache-Control"] = f"public, max-age={secs}, s-maxage={secs}" if secs else "no-store"
+    if secs:   # Cloudflare's Browser Cache TTL can override max-age; this one it passes through for its own cache
+        resp.headers["CDN-Cache-Control"] = f"max-age={secs}"
     resp.headers["Referrer-Policy"] = "no-referrer"
     resp.headers["Access-Control-Allow-Origin"] = "*"
     if (resp.status_code == 200 and not resp.direct_passthrough and "gzip" in request.headers.get("Accept-Encoding", "")
