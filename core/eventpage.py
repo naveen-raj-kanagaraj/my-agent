@@ -206,6 +206,9 @@ td.t{white-space:normal;min-width:0}.lg{width:22px;height:22px;border-radius:50%
 .rk{font:700 14px "Chakra Petch",sans-serif;color:#0a0a14;text-align:center;width:34px}
 .rk.official{background:var(--orange)}.rk.watch{background:var(--cyan)}.rk.community{background:var(--purple);color:#fff}
 .ch{font-weight:700;text-transform:uppercase;letter-spacing:.02em}.st{color:var(--muted);font-size:12px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px}
+.lv{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:1px 7px;font:700 11px "Share Tech Mono",monospace;color:#fff;background:rgba(255,77,94,.15);border:1px solid #ff4d5e;box-shadow:0 0 10px rgba(255,77,94,.55);animation:lvb 1.2s ease-in-out infinite;vertical-align:2px}
+.lv i{width:7px;height:7px;border-radius:50%;background:#ff4d5e;box-shadow:0 0 8px #ff4d5e}
+@keyframes lvb{50%{box-shadow:0 0 2px rgba(255,77,94,.2);opacity:.65}}
 .tag{font:11px "Share Tech Mono",monospace;padding:1px 6px;margin-left:6px;border:1px solid currentColor}
 .tag.official{color:var(--orange)}.tag.watch{color:var(--cyan)}.tag.community{color:#a78bfa}
 .mini{height:3px;background:linear-gradient(90deg,var(--purple),var(--lime));margin-top:5px;transition:width .6s}
@@ -331,7 +334,7 @@ function rows(){
  const tot=src.reduce((a,s)=>a+s.viewers,0)||1,top=Math.max(1,...list.map(s=>s.viewers));
  document.getElementById('lh').textContent=off?`Last broadcast streams (${all.length})`:`Live streams (${all.length})`;
  document.getElementById('rows').innerHTML=list.map((s,i)=>{const p=prev[s.vid];const cl=p===undefined&&Object.keys(prev).length?'':p<s.viewers?'fu':p>s.viewers?'fd':'';
-  return `<tr class="${cl}"><td class="rk ${K[s.kind]}">${i+1}</td><td class="t">${s.logo?`<img class="lg" src="${esc(s.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:''}<span class="ch">${esc(s.channel)}</span><span class="tag ${K[s.kind]}">${esc(s.kind)}</span>
+  return `<tr class="${cl}"><td class="rk ${K[s.kind]}">${i+1}</td><td class="t">${s.logo?`<img class="lg" src="${esc(s.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:''}<span class="ch">${esc(s.channel)}</span><span class="tag ${K[s.kind]}">${esc(s.kind)}</span>${off?'':'<span class="lv"><i></i>LIVE</span>'}
   <a class="st" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title.slice(0,100))}</a><div class="mini" style="width:${100*s.viewers/top}%"></div></td>
   <td class="num">${full(s.viewers)}</td><td class="num muted hide-m">${off?esc(s.at):(100*s.viewers/tot).toFixed(1)+'%'}</td></tr>`}).join('')||'<tr><td colspan=4 class="muted">Nothing live right now</td></tr>';
  prev={};src.forEach(s=>prev[s.vid]=s.viewers);
