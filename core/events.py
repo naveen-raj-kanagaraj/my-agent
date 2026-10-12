@@ -543,7 +543,17 @@ def fast_healthy() -> bool:
 def run_fast_forever():
     """Background thread: live counters for every active event."""
     repair_once()
+    last_log = 0
     while True:
+        if time.time() - last_log > 60:
+            last_log = time.time()
+            try:
+                from core import eventlog
+                for ev in events().values():
+                    if ev.get("active"):
+                        eventlog.check(ev)
+            except Exception as e:
+                print(f"Event log failed: {str(e)[:150]}")
         t0 = time.time()
         for ev in events().values():
             if ev.get("active") and _LIVE.get(ev["key"]):

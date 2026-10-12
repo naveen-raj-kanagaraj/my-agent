@@ -1530,6 +1530,7 @@ async def cmd_bot_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 EVENT_HELP = ("/event - live now, peak, average concurrent\n"
               "/event link - live dashboard that opens on any device (updates every 2s)\n"
+              "/event export - spreadsheet of everything recorded (also sent automatically after each broadcast)\n"
               "/event visitors - who is on the public dashboard right now, today, countries, sources\n"
               "/event chart - viewers-over-time chart\n"
               "/event page - dashboard snapshot as a file\n"
@@ -1574,6 +1575,12 @@ async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_document(document=_io.BytesIO(page.encode()), filename=f"{key}-viewership.html",
                                             caption="Open in your browser for the full dashboard (live data is a "
                                                     "snapshot; send /event page again for fresh numbers).")
+    elif action in ("export", "excel", "log", "data"):
+        from core import eventlog
+        import io as _io
+        xl = await asyncio.to_thread(eventlog.export_xlsx, key)
+        await update.message.reply_document(document=_io.BytesIO(xl), filename=f"{key}-viewership.xlsx",
+                                            caption="Peaks, by day, broadcasts, every stream's peak, watch parties, per-minute readings.")
     elif action in ("visitors", "users", "traffic"):
         from core import visitors
         await update.message.reply_text(visitors.summary(), disable_web_page_preview=True)
