@@ -566,7 +566,6 @@ def run_fast_forever():
                 for ev in events().values():
                     if ev.get("active"):
                         eventlog.check(ev)
-                        eventlog.check_anomalies(ev)
             except Exception as e:
                 print(f"Event log failed: {str(e)[:150]}")
         t0 = time.time()
