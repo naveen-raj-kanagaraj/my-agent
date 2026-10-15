@@ -22,6 +22,8 @@ CACHE = {"/": 5, "/data": 2, "/series": 60}   # seconds Cloudflare (or any CDN) 
 @app.after_request
 def _headers(resp):
     secs = CACHE.get(request.path)
+    if request.path.startswith("/elogo/"):
+        return resp
     resp.headers["Cache-Control"] = f"public, max-age={secs}, s-maxage={secs}" if secs else "no-store"
     if secs:   # Cloudflare's Browser Cache TTL can override max-age; this one it passes through for its own cache
         resp.headers["CDN-Cache-Control"] = f"max-age={secs}"
@@ -65,6 +67,19 @@ def hit():
     except Exception:
         pass
     return Response(status=204)
+
+
+@app.route("/elogo/<name>")
+def elogo(name):
+    import re as _re
+    if not _re.fullmatch(r"[A-Z0-9]+\.webp", name):
+        return Response(status=404)
+    path = os.path.join(eventpage.ELOGO_DIR, name)
+    if not os.path.isfile(path):
+        return Response(status=404)
+    r = Response(open(path, "rb").read(), mimetype="image/webp")
+    r.headers["Cache-Control"] = "public, max-age=86400"
+    return r
 
 
 @app.route("/robots.txt")
