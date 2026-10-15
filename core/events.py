@@ -50,7 +50,7 @@ PRESETS = {
                     "rakazone", "ansh", "casetoo", "sheek", "ipreeet", "shreeman", "mortal", "vaadhiyaar", "regaltos",
                     "snax", "sriop", "mayur", "neonxpawan", "pawanop", "ladypredator"],
         # checked directly every minute, even if search misses them
-        "always_check": ["@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
+        "always_check": ["@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
                          "@sriop-sr70", "@MayurGaming", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
@@ -877,10 +877,10 @@ def stream_tail(key: str, vids: list, n: int = 90) -> dict:
 
 
 ROSTER = [  # (match token, display name, channel handle) of the permitted watch-party streamers
-    ("dynamo", "Dynamo Gaming", None), ("bixi", "Bixi", "@TheBixiOP"), ("zgod", "ZGOD Gaming", "@ZGODGAMING"),
+    ("dynamo", "Dynamo Gaming", "@DynamoGaming"), ("bixi", "Bixi", "@TheBixiOP"), ("zgod", "ZGOD Gaming", "@ZGODGAMING"),
     ("neyoo", "Neyoo Gaming", "@NEYOOGAMINGYT"), ("mizo", "Mizo Plays", "@MizoPlays"), ("mrspike", "Mr Spike", "@MrSpike"),
     ("lolzz", "LoLzZz Gaming", "@LoLzZzGaming"), ("sharkshe", "Sharkshe", "@SHARKSHE"), ("mafianinja", "Mafia Ninja", "@MafiaNinja"),
-    ("ruthless", "Ruthless", "@ImRuthlessceopubg"), ("rakazone", "RakaZone Gaming", "@RakaZoneGaming"), ("ansh", "Ansh YT", "@AnshYT"),
+    ("ruthless", "Im Ruthless", "@ImRuthlessceopubg"), ("rakazone", "RakaZone Gaming", "@RakaZoneGaming"), ("ansh", "Ansh YT", "@AnshYT"),
     ("casetoo", "Casetoo", "@casetooop"), ("sheek", "Sheek Gaming", "@sheekgaming"), ("ipreeet", "iPreeet", "@IPREEET.69"),
     ("shreeman", "Shreeman Legend", None), ("mortal", "MortaL", "@MortaLyt"), ("vaadhiyaar", "Vaadhiyaar", None),
     ("regaltos", "Soul Regaltos", "@soulregaltos9810"), ("snax", "Snax Gaming", "@SnaxGaming"), ("sriop", "SRI OP", "@sriop-sr70"),
