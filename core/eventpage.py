@@ -64,6 +64,7 @@ def data(key: str = None) -> dict:
             return {**hit[1], "now": time.time()}
     st = events.stats(ev["key"])
     out = {"name": ev["name"], "ticks": st.get("ticks", 0), "now": time.time(), "every": events.FAST_SEC,
+           "next_start": events.next_start(ev["key"]),
            "links": ev.get("links") or {}}
     if st.get("ticks"):
         live = [{"vid": s["vid"], "channel": s.get("channel", ""), "title": s.get("title", ""), "kind": s["kind"],
@@ -217,6 +218,8 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 .more{all:unset;cursor:pointer;display:block;margin:8px auto 0;padding:6px 14px;border:1px solid var(--line);font:12px "Share Tech Mono",monospace;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
 .muted{color:var(--muted)}.scroll{overflow-x:auto}
+.cd{text-align:center;border-color:#ff4d5e}.cdv{font:700 54px "Chakra Petch",sans-serif;letter-spacing:.04em;color:#fff;text-shadow:0 0 18px rgba(255,77,94,.5);margin:6px 0}
+@media(max-width:600px){.cdv{font-size:38px}}
 .foot{font-size:12px;color:var(--muted);margin-top:14px}.disc{font-size:11px;border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
 @media(max-width:600px){.hide-m{display:none}.st{max-width:52vw;font-size:11px}td{padding:6px 5px}th{padding:5px}.title h1{font-size:15px}
  .bar .in{gap:5px;padding:7px 12px}.title{width:100%}.pill{font-size:11px;padding:3px 7px}#nx{display:none!important}
@@ -264,7 +267,7 @@ function render(){
  const by=off?{official:LB.split.official,'watch party':LB.split.watch,community:LB.split.community}:{official:0,'watch party':0,community:0};
  if(!off)live.forEach(s=>by[s.kind]=(by[s.kind]||0)+s.viewers);
  if(!document.getElementById('big')){
-  app.innerHTML=`
+  app.innerHTML=`<div class="card cd" id="cd" style="display:none;margin-top:12px"><div class="lbl">// Next broadcast goes live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>
   <div class="hero"><div class="card big"><div class="lbl" id="bk"></div><div class="v" id="big" data-v="0">0</div>
     <div><span id="dl" class="delta flat"></span> <span class="muted" id="nlive"></span></div>
     <div class="split" id="split"></div><div class="legend" id="leg"></div></div>
@@ -505,7 +508,13 @@ async function shareTo(app){if(!cur)return;const f=new File([cur.blob],cur.name,
  else{window.open('https://www.instagram.com/','_blank','noopener');document.getElementById('mhint').textContent='Image downloaded. Upload it as a post or story on Instagram (on desktop: Create, then select the image).'}}
 document.getElementById('mig').onclick=()=>shareTo('ig');document.getElementById('mxb').onclick=()=>shareTo('x');
 // ---------- status + polling ----------
-function status(){
+function countdown(){const el=document.getElementById('cd');if(!el)return null;
+ const ns=D.next_start,left=ns?ns-nowS():0;if(D.official_live||!ns||left<=0){el.style.display='none';return null}
+ el.style.display='block';const d=Math.floor(left/86400),h=Math.floor(left%86400/3600),m=Math.floor(left%3600/60),sec=Math.floor(left%60),p=n=>String(n).padStart(2,'0');
+ document.getElementById('cdv').textContent=(d?d+'D ':'')+`${p(h)}:${p(m)}:${p(sec)}`;
+ document.getElementById('cdw').textContent=new Date(ns*1000).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})+' IST';
+ return left}
+function status(){const cdl=countdown();
  const age=D.updated?Math.max(0,nowS()-D.updated):null;
  document.getElementById('ago').textContent=age===null?'-':age<60?`${age.toFixed(0)}s`:`${Math.floor(age/60)}m`;
  const st=document.getElementById('st'),t=document.getElementById('stt'),live=D.official_live&&(D.live||[]).length>0;
@@ -513,8 +522,9 @@ function status(){
  else if(failing){st.className='pill warn';t.textContent='RECONNECTING'}
  else if(age!==null&&age>Math.max(15,D.every*6)&&live){st.className='pill warn';t.textContent='DELAYED'}
  else if(live){st.className='pill';t.textContent=`LIVE // EVERY ${D.every}S`}
+ else if(cdl){st.className='pill';t.textContent='STARTS IN '+document.getElementById('cdv').textContent}
  else{st.className='pill off';t.textContent='OFFICIAL OFFLINE'}
- const nx=document.getElementById('nx');if(!LIVE){nx.style.display='none';return}
+ const nx=document.getElementById('nx');if(!LIVE||cdl){nx.style.display='none';return}nx.style.display="";
  const left=Math.max(0,EVERY-(Date.now()-lastFetch));document.getElementById('nxt').textContent=(left/1000).toFixed(1)+'s';
  document.getElementById('rp').setAttribute('stroke-dashoffset',44*(left/EVERY));
 }
