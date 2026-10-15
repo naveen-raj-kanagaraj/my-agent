@@ -48,9 +48,10 @@ PRESETS = {
         # only these watch-party channels are permitted to restream; everyone else is ignored (with official channels kept)
         "allowed": ["dynamo", "bixi", "zgod", "neyoo", "mizo", "mrspike", "lolzz", "sharkshe", "mafianinja", "ruthless",
                     "rakazone", "ansh", "casetoo", "sheek", "ipreeet", "shreeman", "mortal", "vaadhiyaar", "regaltos",
-                    "snax", "sriop", "mayur", "neonxpawan", "pawanop", "ladypredator"],
+                    "snax", "sriop", "mayur", "neonxpawan", "pawanop", "ladypredator", "soulaman"],
+        "videos_extra": ["kf7OYvjee_k"],        # specific streams to track (Soul Aman's finals stream)
         # checked directly every minute, even if search misses them
-        "always_check": ["@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
+        "always_check": ["@SoulAman", "@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
                          "@sriop-sr70", "@MayurGaming", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
@@ -221,7 +222,7 @@ def allowed_list(ev: dict) -> list:
 def permitted(ev: dict, s: dict) -> bool:
     """With an allow-list: only official channels and the listed watch-party channels count."""
     al = allowed_list(ev)
-    if not al:
+    if not al or s.get("vid") in PRESETS.get(ev.get("key", ""), {}).get("videos_extra", []):
         return True
     ch = s.get("channel", "").lower()
     if any(o and o in ch for o in ev.get("official", [])) or (s.get("channel_id") or "").lower() in ev.get("official", []):
@@ -236,7 +237,7 @@ def relevant(ev: dict, s: dict) -> bool:
     if s["vid"] in ev.get("excluded", []) or (s.get("channel_id") and s["channel_id"] in ev.get("excluded", [])) \
             or s.get("channel", "").lower() in ev.get("excluded", []):
         return False
-    if s["vid"] in ev.get("videos", []) or _forced_channel(ev, s):
+    if s["vid"] in ev.get("videos", []) + PRESETS.get(ev.get("key", ""), {}).get("videos_extra", []) or _forced_channel(ev, s):
         return True
     text = f"{s.get('title', '')} {s.get('channel', '')}".lower()
     return any(m in text for m in ev["match"])
@@ -609,7 +610,8 @@ def poll(ev: dict, now: int = None) -> dict:
             "SELECT vid, channel, channel_id, title FROM ev_streams WHERE event=? AND last_seen>?",
             (ev["key"], now - RECHECK_MIN * 60))]
     api = {}
-    known = list({*found, *[r["vid"] for r in recent], *ev.get("videos", [])})
+    vids = ev.get("videos", []) + PRESETS.get(ev["key"], {}).get("videos_extra", [])
+    known = list({*found, *[r["vid"] for r in recent], *vids})
     try:
         api = api_counts(known)
     except Exception as e:
@@ -627,7 +629,7 @@ def poll(ev: dict, now: int = None) -> dict:
                     found[vid]["viewers"] = v
     else:
         missing = [r["vid"] for r in recent if r["vid"] not in found][:MAX_DIRECT_CHECKS]
-        missing += [v for v in ev.get("videos", []) if v not in found and v not in missing]
+        missing += [v for v in vids if v not in found and v not in missing]
         if missing:
             with ThreadPoolExecutor(max_workers=6) as pool:
                 for s in pool.map(lambda v: _safe(check_video, v), missing):
@@ -885,7 +887,7 @@ ROSTER = [  # (match token, display name, channel handle) of the permitted watch
     ("shreeman", "Shreeman Legend", None), ("mortal", "MortaL", "@MortaLyt"), ("vaadhiyaar", "Vaadhiyaar", None),
     ("regaltos", "Soul Regaltos", "@soulregaltos9810"), ("snax", "Snax Gaming", "@SnaxGaming"), ("sriop", "SRI OP", "@sriop-sr70"),
     ("mayur", "Mayur Gaming", "@MayurGaming"), ("neonxpawan", "Neon X Pawan", "@NEONXPAWANOP"),
-    ("ladypredator", "Lady Predator", "@LadyPredatorGaming")]
+    ("ladypredator", "Lady Predator", "@LadyPredatorGaming"), ("soulaman", "Soul Aman", "@SoulAman")]
 _RBUSY = set()
 
 
