@@ -54,7 +54,7 @@ PRESETS = {
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
                          "@sriop-sr70", "@MayurGaming", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
-        "next_start": "2026-10-16 02:30",       # IST; shown as a countdown while the official stream is offline
+        "next_start": "2026-10-16 14:30",       # IST; shown as a countdown while the official stream is offline
         "match": ["bmsd", "bgmi showdown", "battlegrounds mobile india showdown", "battlegrounds mobile showdown",
                   "bgmi show down", "bm showdown"],
         "queries": ["BMSD", "BMSD 2026", "BGMI Showdown", "Battlegrounds Mobile India Showdown", "BMSD watch party"],
@@ -874,6 +874,42 @@ def stream_series(key: str, vids: list, t0: float, t1: float, limit: int = 600) 
 def stream_tail(key: str, vids: list, n: int = 90) -> dict:
     h = _HIST.get(key, {})
     return {v: [list(x) for x in list(h[v])[-n:]] for v in vids if v in h}
+
+
+ROSTER = [  # (match token, display name, channel handle) of the permitted watch-party streamers
+    ("dynamo", "Dynamo Gaming", None), ("bixi", "Bixi", "@TheBixiOP"), ("zgod", "ZGOD Gaming", "@ZGODGAMING"),
+    ("neyoo", "Neyoo Gaming", "@NEYOOGAMINGYT"), ("mizo", "Mizo Plays", "@MizoPlays"), ("mrspike", "Mr Spike", "@MrSpike"),
+    ("lolzz", "LoLzZz Gaming", "@LoLzZzGaming"), ("sharkshe", "Sharkshe", "@SHARKSHE"), ("mafianinja", "Mafia Ninja", "@MafiaNinja"),
+    ("ruthless", "Ruthless", "@ImRuthlessceopubg"), ("rakazone", "RakaZone Gaming", "@RakaZoneGaming"), ("ansh", "Ansh YT", "@AnshYT"),
+    ("casetoo", "Casetoo", "@casetooop"), ("sheek", "Sheek Gaming", "@sheekgaming"), ("ipreeet", "iPreeet", "@IPREEET.69"),
+    ("shreeman", "Shreeman Legend", None), ("mortal", "MortaL", "@MortaLyt"), ("vaadhiyaar", "Vaadhiyaar", None),
+    ("regaltos", "Soul Regaltos", "@soulregaltos9810"), ("snax", "Snax Gaming", "@SnaxGaming"), ("sriop", "SRI OP", "@sriop-sr70"),
+    ("mayur", "Mayur Gaming", "@MayurGaming"), ("neonxpawan", "Neon X Pawan", "@NEONXPAWANOP"),
+    ("ladypredator", "Lady Predator", "@LadyPredatorGaming")]
+_RBUSY = set()
+
+
+def channel_card(handle: str) -> dict:
+    """{name, logo} for a channel handle (cached; fetched in the background the first time)."""
+    if not handle:
+        return {}
+    v = store.kv_get(f"ev_rcard:{handle}")
+    if v is None and handle not in _RBUSY:
+        _RBUSY.add(handle)
+
+        def fetch():
+            try:
+                r = _http.get(f"https://www.youtube.com/{handle}", headers={"User-Agent": _UA, "Accept-Language": "en"}, timeout=10)
+                img = re.search(r'<meta property="og:image" content="([^"]+)"', r.text)
+                name = re.search(r'<meta property="og:title" content="([^"]+)"', r.text)
+                store.kv_set(f"ev_rcard:{handle}", {
+                    "logo": re.sub(r"=s\d+.*$", "=s88-c-k-c0x00ffffff-no-rj", img.group(1)) if img else "",
+                    "name": name.group(1).replace("&amp;", "&") if name else ""})
+            except Exception:
+                pass
+            _RBUSY.discard(handle)
+        _fast_pool.submit(fetch)
+    return v or {}
 
 
 def next_start(key: str):

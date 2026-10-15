@@ -115,9 +115,39 @@ def data(key: str = None) -> dict:
         out["wp"] = [{"vid": w["vid"], "channel": w["channel"], "viewers": w["viewers"], "url": w["url"], "logo": w.get("logo", ""),
                       "peak": max(peaks.get(w["vid"], 0), w["viewers"])} for w in wp]
         out["wp_series"] = ser
+    if ev["key"] == "bmsd":
+        out["roster"] = _roster(out)
     with _cache_lock:
         _cache[ev["key"]] = (time.time(), out)
     return out
+
+
+def _roster(out: dict) -> list:
+    """Every permitted watch-party streamer: live now / ended (peak this broadcast) / yet to start."""
+    n = events._norm
+    countdown = bool(out.get("next_start")) and not out.get("official_live")
+    live = [x for x in out.get("live", []) if x["kind"] != "official"]
+    lb = out.get("last_broadcast") or {}
+    done = [] if countdown else [x for x in lb.get("streams", []) if x["kind"] != "official"]
+    rows = []
+    for token, name, handle in events.ROSTER:
+        card = events.channel_card(handle)
+        lv = [x for x in live if token in n(x["channel"])]
+        pk = [x for x in done if token in n(x["channel"])]
+        logo = card.get("logo") or next((x.get("logo") for x in lv + pk if x.get("logo")), "")
+        url = (lv or pk)[0]["url"] if (lv or pk) else (f"https://www.youtube.com/{handle}" if handle else "")
+        r = {"name": card.get("name") or name, "logo": logo, "url": url, "vid": (lv or pk or [{}])[0].get("vid", "")}
+        if lv:
+            r.update(status="live", viewers=sum(x["viewers"] for x in lv), peak=max(x["viewers"] for x in pk) if pk else 0)
+            r["peak"] = max(r["peak"], r["viewers"])
+        elif pk:
+            r.update(status="ended", viewers=0, peak=max(x["viewers"] for x in pk))
+        else:
+            r.update(status="upcoming", viewers=0, peak=0)
+        rows.append(r)
+    order = {"live": 0, "ended": 1, "upcoming": 2}
+    rows.sort(key=lambda r: (order[r["status"]], -r["viewers"], -r["peak"], r["name"].lower()))
+    return rows
 
 
 def _social() -> str:
@@ -323,10 +353,17 @@ function render(){
  rows();wpRows();chips();drawChart();mark();
 }
 function wpRows(){
- const off=isOff(),wp=D.wp||[];
- document.getElementById('wph').textContent=off?'Watch party leaderboard, last broadcast':'Watch party leaderboard, live';
- document.getElementById('wprows').innerHTML=wp.map((w,i)=>`<tr><td class="rk watch">${i+1}</td><td class="t"><span class="sw" style="background:${PAL[i%8]}"></span>${w.logo?`<img class="lg" src="${esc(w.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:''}<a class="ch" href="${esc(w.url)}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(w.channel)}</a></td>
-  <td class="num">${full(w.viewers)}</td><td class="num hide-m muted">${fmt(w.peak)}</td><td style="text-align:right"><button class="btn sm ghost" data-share="${esc(w.vid)}">Share</button></td></tr>`).join('')||'<tr><td colspan=5 class="muted">No watch parties yet</td></tr>';
+ const off=isOff(),R=D.roster||[],cd=!!(D.next_start&&!D.official_live);
+ document.getElementById('wph').textContent=cd?'Watch party streamers, yet to start':off?'Watch party streamers, last broadcast':'Watch party streamers, live';
+ document.getElementById('wpth').textContent='Status';
+ let rank=0;
+ document.getElementById('wprows').innerHTML=R.map(w=>{const has=w.status!=='upcoming';if(has)rank++;
+  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?'<span class="muted">ENDED</span>':'<span class="muted">YET TO START</span>';
+  const logo=w.logo?`<img class="lg" src="${esc(w.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="lg" style="display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${esc(w.name.slice(0,2).toUpperCase())}</span>`;
+  const nm=w.url?`<a class="ch" href="${esc(w.url)}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(w.name)}</a>`:`<span class="ch">${esc(w.name)}</span>`;
+  return `<tr><td class="rk ${has?'watch':''}" style="${has?'':'background:var(--line);color:var(--muted)'}">${has?rank:'-'}</td><td class="t">${logo}${nm}</td>
+  <td class="num" style="font-size:13px">${st}</td><td class="num hide-m muted">${w.peak?fmt(w.peak):'-'}</td>
+  <td style="text-align:right">${w.vid&&has?`<button class="btn sm ghost" data-share="${esc(w.vid)}">Share</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=5 class="muted">No watch parties yet</td></tr>';
  document.querySelectorAll('[data-share]').forEach(b=>b.onclick=()=>openShare('streamer',b.dataset.share));
 }
 function rows(){
@@ -516,7 +553,7 @@ function countdown(){const el=document.getElementById('cd');if(!el)return null;
  return left}
 function status(){const cdl=countdown();
  const age=D.updated?Math.max(0,nowS()-D.updated):null;
- document.getElementById('ago').textContent=age===null?'-':age<60?`${age.toFixed(0)}s`:`${Math.floor(age/60)}m`;
+ document.getElementById('ago').textContent=age===null?'-':age<60?`${age.toFixed(0)}s`:age<3600?`${Math.floor(age/60)}m`:age<86400?`${Math.floor(age/3600)}h`:`${Math.floor(age/86400)}d`;
  const st=document.getElementById('st'),t=document.getElementById('stt'),live=D.official_live&&(D.live||[]).length>0;
  if(!LIVE){st.className='pill off';t.textContent='SNAPSHOT'}
  else if(failing){st.className='pill warn';t.textContent='RECONNECTING'}
