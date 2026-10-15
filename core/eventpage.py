@@ -155,9 +155,12 @@ def _social() -> str:
                    f'<b>{html.escape(n.upper())}</b><span>{html.escape(h)}</span></a>' for n, u, h in SOCIAL)
 
 
-def build_demo_html(style: str = "v1") -> str:
-    """Self-contained page with generated data (no server), for testing the layout and graphs."""
-    return build_html("bmsd", live=False, style=style).replace("const DEMO=false", "const DEMO=true")
+def build_demo_html(style: str = "v1", logos: dict = None) -> str:
+    """Self-contained page with generated data (no server), for testing the layout and graphs.
+    logos: {channel handle: base64 webp} embedded so the demo shows real channel logos offline."""
+    names = {h: n for _, n, h in events.ROSTER if h}
+    dl = {names[h]: "data:image/webp;base64," + b for h, b in (logos or {}).items() if h in names}
+    return build_html("bmsd", live=False, style=style).replace("const DEMO=false, DLOGO={}", "const DEMO=true, DLOGO=" + json.dumps(dl))
 
 
 def build_html(key: str = None, live: bool = False, style: str = None) -> str:
@@ -300,7 +303,7 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
  <img id="mimg" alt="Share card"><div class="mrow"><button class="btn" id="mig">Instagram</button><button class="btn" id="mxb">X</button><button class="btn ghost" id="mdl">Download</button></div>
  <p class="muted" id="mhint" style="font-size:12px;margin:10px 0 0">On your phone, Instagram and X open the share menu with the image attached: pick Instagram (Story or Post) or X.</p></div></div>
 <script>
-const DEMO=false, V2=__V2__, ROSTERN=__ROSTERN__;
+const DEMO=false, DLOGO={}, V2=__V2__, ROSTERN=__ROSTERN__;
 const LIVE=__LIVE__||DEMO, EVERY=__REFRESH__*1000, URLX='https://live.letsgrowesports.com', BRAND='__BRAND__', TITLE='__TITLE__';
 let D=__DATA__, prev={}, prevTotal=null, view='total', range='full', wpAll=false, kind='all', q='', skew=0, lastFetch=Date.now(), failing=false, mode=null, showAll=false, hover=null, hidden={};
 const PAL=['#b6f23a','#4cc9f0','#ff8a3d','#ff5fa2','#a78bfa','#ffd23f','#2dd4bf','#ff6b6b'];
@@ -669,17 +672,17 @@ let lastSeries=Date.now();
 let DM=null;
 function demoInit(m){const now=Date.now()/1000;DM={mode:m,t0:now-2.5*3600,hist:{},tot:[],last:0};
  DM.off=[{vid:'o1',channel:'KRAFTON INDIA ESPORTS',title:'[HINDI] BMSD 2026 | Grand Finals #BGMILIVE',base:190000,ph:0},{vid:'o2',channel:'KRAFTON INDIA ESPORTS',title:'[ENGLISH] BMSD 2026 | Grand Finals',base:14000,ph:1},{vid:'o3',channel:'KRAFTON INDIA ESPORTS',title:'[MAP STREAM] BMSD 2026 | Grand Finals',base:3500,ph:2}];
- DM.st=ROSTERN.map((n,i)=>({vid:'w'+i,channel:n,title:`BMSD 2026 Grand Finals watch party with ${n}`,base:i%5===4?0:Math.round(70000/Math.pow(i+1,.75)),ph:Math.random()*6}));
+ DM.st=ROSTERN.map((n,i)=>({vid:'w'+i,channel:n,title:`BMSD 2026 Grand Finals watch party with ${n}`,base:i%5===4?0:Math.round(70000/Math.pow(i+1,.75)),ph:Math.random()*6,logo:DLOGO[n]||''}));
  for(let t=DM.t0;t<=now-200;t+=30)demoStep(t);for(let t=now-200;t<=now;t+=2)demoStep(t)}
 function demoVal(s,t){const p=(t-DM.t0)/3600;return Math.max(0,Math.round(s.base*(.62+.38*Math.sin(p*2.4+s.ph))*(1+.06*Math.sin(t/7+s.ph))*(.97+.06*Math.random())))}
 function demoStep(t){let o=0,w=0;DM.off.concat(DM.st).forEach(s=>{if(!s.base)return;const v=demoVal(s,t);(DM.hist[s.vid]=DM.hist[s.vid]||[]).push([Math.round(t),v]);s.cur=v;s.peak=Math.max(s.peak||0,v);if(s.vid[0]==='o')o+=v;else w+=v});DM.tot.push([Math.round(t),o+w,o,w,0]);DM.last=t}
 function demoData(){const now=Date.now()/1000;if(!DM)demoInit('live');while(DM.last+2<=now)demoStep(DM.last+2);
  const liveM=DM.mode==='live',all=DM.off.concat(DM.st).filter(s=>s.base),tf=t=>new Date(t*1000).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'})+' IST';
- const pk=DM.tot.reduce((a,r)=>r[1]>a[1]?r:a),live=liveM?all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.cur,url:'#',logo:''})).sort((a,b)=>b.viewers-a.viewers):[];
- const wp=DM.st.filter(s=>s.base).map(s=>({vid:s.vid,channel:s.channel,viewers:liveM?s.cur:0,url:'#',logo:'',peak:s.peak})).sort((a,b)=>b.viewers-a.viewers||b.peak-a.peak).slice(0,8);
+ const pk=DM.tot.reduce((a,r)=>r[1]>a[1]?r:a),live=liveM?all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.cur,url:'#',logo:s.logo||''})).sort((a,b)=>b.viewers-a.viewers):[];
+ const wp=DM.st.filter(s=>s.base).map(s=>({vid:s.vid,channel:s.channel,viewers:liveM?s.cur:0,url:'#',logo:s.logo||'',peak:s.peak})).sort((a,b)=>b.viewers-a.viewers||b.peak-a.peak).slice(0,8);
  const ws={};wp.forEach(w=>ws[w.vid]=DM.hist[w.vid]);
- const roster=DM.st.map(s=>({name:s.channel,logo:'',url:'#',vid:s.base?s.vid:'',status:!liveM||!s.base?'upcoming':'live',viewers:liveM&&s.base?s.cur:0,peak:liveM?s.peak||0:0})).sort((a,b)=>({live:0,ended:1,upcoming:2}[a.status]-{live:0,ended:1,upcoming:2}[b.status])||b.viewers-a.viewers||a.name.localeCompare(b.name));
- const LBs=all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.peak,at:tf(DM.t0+3600).replace(' IST',''),url:'#',logo:''})).sort((a,b)=>b.viewers-a.viewers);
+ const roster=DM.st.map(s=>({name:s.channel,logo:s.logo||'',url:'#',vid:s.base?s.vid:'',status:!liveM||!s.base?'upcoming':'live',viewers:liveM&&s.base?s.cur:0,peak:liveM?s.peak||0:0})).sort((a,b)=>({live:0,ended:1,upcoming:2}[a.status]-{live:0,ended:1,upcoming:2}[b.status])||b.viewers-a.viewers||a.name.localeCompare(b.name));
+ const LBs=all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.peak,at:tf(DM.t0+3600).replace(' IST',''),url:'#',logo:s.logo||''})).sort((a,b)=>b.viewers-a.viewers);
  return{name:'BMSD 2026',ticks:DM.tot.length,now,every:2,method:'demo data',updated:DM.last,official_live:liveM,next_start:liveM?null:(Date.UTC(2026,9,16,9,0)/1000>now?Date.UTC(2026,9,16,9,0)/1000:now+5*3600),live,wp,wp_series:ws,roster,
   peak:pk[1],peak_when:tf(pk[0]),avg:Math.round(DM.tot.reduce((a,r)=>a+r[1],0)/DM.tot.length),peak_official:Math.max(...DM.tot.map(r=>r[2])),peak_watch:Math.max(...DM.tot.map(r=>r[3])),
   days:[{day:'Fri 16 Oct',peak:pk[1],at:tf(pk[0]).replace(' IST',''),avg:Math.round(pk[1]*.6)}],series_all:DM.tot.filter((_,i)=>i%5===0),series_recent:DM.tot.slice(),
