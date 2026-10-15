@@ -46,8 +46,15 @@ PRESETS = {
     "bmsd": {
         "name": "BMSD 2026",
         # only these watch-party channels are permitted to restream; everyone else is ignored (with official channels kept)
-        "allowed": ["snax", "neyoo", "lolzz", "zgod"],
-        "always_check": ["@NEYOOGAMINGYT"],     # checked directly every minute, even if search misses it
+        "allowed": ["dynamo", "bixi", "zgod", "neyoo", "mizo", "mrspike", "lolzz", "sharkshe", "mafianinja", "ruthless",
+                    "rakazone", "ansh", "casetoo", "sheek", "ipreeet", "shreeman", "mortal", "vaadhiyaar", "regaltos",
+                    "snax", "sriop", "mayur", "neonxpawan", "pawanop", "ladypredator"],
+        # checked directly every minute, even if search misses them
+        "always_check": ["@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
+                         "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
+                         "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
+                         "@sriop-sr70", "@MayurGaming", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
+        "next_start": "2026-10-16 02:30",       # IST; shown as a countdown while the official stream is offline
         "match": ["bmsd", "bgmi showdown", "battlegrounds mobile india showdown", "battlegrounds mobile showdown",
                   "bgmi show down", "bm showdown"],
         "queries": ["BMSD", "BMSD 2026", "BGMI Showdown", "Battlegrounds Mobile India Showdown", "BMSD watch party"],
@@ -591,10 +598,11 @@ def poll(ev: dict, now: int = None) -> dict:
         except Exception as e:
             errors += 1
             print(f"Event search '{q}' failed: {str(e)[:120]}")
-    for ch in (ev.get("channels", []) + PRESETS.get(ev["key"], {}).get("always_check", []))[:30]:
-        s = check_channel(ch)
-        if s and s["vid"] not in found and relevant(ev, s):
-            found[s["vid"]] = s
+    chans = list(dict.fromkeys(ev.get("channels", []) + PRESETS.get(ev["key"], {}).get("always_check", [])))[:40]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for s in pool.map(check_channel, chans):
+            if s and s["vid"] not in found and relevant(ev, s):
+                found[s["vid"]] = s
     with store._lock:
         c = _db()
         recent = [dict(r) for r in c.execute(
@@ -866,6 +874,18 @@ def stream_series(key: str, vids: list, t0: float, t1: float, limit: int = 600) 
 def stream_tail(key: str, vids: list, n: int = 90) -> dict:
     h = _HIST.get(key, {})
     return {v: [list(x) for x in list(h[v])[-n:]] for v in vids if v in h}
+
+
+def next_start(key: str):
+    """Next scheduled official start (epoch) if it's in the future: set with /event next, else the preset."""
+    v = store.kv_get(f"event_next:{key}") or PRESETS.get(key, {}).get("next_start")
+    if not v:
+        return None
+    try:
+        ts = datetime.strptime(v, "%Y-%m-%d %H:%M").replace(tzinfo=REPORT_TZ).timestamp() if isinstance(v, str) else float(v)
+    except ValueError:
+        return None
+    return ts if ts > time.time() else None
 
 
 def fmt_n(n) -> str:

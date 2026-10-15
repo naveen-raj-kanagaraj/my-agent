@@ -1531,6 +1531,7 @@ async def cmd_bot_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
 EVENT_HELP = ("/event - live now, peak, average concurrent\n"
               "/event link - live dashboard that opens on any device (updates every 2s)\n"
               "/event export - spreadsheet of everything recorded (also sent automatically after each broadcast)\n"
+              "/event next 2026-10-16 02:30 - countdown on the site to the next broadcast (IST)\n"
               "/event visitors - who is on the public dashboard right now, today, countries, sources\n"
               "/event chart - viewers-over-time chart\n"
               "/event page - dashboard snapshot as a file\n"
@@ -1581,6 +1582,17 @@ async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
         xl = await asyncio.to_thread(eventlog.export_xlsx, key)
         await update.message.reply_document(document=_io.BytesIO(xl), filename=f"{key}-viewership.xlsx",
                                             caption="Peaks, by day, broadcasts, every stream's peak, watch parties, per-minute readings.")
+    elif action == "next":
+        if rest.strip() == "off":
+            store.kv_set(f"event_next:{key}", "1970-01-01 00:00")
+            await update.message.reply_text("Countdown removed.")
+            return
+        m = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})", rest)
+        if not m:
+            await update.message.reply_text("Use: /event next 2026-10-16 02:30  (IST), or /event next off")
+            return
+        store.kv_set(f"event_next:{key}", f"{m.group(1)} {m.group(2).zfill(5)}")
+        await update.message.reply_text(f"Countdown set: next broadcast {m.group(1)} {m.group(2)} IST.")
     elif action in ("anomalies", "spikes", "bots"):
         from core import eventlog
         import io as _io
