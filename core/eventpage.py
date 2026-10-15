@@ -163,6 +163,22 @@ def build_demo_html(style: str = "v1", logos: dict = None) -> str:
     return build_html("bmsd", live=False, style=style).replace("const DEMO=false, DLOGO={}", "const DEMO=true, DLOGO=" + json.dumps(dl))
 
 
+ELOGO_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "eventlogos")
+
+
+def _elogos(embed: bool = False) -> dict:
+    """Event logos for the history section: served files on the live site, embedded for snapshots and demos."""
+    import base64
+    out = {}
+    for f in sorted(os.listdir(ELOGO_DIR)) if os.path.isdir(ELOGO_DIR) else []:
+        k = f.rsplit(".", 1)[0]
+        if embed:
+            out[k] = "data:image/webp;base64," + base64.b64encode(open(os.path.join(ELOGO_DIR, f), "rb").read()).decode()
+        else:
+            out[k] = f"elogo/{f}"
+    return out
+
+
 def build_html(key: str = None, live: bool = False, style: str = None) -> str:
     """live=True: the page re-reads ./data every REFRESH_SEC seconds. Otherwise a snapshot (e.g. a file sent on Telegram)."""
     d = data(key)
@@ -170,6 +186,7 @@ def build_html(key: str = None, live: bool = False, style: str = None) -> str:
     return (PAGE.replace("__TITLE__", html.escape(d.get("name", "Event")))
                 .replace("__DATA__", payload)
                 .replace("__LIVE__", "true" if live else "false")
+                .replace("__ELOGO__", json.dumps(_elogos(embed=not live)))
                 .replace("__V2__", "true" if (style or os.getenv("EVENT_STYLE", "v1")) == "v2" else "false")
                 .replace("__ROSTERN__", json.dumps([n for _, n, _ in events.ROSTER]))
                 .replace("__REFRESH__", str(REFRESH_SEC))
@@ -303,7 +320,7 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
  <img id="mimg" alt="Share card"><div class="mrow"><button class="btn" id="mig">Instagram</button><button class="btn" id="mxb">X</button><button class="btn ghost" id="mdl">Download</button></div>
  <p class="muted" id="mhint" style="font-size:12px;margin:10px 0 0">On your phone, Instagram and X open the share menu with the image attached: pick Instagram (Story or Post) or X.</p></div></div>
 <script>
-const DEMO=false, DLOGO={}, V2=__V2__, ROSTERN=__ROSTERN__;
+const DEMO=false, DLOGO={}, ELOGO=__ELOGO__, V2=__V2__, ROSTERN=__ROSTERN__;
 const LIVE=__LIVE__||DEMO, EVERY=__REFRESH__*1000, URLX='https://live.letsgrowesports.com', BRAND='__BRAND__', TITLE='__TITLE__';
 let D=__DATA__, prev={}, prevTotal=null, view='total', range='full', wpAll=false, kind='all', q='', skew=0, lastFetch=Date.now(), failing=false, mode=null, showAll=false, hover=null, hidden={};
 const PAL=['#b6f23a','#4cc9f0','#ff8a3d','#ff5fa2','#a78bfa','#ffd23f','#2dd4bf','#ff6b6b'];
@@ -319,7 +336,9 @@ function isOff(){return !D.official_live&&D.last_broadcast}
 const HIST=[['LAUNCH','21',540],['BGIS','21',460],['BMPS','22',305],['BMSD','22',315],['BGIS','23',235],['BMPS','23',201],['INKR','23',178],['BGIS','24',275],['BMPS','24',495],['BGIS','25',485],['BMPS','25',320],['BMSD','25',380],['BMIC','25',372],['BGIS','26',578],['BMPS','26',730],['BMSD','26',450]];
 const HNAME={LAUNCH:'BGMI Launch Party',BGIS:'BGIS',BMPS:'BMPS',BMSD:'BMSD',INKR:'INKR Invitational',BMIC:'BMIC'};
 function hist(){const h=HIST.map(x=>x.slice());const cur=Math.round((D.peak||0)/1000);if(cur>h[15][2])h[15][2]=cur;return h}
-function drawHist(ctx,W,H,fs){fs=fs||1;const h=hist(),n=h.length,pl=34*fs,pr=34*fs,pt=46*fs,pb=58*fs,cw=W-pl-pr,ch=H-pt-pb,max=820;
+const EIMG={};function elogo(k){const u=ELOGO[k];if(!u)return null;let im=EIMG[k];if(!im){im=EIMG[k]=new Image();im.onload=()=>{drawHistCanvas()};im.src=u}return im.complete&&im.naturalWidth?im:null}
+const ekey=x=>x[0]+x[1];
+function drawHist(ctx,W,H,fs){fs=fs||1;const h=hist(),n=h.length,pl=34*fs,pr=34*fs,LS=Math.min(54*fs,(W-68*fs)/(n-1)*.86),pt=46*fs,pb=LS+30*fs,cw=W-pl-pr,ch=H-pt-pb,max=820;
  const X=i=>pl+i*cw/(n-1),Y=v=>pt+ch-v/max*ch,top=h.reduce((a,x,i)=>x[2]>h[a][2]?i:a,0);ctx.clearRect(0,0,W,H);
  ctx.strokeStyle=css('--line');ctx.lineWidth=1;ctx.fillStyle=css('--muted');ctx.font=`${11*fs}px "Share Tech Mono",monospace`;ctx.textAlign='left';ctx.textBaseline='bottom';
  [200,400,600,800].forEach(v=>{ctx.globalAlpha=.6;ctx.beginPath();ctx.moveTo(pl,Y(v));ctx.lineTo(W-pr,Y(v));ctx.stroke();ctx.globalAlpha=1;ctx.fillText(v+'K',pl+2,Y(v)-2)});
@@ -329,22 +348,24 @@ function drawHist(ctx,W,H,fs){fs=fs||1;const h=hist(),n=h.length,pl=34*fs,pr=34*
  const small=W/fs<620;ctx.textAlign='center';
  h.forEach((x,i)=>{const last=i===n-1,hi=i===top;ctx.beginPath();ctx.arc(X(i),Y(x[2]),(hi||last?6:4)*fs,0,7);ctx.fillStyle=last?'#ff4d5e':'#b6f23a';ctx.fill();
   if(!small||hi||last||i%2===0){ctx.fillStyle=last?'#ff4d5e':hi?'#b6f23a':css('--ink');ctx.font=`700 ${(small?10:12)*fs}px "Chakra Petch",sans-serif`;ctx.textBaseline='bottom';ctx.fillText(x[2]+'K',X(i),Y(x[2])-8*fs)}
-  ctx.save();ctx.translate(X(i),pt+ch+10*fs);if(small)ctx.rotate(-Math.PI/4);ctx.textAlign=small?'right':'center';ctx.textBaseline='top';
-  ctx.fillStyle=last?'#ff4d5e':hi?'#b6f23a':css('--muted');ctx.font=`${(small?9:11)*fs}px "Share Tech Mono",monospace`;ctx.fillText(small?`${x[0]} '${x[1]}`:x[0],0,0);
-  if(!small){ctx.fillText(`'${x[1]}`,0,13*fs)}ctx.restore()});
+  const im=elogo(ekey(x)),ly=pt+ch+8*fs;
+  if(im){const r=Math.min(LS/im.naturalWidth,LS/im.naturalHeight),w=im.naturalWidth*r,hh=im.naturalHeight*r;ctx.globalAlpha=last||hi?1:.85;ctx.drawImage(im,X(i)-w/2,ly+(LS-hh)/2,w,hh);ctx.globalAlpha=1}
+  else{ctx.fillStyle=css('--muted');ctx.font=`700 ${(small?8:11)*fs}px "Chakra Petch",sans-serif`;ctx.textBaseline='middle';ctx.fillText(x[0]==='LAUNCH'?(small?'LP':'LAUNCH'):x[0],X(i),ly+LS/2)}
+  ctx.textBaseline='top';ctx.fillStyle=last?'#ff4d5e':hi?'#b6f23a':css('--muted');ctx.font=`${(small?9:11)*fs}px "Share Tech Mono",monospace`;ctx.fillText((small?'':x[0]+' ')+`'${x[1]}`,X(i),ly+LS+4*fs)});
  ctx.textAlign='left';ctx.textBaseline='top';ctx.fillStyle='#b6f23a';ctx.font=`700 ${13*fs}px "Chakra Petch",sans-serif`;ctx.fillText(`ALL-TIME HIGH ${h[top][2]}K // ${HNAME[h[top][0]]} 20${h[top][1]}`,pl,6*fs)}
 function historyHTML(){const h=hist(),top=[...h].sort((a,b)=>b[2]-a[2]),best={},yr={};
  h.forEach(x=>{if(!best[x[0]]||x[2]>best[x[0]][2])best[x[0]]=x;const y='20'+x[1];if(!yr[y]||x[2]>yr[y][2])yr[y]=x});
- const tile=(l,v,s,c)=>`<div><div class="muted mono" style="font-size:12px">${l}</div><div style="font:700 26px 'Chakra Petch',sans-serif;color:${c||'var(--ink)'}">${v}</div><div class="muted" style="font-size:12px">${s}</div></div>`;
+ const eimg=(k,sz)=>ELOGO[k]?`<img src="${ELOGO[k]}" alt="" style="height:${sz}px;width:${sz}px;object-fit:contain;flex:none">`:'';
+ const tile=(l,v,s,c,k)=>`<div style="display:flex;gap:10px;align-items:center">${k?eimg(k,44):''}<div><div class="muted mono" style="font-size:12px">${l}</div><div style="font:700 26px 'Chakra Petch',sans-serif;color:${c||'var(--ink)'}">${v}</div><div class="muted" style="font-size:12px">${s}</div></div></div>`;
  const ath=top[0];
  return `<div class="card" style="margin-top:12px" id="histCard"><div class="head"><div><div class="lbl">// BGMI viewership till date</div><h2 style="font-size:22px;margin-top:4px">Peak concurrent viewers, every KRAFTON India event</h2></div><button class="btn sm" id="shareHist">Share</button></div>
  <div class="hchart"><canvas id="hc"></canvas></div>
  <div class="hgrid"><div><div class="lbl">// All-time high // ${HNAME[ath[0]]} 20${ath[1]}</div><div class="big"><div class="v">${ath[2]}K</div></div></div>
  <div><div class="lbl">// Events till date</div><div class="big"><div class="v" style="color:var(--lime)">${h.length}</div></div><div class="muted">2021 to 2026</div></div></div>
  <div class="hgrid2"><div class="card"><div class="lbl">// Year-wise peak</div><div class="tiles">${Object.entries(yr).map(([y,x])=>tile(y,x[2]+'K',HNAME[x[0]].toUpperCase(),y==='2026'?'var(--lime)':'')).join('')}</div></div>
- <div class="card"><div class="lbl">// Series best</div><div class="tiles t2">${['BMPS','BGIS','BMSD','BMIC'].map(k=>tile(k,best[k][2]+'K',(k==='BMSD'&&best[k][1]==='26'?'<span style="color:var(--red)">\u25CF ONGOING</span> ':'')+'20'+best[k][1],k==='BMSD'&&best[k][1]==='26'?'var(--red)':'')).join('')}</div></div></div>
+ <div class="card"><div class="lbl">// Series best</div><div class="tiles t2">${['BMPS','BGIS','BMSD','BMIC'].map(k=>tile(k,best[k][2]+'K',(k==='BMSD'&&best[k][1]==='26'?'<span style="color:var(--red)">\u25CF ONGOING</span> ':'')+'20'+best[k][1],k==='BMSD'&&best[k][1]==='26'?'var(--red)':'',k+best[k][1])).join('')}</div></div></div>
  <div class="lbl" style="margin:10px 0 6px">// All-time ranking, peak concurrent viewers</div>
- <div class="rank">${top.map((x,i)=>`<div class="rrow"><span class="rk ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</span><span class="rn">${HNAME[x[0]]} 20${x[1]}${i===0?' <span class="tagx lime">ALL-TIME HIGH</span>':''}${x[0]==='BMSD'&&x[1]==='26'?' <span class="tagx red">\u25CF ONGOING</span>':''}</span><b>${x[2]}K</b></div>`).join('')}</div>
+ <div class="rank">${top.map((x,i)=>`<div class="rrow"><span class="rk ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</span>${eimg(ekey(x),30)}<span class="rn">${HNAME[x[0]]} 20${x[1]}${i===0?' <span class="tagx lime">ALL-TIME HIGH</span>':''}${x[0]==='BMSD'&&x[1]==='26'?' <span class="tagx red">\u25CF ONGOING</span>':''}</span><b>${x[2]}K</b></div>`).join('')}</div>
  <div class="muted" style="font-size:11px;margin-top:8px">Earlier events: peak concurrent viewers as reported for each event. BMSD 2026 updates from this tracker.</div></div>`}
 function cdMode(){return !!(D.next_start&&!D.official_live&&D.next_start-nowS()>0)}
 function render(){
