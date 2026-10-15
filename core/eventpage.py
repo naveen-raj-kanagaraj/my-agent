@@ -136,7 +136,7 @@ def _roster(out: dict) -> list:
         pk = [x for x in done if token in n(x["channel"])]
         logo = card.get("logo") or next((x.get("logo") for x in lv + pk if x.get("logo")), "")
         url = (lv or pk)[0]["url"] if (lv or pk) else (f"https://www.youtube.com/{handle}" if handle else "")
-        r = {"name": card.get("name") or name, "logo": logo, "url": url, "vid": (lv or pk or [{}])[0].get("vid", "")}
+        r = {"name": name, "logo": logo, "url": url, "vid": (lv or pk or [{}])[0].get("vid", "")}
         if lv:
             r.update(status="live", viewers=sum(x["viewers"] for x in lv), peak=max(x["viewers"] for x in pk) if pk else 0)
             r["peak"] = max(r["peak"], r["viewers"])
@@ -155,6 +155,12 @@ def _social() -> str:
                    f'<b>{html.escape(n.upper())}</b><span>{html.escape(h)}</span></a>' for n, u, h in SOCIAL)
 
 
+def build_demo_html() -> str:
+    """Self-contained page with generated data (no server), for testing the layout and graphs."""
+    html_ = build_html("bmsd", live=False).replace("const DEMO=false", "const DEMO=true")
+    return html_
+
+
 def build_html(key: str = None, live: bool = False) -> str:
     """live=True: the page re-reads ./data every REFRESH_SEC seconds. Otherwise a snapshot (e.g. a file sent on Telegram)."""
     d = data(key)
@@ -162,6 +168,7 @@ def build_html(key: str = None, live: bool = False) -> str:
     return (PAGE.replace("__TITLE__", html.escape(d.get("name", "Event")))
                 .replace("__DATA__", payload)
                 .replace("__LIVE__", "true" if live else "false")
+                .replace("__ROSTERN__", json.dumps([n for _, n, _ in events.ROSTER]))
                 .replace("__REFRESH__", str(REFRESH_SEC))
                 .replace("__SOCIAL__", _social())
                 .replace("__BRAND__", html.escape(BRAND)).replace("__BRANDURL__", html.escape(BRAND_URL, quote=True)))
@@ -175,7 +182,7 @@ PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0b0b12;--bg2:#121219;--card:#13131c;--card2:#1a1a26;--ink:#eeeef5;--muted:#8d8ca3;--line:#262636;
+:root{color-scheme:dark;--bg:#0b0b12;--bg2:#121219;--card:#13131c;--card2:#1a1a26;--ink:#eeeef5;--muted:#8d8ca3;--line:#262636;
 --lime:#b6f23a;--purple:#7c5cff;--cyan:#4cc9f0;--orange:#ff8a3d;--red:#ff4d5e;--up:#b6f23a;--down:#ff4d5e}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Chakra Petch",system-ui,sans-serif}
@@ -250,6 +257,16 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 .muted{color:var(--muted)}.scroll{overflow-x:auto}
 .cd{text-align:center;border-color:#ff4d5e}.cdv{font:700 54px "Chakra Petch",sans-serif;letter-spacing:.04em;color:#fff;text-shadow:0 0 18px rgba(255,77,94,.5);margin:6px 0}
 @media(max-width:600px){.cdv{font-size:38px}}
+.hgrid{display:grid;grid-template-columns:1.6fr 1fr;gap:12px;margin:8px 0}.hgrid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}.tiles.t2{grid-template-columns:1fr 1fr}
+.hchart{position:relative;height:340px;margin-top:12px}.hchart canvas{width:100%;height:100%;display:block}
+.rank{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px}.rrow{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.rrow .rk{width:28px;height:26px;display:inline-flex;align-items:center;justify-content:center;background:var(--card2);color:var(--ink)}.rrow .rk.r1{background:var(--lime);color:#0a0a14}.rrow .rk.r2{background:var(--cyan);color:#0a0a14}.rrow .rk.r3{background:var(--orange);color:#0a0a14}
+.rrow .rn{flex:1;font-weight:700;text-transform:uppercase;min-width:0}.rrow b{font:700 16px "Chakra Petch",sans-serif}
+.tagx{font:11px "Share Tech Mono",monospace;padding:1px 6px;border:1px solid currentColor;margin-left:6px;white-space:nowrap}.tagx.lime{color:var(--lime)}.tagx.red{color:var(--red)}
+@media(max-width:700px){.hgrid,.hgrid2,.rank{grid-template-columns:1fr}.hchart{height:300px}.tiles{grid-template-columns:repeat(2,1fr)}}
+.demo{position:fixed;left:0;right:0;bottom:0;z-index:70;display:flex;gap:8px;align-items:center;justify-content:center;padding:8px max(16px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:#ff4d5e;color:#fff;font:12px "Share Tech Mono",monospace}
+.demo button{all:unset;cursor:pointer;padding:3px 10px;border:1px solid #fff}.demo button.on{background:#fff;color:#ff4d5e}
 .foot{font-size:12px;color:var(--muted);margin-top:14px}.disc{font-size:11px;border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
 @media(max-width:600px){.hide-m{display:none}.st{max-width:52vw;font-size:11px}td{padding:6px 5px}th{padding:5px}.title h1{font-size:15px}
  .bar .in{gap:5px;padding:7px 12px}.title{width:100%}.pill{font-size:11px;padding:3px 7px}#nx{display:none!important}
@@ -276,8 +293,9 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
  <img id="mimg" alt="Share card"><div class="mrow"><button class="btn" id="mig">Instagram</button><button class="btn" id="mxb">X</button><button class="btn ghost" id="mdl">Download</button></div>
  <p class="muted" id="mhint" style="font-size:12px;margin:10px 0 0">On your phone, Instagram and X open the share menu with the image attached: pick Instagram (Story or Post) or X.</p></div></div>
 <script>
-const LIVE=__LIVE__, EVERY=__REFRESH__*1000, URLX='https://live.letsgrowesports.com', BRAND='__BRAND__', TITLE='__TITLE__';
-let D=__DATA__, prev={}, prevTotal=null, view='total', range='full', kind='all', q='', skew=0, lastFetch=Date.now(), failing=false, mode=null, showAll=false, hover=null, hidden={};
+const DEMO=false, ROSTERN=__ROSTERN__;
+const LIVE=__LIVE__||DEMO, EVERY=__REFRESH__*1000, URLX='https://live.letsgrowesports.com', BRAND='__BRAND__', TITLE='__TITLE__';
+let D=__DATA__, prev={}, prevTotal=null, view='wp', range='full', wpAll=false, kind='all', q='', skew=0, lastFetch=Date.now(), failing=false, mode=null, showAll=false, hover=null, hidden={};
 const PAL=['#b6f23a','#4cc9f0','#ff8a3d','#ff5fa2','#a78bfa','#ffd23f','#2dd4bf','#ff6b6b'];
 const fmt=n=>{n=+n||0;return n>=1e7?(n/1e7).toFixed(2)+' Cr':n>=1e5?(n/1e5).toFixed(2)+' L':n>=1e3?(n/1e3).toFixed(1)+'K':Math.round(n)+''};
 const full=n=>Math.round(+n||0).toLocaleString('en-IN');
@@ -288,8 +306,47 @@ const nowS=()=>Date.now()/1000-skew;
 function tween(el,to){const from=+el.dataset.v||0;el.dataset.v=to;if(from===to){el.textContent=full(to);return}
  const t0=performance.now();const st=t=>{const k=Math.min(1,(t-t0)/600);el.textContent=full(from+(to-from)*(1-Math.pow(1-k,3)));if(k<1)requestAnimationFrame(st)};requestAnimationFrame(st)}
 function isOff(){return !D.official_live&&D.last_broadcast}
+const HIST=[['LAUNCH','21',540],['BGIS','21',460],['BMPS','22',305],['BMSD','22',315],['BGIS','23',235],['BMPS','23',201],['INKR','23',178],['BGIS','24',275],['BMPS','24',495],['BGIS','25',485],['BMPS','25',320],['BMSD','25',380],['BMIC','25',372],['BGIS','26',578],['BMPS','26',730],['BMSD','26',450]];
+const HNAME={LAUNCH:'BGMI Launch Party',BGIS:'BGIS',BMPS:'BMPS',BMSD:'BMSD',INKR:'INKR Invitational',BMIC:'BMIC'};
+function hist(){const h=HIST.map(x=>x.slice());const cur=Math.round((D.peak||0)/1000);if(cur>h[15][2])h[15][2]=cur;return h}
+function drawHist(ctx,W,H,fs){fs=fs||1;const h=hist(),n=h.length,pl=34*fs,pr=34*fs,pt=46*fs,pb=58*fs,cw=W-pl-pr,ch=H-pt-pb,max=820;
+ const X=i=>pl+i*cw/(n-1),Y=v=>pt+ch-v/max*ch,top=h.reduce((a,x,i)=>x[2]>h[a][2]?i:a,0);ctx.clearRect(0,0,W,H);
+ ctx.strokeStyle=css('--line');ctx.lineWidth=1;ctx.fillStyle=css('--muted');ctx.font=`${11*fs}px "Share Tech Mono",monospace`;ctx.textAlign='left';ctx.textBaseline='bottom';
+ [200,400,600,800].forEach(v=>{ctx.globalAlpha=.6;ctx.beginPath();ctx.moveTo(pl,Y(v));ctx.lineTo(W-pr,Y(v));ctx.stroke();ctx.globalAlpha=1;ctx.fillText(v+'K',pl+2,Y(v)-2)});
+ ctx.beginPath();h.forEach((x,i)=>i?ctx.lineTo(X(i),Y(x[2])):ctx.moveTo(X(i),Y(x[2])));ctx.lineTo(X(n-1),pt+ch);ctx.lineTo(X(0),pt+ch);ctx.closePath();
+ const g=ctx.createLinearGradient(0,pt,0,pt+ch);g.addColorStop(0,'rgba(124,92,255,.45)');g.addColorStop(1,'rgba(124,92,255,0)');ctx.fillStyle=g;ctx.fill();
+ ctx.beginPath();h.forEach((x,i)=>i?ctx.lineTo(X(i),Y(x[2])):ctx.moveTo(X(i),Y(x[2])));ctx.strokeStyle='#b6f23a';ctx.lineWidth=3*fs;ctx.shadowColor='#b6f23a';ctx.shadowBlur=10*fs;ctx.stroke();ctx.shadowBlur=0;
+ const small=W/fs<620;ctx.textAlign='center';
+ h.forEach((x,i)=>{const last=i===n-1,hi=i===top;ctx.beginPath();ctx.arc(X(i),Y(x[2]),(hi||last?6:4)*fs,0,7);ctx.fillStyle=last?'#ff4d5e':'#b6f23a';ctx.fill();
+  if(!small||hi||last||i%2===0){ctx.fillStyle=last?'#ff4d5e':hi?'#b6f23a':css('--ink');ctx.font=`700 ${(small?10:12)*fs}px "Chakra Petch",sans-serif`;ctx.textBaseline='bottom';ctx.fillText(x[2]+'K',X(i),Y(x[2])-8*fs)}
+  ctx.save();ctx.translate(X(i),pt+ch+10*fs);if(small)ctx.rotate(-Math.PI/4);ctx.textAlign=small?'right':'center';ctx.textBaseline='top';
+  ctx.fillStyle=last?'#ff4d5e':hi?'#b6f23a':css('--muted');ctx.font=`${(small?9:11)*fs}px "Share Tech Mono",monospace`;ctx.fillText(small?`${x[0]} '${x[1]}`:x[0],0,0);
+  if(!small){ctx.fillText(`'${x[1]}`,0,13*fs)}ctx.restore()});
+ ctx.textAlign='left';ctx.textBaseline='top';ctx.fillStyle='#b6f23a';ctx.font=`700 ${13*fs}px "Chakra Petch",sans-serif`;ctx.fillText(`ALL-TIME HIGH ${h[top][2]}K // ${HNAME[h[top][0]]} 20${h[top][1]}`,pl,6*fs)}
+function historyHTML(){const h=hist(),top=[...h].sort((a,b)=>b[2]-a[2]),best={},yr={};
+ h.forEach(x=>{if(!best[x[0]]||x[2]>best[x[0]][2])best[x[0]]=x;const y='20'+x[1];if(!yr[y]||x[2]>yr[y][2])yr[y]=x});
+ const tile=(l,v,s,c)=>`<div><div class="muted mono" style="font-size:12px">${l}</div><div style="font:700 26px 'Chakra Petch',sans-serif;color:${c||'var(--ink)'}">${v}</div><div class="muted" style="font-size:12px">${s}</div></div>`;
+ const ath=top[0];
+ return `<div class="card" style="margin-top:12px" id="histCard"><div class="head"><div><div class="lbl">// BGMI viewership till date</div><h2 style="font-size:22px;margin-top:4px">Peak concurrent viewers, every KRAFTON India event</h2></div><button class="btn sm" id="shareHist">Share</button></div>
+ <div class="hgrid"><div><div class="lbl">// All-time high // ${HNAME[ath[0]]} 20${ath[1]}</div><div class="big"><div class="v">${ath[2]}K</div></div></div>
+ <div><div class="lbl">// Events till date</div><div class="big"><div class="v" style="color:var(--lime)">${h.length}</div></div><div class="muted">2021 to 2026</div></div></div>
+ <div class="hgrid2"><div class="card"><div class="lbl">// Year-wise peak</div><div class="tiles">${Object.entries(yr).map(([y,x])=>tile(y,x[2]+'K',HNAME[x[0]].toUpperCase(),y==='2026'?'var(--lime)':'')).join('')}</div></div>
+ <div class="card"><div class="lbl">// Series best</div><div class="tiles t2">${['BMPS','BGIS','BMSD','BMIC'].map(k=>tile(k,best[k][2]+'K',(k==='BMSD'&&best[k][1]==='26'?'<span style="color:var(--red)">\u25CF ONGOING</span> ':'')+'20'+best[k][1],k==='BMSD'&&best[k][1]==='26'?'var(--red)':'')).join('')}</div></div></div>
+ <div class="hchart"><canvas id="hc"></canvas></div>
+ <div class="lbl" style="margin:10px 0 6px">// All-time ranking, peak concurrent viewers</div>
+ <div class="rank">${top.map((x,i)=>`<div class="rrow"><span class="rk ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</span><span class="rn">${HNAME[x[0]]} 20${x[1]}${i===0?' <span class="tagx lime">ALL-TIME HIGH</span>':''}${x[0]==='BMSD'&&x[1]==='26'?' <span class="tagx red">\u25CF ONGOING</span>':''}</span><b>${x[2]}K</b></div>`).join('')}</div>
+ <div class="muted" style="font-size:11px;margin-top:8px">Earlier events: peak concurrent viewers as reported for each event. BMSD 2026 updates from this tracker.</div></div>`}
+function cdMode(){return !!(D.next_start&&!D.official_live&&D.next_start-nowS()>0)}
 function render(){
  const app=document.getElementById('app');
+ if(cdMode()){
+  if(mode!=='cd'){mode='cd';app.innerHTML=`<div class="card cd" id="cd" style="margin-top:12px"><div class="lbl">// Grand finals go live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>
+   <div class="card" id="wpCard" style="margin-top:12px"><div class="head"><div><h2 id="wph">Watch party streamers</h2><div class="muted" style="font-size:12px">Official watch parties for the grand finals.</div></div></div>
+   <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Status</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
+   ${historyHTML()}<div class="foot" id="foot"><div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div><div class="disc">Unofficial viewership tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON.</div></div>`;
+   document.getElementById('shareHist').onclick=()=>openShare('history');window.addEventListener('resize',drawHistCanvas)}
+  wpRows();drawHistCanvas();return}
+ if(mode==='cd'){mode=null;app.innerHTML=''}
  if(!D.ticks){app.innerHTML='<div class="card" style="margin-top:12px">No data yet. Numbers are recorded only while the official broadcast is live.</div>';return}
  const off=isOff(),LB=D.last_broadcast||{};
  const m=off?'off':'on';if(mode!==m){mode=m;app.innerHTML='';prev={};prevTotal=null;showAll=false;range='full'}
@@ -306,14 +363,14 @@ function render(){
     <div class="card kpi"><div class="lbl">Average concurrent</div><div class="v" id="ka"></div><div class="s">while the official broadcast was live</div></div>
     <div class="card kpi"><div class="lbl">Official peak</div><div class="v" id="ko"></div><div class="s">official broadcasts combined</div></div>
     <div class="card kpi"><div class="lbl">Watch parties peak</div><div class="v" id="kw"></div><div class="s">all watch parties combined</div></div></div></div>
-  <div class="card"><div class="tabs" id="tabs"><button data-v="total">Total viewers</button><button data-v="split">Official vs watch parties</button><button data-v="wp">Watch party battle</button></div>
+  <div class="card"><div class="tabs" id="tabs"><button data-v="wp">Watch party battle</button><button data-v="total">Total viewers</button><button data-v="split">Official vs watch parties</button></div>
    <div class="head"><div><div class="lbl" id="chh"></div><div class="cv" id="cv"></div></div>
     <div class="seg" id="rg"><button data-r="full">FULL BROADCAST</button><button data-r="live">LAST 3 MIN</button></div>
     <button class="btn sm" id="shareChart">Share</button></div>
    <div class="chart"><canvas id="c"></canvas></div><div class="chips" id="chips"></div></div>
   <div class="grid2">
    <div class="card" id="wpCard"><div class="head"><div><h2 id="wph">Watch party leaderboard</h2><div class="muted" style="font-size:12px">Streamers: share your rank card.</div></div></div>
-    <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Live</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div></div>
+    <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Live</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
    <div class="card"><div class="head"><div><h2 id="lh">Live streams</h2></div>
     <div class="seg" id="kf">${[['all','ALL'],['official','OFFICIAL'],['watch party','WATCH PARTIES']].map(([k,l])=>`<button data-k="${k}">${l}</button>`).join('')}</div>
     <input class="q" id="q" placeholder="Search channel or title"></div>
@@ -356,8 +413,9 @@ function wpRows(){
  const off=isOff(),R=D.roster||[],cd=!!(D.next_start&&!D.official_live);
  document.getElementById('wph').textContent=cd?'Watch party streamers, yet to start':off?'Watch party streamers, last broadcast':'Watch party streamers, live';
  document.getElementById('wpth').textContent='Status';
- let rank=0;
- document.getElementById('wprows').innerHTML=R.map(w=>{const has=w.status!=='upcoming';if(has)rank++;
+ let rank=0;const lim=D.official_live&&!wpAll?10:999,RR=R.slice(0,lim),mb=document.getElementById('wpmore');
+ if(mb){mb.style.display=R.length>lim||wpAll&&D.official_live?'block':'none';mb.textContent=wpAll?'\u25B2 SHOW TOP 10':`\u25BC SHOW ALL ${R.length} STREAMERS`;mb.onclick=()=>{wpAll=!wpAll;wpRows()}}
+ document.getElementById('wprows').innerHTML=RR.map(w=>{const has=w.status!=='upcoming';if(has)rank++;
   const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?'<span class="muted">ENDED</span>':'<span class="muted">YET TO START</span>';
   const logo=w.logo?`<img class="lg" src="${esc(w.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="lg" style="display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${esc(w.name.slice(0,2).toUpperCase())}</span>`;
   const nm=w.url?`<a class="ch" href="${esc(w.url)}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(w.name)}</a>`:`<span class="ch">${esc(w.name)}</span>`;
@@ -382,7 +440,7 @@ function rows(){
 function chips(){
  const el=document.getElementById('chips');
  if(view!=='wp'){el.innerHTML='';return}
- el.innerHTML=(D.wp||[]).map((w,i)=>`<button class="chip ${hidden[w.vid]?'offc':''}" data-vid="${esc(w.vid)}"><i style="background:${PAL[i%8]}"></i>${esc(w.channel.slice(0,18))} <b>${fmt(w.viewers)}</b></button>`).join('');
+ el.innerHTML=(D.wp||[]).slice(0,6).map((w,i)=>`<button class="chip ${hidden[w.vid]?'offc':''}" data-vid="${esc(w.vid)}"><i style="background:${PAL[i%8]}"></i>${esc(w.channel.slice(0,18))} <b>${fmt(w.viewers)}</b></button>`).join('');
  el.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{hidden[c.dataset.vid]=!hidden[c.dataset.vid];chips();drawChart()});
 }
 // ---------- graphs ----------
@@ -393,7 +451,7 @@ function lines(){
   else if(sr.length){src=src.filter(r=>r[0]>=sr[0][0]);const last=src.length?src[src.length-1][0]:0;src=src.concat(sr.filter(r=>r[0]>last))}tot=src}
  if(view==='total')return[{label:'Total',color:css('--lime'),pts:tot.map(r=>[r[0],r[1]]),w:2.4,fill:true}];
  if(view==='split')return[{label:'Official',color:css('--orange'),pts:tot.map(r=>[r[0],r[2]]),w:2.2},{label:'Watch parties',color:css('--cyan'),pts:tot.map(r=>[r[0],r[3]]),w:2.2}];
- return(D.wp||[]).map((w,i)=>({label:w.channel,color:PAL[i%8],pts:(D.wp_series||{})[w.vid]||[],w:2,vid:w.vid})).filter(l=>!hidden[l.vid]);
+ return(D.wp||[]).slice(0,6).map((w,i)=>({label:w.channel,color:PAL[i%8],pts:(D.wp_series||{})[w.vid]||[],w:2.4,vid:w.vid})).filter(l=>!hidden[l.vid]);
 }
 const WIN=180,LAG=4;let ys={};
 function plot(ctx,W,H,L,o){
@@ -444,6 +502,8 @@ function plot(ctx,W,H,L,o){
   lab.forEach((s,i)=>{ctx.fillStyle=i?(rowsH[i-1][0].color):css('--muted');ctx.fillText(s,bx+8,padT+12+i*16)})}
  return{t0,t1,last:ends}
 }
+function drawHistCanvas(){const cv=document.getElementById('hc');if(!cv)return;const dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;
+ cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);drawHist(ctx,W,H,1)}
 function drawChart(){
  const cv=document.getElementById('c');if(!cv)return;
  const dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;
@@ -468,7 +528,18 @@ function dayWin(){const LB=D.last_broadcast;if(isOff()&&LB)return[LB.start-60,LB
 function dayStreams(){const LB=D.last_broadcast||{};return(LB.streams||[])}
 function wpByPeak(){const live={};(D.live||[]).forEach(s=>live[s.vid]=s.viewers);
  return dayStreams().filter(s=>s.kind==='watch party').map(s=>({vid:s.vid,channel:s.channel,peak:s.viewers,at:s.at,now:D.official_live?(live[s.vid]||0):null})).sort((a,b)=>b.peak-a.peak)}
-function card(type,vid){
+function histCard(){const W=1080,H=1350,SC=3,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);
+ const g=x.createRadialGradient(W*.8,0,40,W*.8,0,1200);g.addColorStop(0,'#2a1d5c');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,W,H);
+ const T=(t,X,Y,f,c,a)=>{x.font=f;x.fillStyle=c;x.textAlign=a||'left';x.textBaseline='top';x.fillText(t,X,Y)};const h=hist(),top=[...h].sort((a,b)=>b[2]-a[2]);
+ T('letsgrowesports',80,70,'30px "Share Tech Mono",monospace','#b6f23a');T('BGMI VIEWERSHIP TILL DATE',80,110,'700 64px "Chakra Petch",sans-serif','#ffffff');
+ T(`// ALL-TIME HIGH // ${HNAME[top[0][0]].toUpperCase()} 20${top[0][1]}`,80,200,'30px "Share Tech Mono",monospace','#ff4d5e');T(top[0][2]+'K',72,240,'700 150px "Chakra Petch",sans-serif','#ffffff');
+ T(`${h.length} EVENTS // 2021 TO 2026`,W-80,300,'30px "Share Tech Mono",monospace','#b6f23a','right');
+ x.save();x.translate(40,420);drawHist(x,W-80,420,2);x.restore();
+ let y=880;T('// ALL-TIME RANKING',80,y,'26px "Share Tech Mono",monospace','#ff4d5e');y+=44;
+ top.slice(0,8).forEach((r,i)=>{const col=i%2,row=Math.floor(i/2),X=80+col*470,Y=y+row*48,c=r[0]==='BMSD'&&r[1]==='26'?'#ff4d5e':i===0?'#b6f23a':'#eeeef5';
+  T(`${i+1}. ${HNAME[r[0]].toUpperCase()} 20${r[1]}`.slice(0,26),X,Y,'700 28px "Chakra Petch",sans-serif',c);T(r[2]+'K',X+430,Y,'700 28px "Chakra Petch",sans-serif',c,'right')});
+ x.fillStyle='#b6f23a';x.fillRect(0,H-130,W,130);T('LIVE.LETSGROWESPORTS.COM',80,H-108,'700 44px "Chakra Petch",sans-serif','#0a0a14');T('@letsgrowesports',80,H-52,'24px "Share Tech Mono",monospace','#0a0a14');return c}
+function card(type,vid){if(type==='history')return histCard();
  const W=1080,H=1350,SC=3,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);x.imageSmoothingQuality='high';
  const g=x.createRadialGradient(W*.8,0,40,W*.8,0,1200);g.addColorStop(0,'#1f1a3d');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,W,H);
  x.fillStyle='rgba(255,255,255,.02)';for(let yy=0;yy<H;yy+=4)x.fillRect(0,yy,W,1);
@@ -526,8 +597,9 @@ function openShare(type,vid){
  const wp=D.wp||[],i=wp.findIndex(w=>w.vid===vid);
  const dpk=wp.slice().sort((a,b)=>b.peak-a.peak),today=(D.days||[]).slice(-1)[0]||{},nowT=(D.live||[]).reduce((a,s)=>a+s.viewers,0);
  const LB=D.last_broadcast||{},wpp=wpByPeak();let text;
+ if(type==='history'){const t=[...hist()].sort((a,b)=>b[2]-a[2])[0];text=`BGMI viewership till date: all-time high ${t[2]}K (${HNAME[t[0]]} 20${t[1]}). BMSD 2026 so far: ${hist()[15][2]}K.`}else
  if(type==='streamer'){const j=wpp.findIndex(w=>w.vid===vid),w=wpp[j]||{};text=`${w.channel} was the #${j+1} watch party of ${TITLE} on ${LB.date||'the day'}, peaking at ${full(w.peak)} concurrent viewers.`}
- else if(type==='battle'){const w=wpp[0]||{};text=`${TITLE} watch party battle (${LB.date||''}): ${wpp.slice(0,3).map((x,j)=>`${j+1}. ${x.channel} ${fmt(x.peak)}`).join(' | ')}.`}
+ if(type==='battle'){const w=wpp[0]||{};text=`${TITLE} watch party battle (${LB.date||''}): ${wpp.slice(0,3).map((x,j)=>`${j+1}. ${x.channel} ${fmt(x.peak)}`).join(' | ')}.`}
  else text=`${TITLE} peaked at ${full(LB.peak||D.peak)} concurrent viewers on YouTube on ${LB.date||'the day'} (${LB.peak_when||''})${D.official_live?`, ${full((D.live||[]).reduce((a,s)=>a+s.viewers,0))} watching right now`:''}.`;
  text+=' Live tracker:';
  document.getElementById('mt').textContent=type==='streamer'?'Share your rank':'Share';
@@ -567,7 +639,29 @@ function status(){const cdl=countdown();
 }
 function merge(a,tail){a=a||[];const last=a.length?a[a.length-1][0]:0;for(const r of tail||[])if(r[0]>last)a.push(r);return a}
 let lastSeries=Date.now();
+let DM=null;
+function demoInit(m){const now=Date.now()/1000;DM={mode:m,t0:now-2.5*3600,hist:{},tot:[],last:0};
+ DM.off=[{vid:'o1',channel:'KRAFTON INDIA ESPORTS',title:'[HINDI] BMSD 2026 | Grand Finals #BGMILIVE',base:190000,ph:0},{vid:'o2',channel:'KRAFTON INDIA ESPORTS',title:'[ENGLISH] BMSD 2026 | Grand Finals',base:14000,ph:1},{vid:'o3',channel:'KRAFTON INDIA ESPORTS',title:'[MAP STREAM] BMSD 2026 | Grand Finals',base:3500,ph:2}];
+ DM.st=ROSTERN.map((n,i)=>({vid:'w'+i,channel:n,title:`BMSD 2026 Grand Finals watch party with ${n}`,base:i%5===4?0:Math.round(70000/Math.pow(i+1,.75)),ph:Math.random()*6}));
+ for(let t=DM.t0;t<=now-200;t+=30)demoStep(t);for(let t=now-200;t<=now;t+=2)demoStep(t)}
+function demoVal(s,t){const p=(t-DM.t0)/3600;return Math.max(0,Math.round(s.base*(.62+.38*Math.sin(p*2.4+s.ph))*(1+.06*Math.sin(t/7+s.ph))*(.97+.06*Math.random())))}
+function demoStep(t){let o=0,w=0;DM.off.concat(DM.st).forEach(s=>{if(!s.base)return;const v=demoVal(s,t);(DM.hist[s.vid]=DM.hist[s.vid]||[]).push([Math.round(t),v]);s.cur=v;s.peak=Math.max(s.peak||0,v);if(s.vid[0]==='o')o+=v;else w+=v});DM.tot.push([Math.round(t),o+w,o,w,0]);DM.last=t}
+function demoData(){const now=Date.now()/1000;if(!DM)demoInit('live');while(DM.last+2<=now)demoStep(DM.last+2);
+ const liveM=DM.mode==='live',all=DM.off.concat(DM.st).filter(s=>s.base),tf=t=>new Date(t*1000).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'})+' IST';
+ const pk=DM.tot.reduce((a,r)=>r[1]>a[1]?r:a),live=liveM?all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.cur,url:'#',logo:''})).sort((a,b)=>b.viewers-a.viewers):[];
+ const wp=DM.st.filter(s=>s.base).map(s=>({vid:s.vid,channel:s.channel,viewers:liveM?s.cur:0,url:'#',logo:'',peak:s.peak})).sort((a,b)=>b.viewers-a.viewers||b.peak-a.peak).slice(0,8);
+ const ws={};wp.forEach(w=>ws[w.vid]=DM.hist[w.vid]);
+ const roster=DM.st.map(s=>({name:s.channel,logo:'',url:'#',vid:s.base?s.vid:'',status:!liveM||!s.base?'upcoming':'live',viewers:liveM&&s.base?s.cur:0,peak:liveM?s.peak||0:0})).sort((a,b)=>({live:0,ended:1,upcoming:2}[a.status]-{live:0,ended:1,upcoming:2}[b.status])||b.viewers-a.viewers||a.name.localeCompare(b.name));
+ const LBs=all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.peak,at:tf(DM.t0+3600).replace(' IST',''),url:'#',logo:''})).sort((a,b)=>b.viewers-a.viewers);
+ return{name:'BMSD 2026',ticks:DM.tot.length,now,every:2,method:'demo data',updated:DM.last,official_live:liveM,next_start:liveM?null:now+5*3600+1234,live,wp,wp_series:ws,roster,
+  peak:pk[1],peak_when:tf(pk[0]),avg:Math.round(DM.tot.reduce((a,r)=>a+r[1],0)/DM.tot.length),peak_official:Math.max(...DM.tot.map(r=>r[2])),peak_watch:Math.max(...DM.tot.map(r=>r[3])),
+  days:[{day:'Fri 16 Oct',peak:pk[1],at:tf(pk[0]).replace(' IST',''),avg:Math.round(pk[1]*.6)}],series_all:DM.tot.filter((_,i)=>i%5===0),series_recent:DM.tot.slice(),
+  last_broadcast:{start:DM.t0,end:DM.last,peak:pk[1],peak_at:pk[0],peak_when:tf(pk[0]),split:{official:pk[2],watch:pk[3],community:0},streams:LBs,when:'Today, demo',day:'Today',date:'FRI 16 OCT'}}}
+function demoBar(){if(!DEMO)return;const b=document.createElement('div');b.className='demo';b.innerHTML='DEMO, FAKE DATA <button data-m="live">LIVE</button><button data-m="countdown">COUNTDOWN</button>';document.body.appendChild(b);
+ const mk=()=>b.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.m===DM.mode));mk();
+ b.querySelectorAll('button').forEach(x=>x.onclick=()=>{DM.mode=x.dataset.m;D=demoData();mode=null;document.getElementById('app').innerHTML='';render();mk()})}
 async function tick(){
+ if(DEMO){lastFetch=Date.now();D=demoData();render();return}
  if(document.hidden){lastFetch=Date.now();return}
  lastFetch=Date.now();
  try{const r=await fetch('data?t='+Math.floor(Date.now()/2000),{cache:'no-store'});if(!r.ok)throw 0;const j=await r.json();
@@ -582,7 +676,8 @@ async function tick(){
  }catch(e){failing=true}
 }
 async function boot(){
- if(LIVE){document.getElementById('app').innerHTML='<div class="card" style="margin-top:12px;text-align:center;padding:40px" class="mono">LOADING LIVE NUMBERS...</div>';
+ if(DEMO){D=demoData();demoBar()}
+ else if(LIVE){document.getElementById('app').innerHTML='<div class="card" style="margin-top:12px;text-align:center;padding:40px" class="mono">LOADING LIVE NUMBERS...</div>';
   try{const t=Math.floor(Date.now()/2000);const [a,b]=await Promise.all([fetch('data?t='+t,{cache:'no-store'}).then(r=>r.json()),fetch('series?t='+Math.floor(Date.now()/60000),{cache:'no-store'}).then(r=>r.json())]);
    const ws=b.wp_series||{};for(const [v,tl] of Object.entries(a.wp_tail||{}))ws[v]=merge(ws[v],tl);
    D={...a,series_all:b.series_all,series_recent:merge(b.series_recent,a.tail),wp_series:ws};lastSeries=Date.now()}catch(e){}}
