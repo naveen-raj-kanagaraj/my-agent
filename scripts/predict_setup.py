@@ -2,7 +2,6 @@
 
 Usage (on the Mac, from ~/my-agent):
   python scripts/predict_setup.py config/predict_bmsd2026.json            # settings + tournament + Day 1
-  python scripts/predict_setup.py config/predict_bmsd2026.json --day 2    # add Day 2 questions
 Safe to run twice: nothing is duplicated.
 """
 import json
@@ -20,13 +19,10 @@ def main():
     cfg = json.load(open(sys.argv[1]))
     day = int(sys.argv[sys.argv.index("--day") + 1]) if "--day" in sys.argv else 1
     predict.save_settings(**cfg["settings"])
-    if not cfg["settings"].get("match_questions"):   # remove per-match questions made by an older setup
-        for q in predict.questions():
-            if q["kind"] == "match":
-                predict.update_question(q["id"], "delete")
-                print(f"Removed: {q['title']}")
-    made = predict.create_event_set() if day == 1 else []
-    made += predict.create_day_set(day)
+    r = predict.sync_event_set()
+    for t in r["removed"]:
+        print(f"Removed: {t}")
+    made = [None] * r["added"]
     print(f"Created {len(made)} questions. Total now: {len(predict.questions())}")
     for q in predict.questions():
         print(f"  #{q['id']:<3} day {q['day'] or '-'}  {predict.fmt_ist(q['close_ts'])}  {q['title']}")

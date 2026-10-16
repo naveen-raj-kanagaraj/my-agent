@@ -160,7 +160,7 @@ class PredictTests(unittest.TestCase):
         self.assertEqual(qs[0]["title"], "Day 1 · Match 1: Who wins?")
         self.assertEqual(len(qs[0]["options"]), 16)
         self.assertEqual(qs[0]["style"], "dropdown")
-        self.assertEqual(qs[0]["close_ts"], predict.ist_ts("2026-10-16", "14:45"))
+        self.assertEqual(qs[0]["close_ts"], predict.ist_ts("2026-10-16", "16:00"))
         self.assertEqual(predict.create_match_day(1), [])     # no duplicates
 
     def test_tracker_resolution(self):
@@ -168,26 +168,30 @@ class PredictTests(unittest.TestCase):
         st = {"peak": 812000, "days": [{"day": "Fri 16 Oct", "peak": 455000}], "official_live": False,
               "last_broadcast": {"end": predict.ist_ts("2026-10-16", "20:00")}}
         q = predict.get_question(qid)
-        self.assertEqual(predict.tracker_answer(q, st), "450K-500K")
+        self.assertEqual(predict.tracker_answer(q, st), "400K-500K")
+        ev_peak = predict.add_question("peak", "Tournament peak", predict.bucket_labels(), time.time() - 1, 0, "PEAK",
+                                       meta={"scope": "event", "buckets": predict.settings()["buckets"], "date": "2026-10-18"})
+        self.assertEqual(predict.tracker_answer(predict.get_question(ev_peak), st), "800K-850K")
         rec = predict.create_record()
         self.assertEqual(predict.tracker_answer(predict.get_question(rec), st), "Yes")
         done = predict.auto_resolve(st, now=predict.ist_ts("2026-10-16", "20:31"))
         self.assertEqual(done, [qid])
-        self.assertEqual(predict.get_question(qid)["answer"], "450K-500K")
+        self.assertEqual(predict.get_question(qid)["answer"], "400K-500K")
 
     def test_event_and_day_sets(self):
         ids = predict.create_event_set()
-        self.assertEqual(len(ids), 6)
+        self.assertEqual(len(ids), 8)
         self.assertEqual(predict.create_event_set(), [])
-        champ = predict.get_question(ids[0])
-        self.assertEqual(champ["close_ts"], predict.ist_ts("2026-10-18", "14:45"))
-        self.assertEqual(predict.get_question(ids[1])["close_ts"], predict.ist_ts("2026-10-16", "14:45"))
-        d = predict.create_day_set(1)
-        self.assertEqual(len(d), 3)                          # day MVP + most chicken dinners + peak
-        self.assertEqual(predict.create_day_set(1), [])
-        peak = predict.get_question(d[-1])
-        self.assertEqual(peak["options"][0], "Under 350K")
-        self.assertIn("350K-450K", peak["options"])
+        for qid in ids:                                  # everything closes 4 PM IST on Day 1
+            self.assertEqual(predict.get_question(qid)["close_ts"], predict.ist_ts("2026-10-16", "16:00"))
+        peak = predict.get_question(ids[-1])
+        self.assertEqual(peak["options"][0], "Under 400K")
+        self.assertIn("800K-850K", peak["options"])
+        self.assertEqual(peak["options"][-1], "850K+")
+        predict.add_question("team", "Old question", ["A", "B"], time.time() + 99)
+        r = predict.sync_event_set()
+        self.assertEqual(r["removed"], ["Old question"])
+        self.assertEqual(len(predict.questions()), 8)
 
     def test_multi_pick_scoring(self):
         a, b = self.tok("ma"), self.tok("mb")

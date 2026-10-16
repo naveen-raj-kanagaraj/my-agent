@@ -25,9 +25,9 @@ DEFAULTS = {
     "teams": ["Meta Ninza", "8Bit Esports", "RNTX Esports", "Blitz x Epigrotive", "TAG", "Nebula", "K9 Esports", "V1 x Blue Army",
               "Outrage", "GodLike", "Gladiators", "Soul", "Myth Esports", "Welt Esports", "Genesis", "Wyld Fangs"],
     "mvp": [],
-    "buckets": [350, 450, 500, 550, 600, 650, 700],                         # thousands; labels are built from these
+    "buckets": [400, 500, 600, 700, 750, 800, 850],                         # thousands; labels are built from these
     "days": {"1": "2026-10-16", "2": "2026-10-17", "3": "2026-10-18"},
-    "close": "14:45",                                             # IST, default close time on a match day
+    "close": "16:00",                                             # IST, default close time on a match day
     "matches": 6,
     "maps": {"1": ["Rondo", "Erangel", "Erangel", "Erangel", "Miramar", "Miramar"]},   # per day; other days reuse Day 1
     "match_questions": False,                                     # per-match chicken dinner questions (off)
@@ -300,23 +300,44 @@ def _exists(kind, title, day=None) -> bool:
                                   (kind, title, int(day))).fetchone())
 
 
-def create_event_set(close_ts: float = None) -> list:
-    """Whole-event questions: champion (open until the last day), top 3, BMIC qualifiers, finals MVP, best IGL,
-    the eliminator (typed answers)."""
+def event_spec(close_ts: float = None) -> list:
+    """The whole question set. Everything closes at one time (settings close on Day 1)."""
     s = settings()
-    first = _close(1, close_ts)
-    last = ist_ts(s["days"]["3"], s["close"])
-    spec = [("team", "Who will win the BMSD 2026 Grand Finals?", s["teams"], last, "CHAMPION", "grid", {}, 1),
-            ("multi", "Which teams will finish in the top 3?", s["teams"], first, "TOP 3", "multi", {"pick": 3, "ranked": True}, 2),
-            ("multi", "Which 6 teams will qualify for BMIC?", s["teams"], first, "BMIC", "multi", {"pick": 6}, 3),
-            ("text", "Who will be the MVP of the Grand Finals?", [], first, "FINALS MVP", "text", {}, 4),
-            ("text", "Who will be the best IGL of the Grand Finals?", [], first, "BEST IGL", "text", {}, 5),
-            ("text", "Who will get the most finishes in the Grand Finals?", [], first, "THE ELIMINATOR", "text", {}, 6)]
+    close = _close(1, close_ts)
+    return [("team", "Who will win the BMSD 2026 Grand Finals?", s["teams"], "CHAMPION", "grid", {}, 1),
+            ("multi", "Which teams will finish in the top 3?", s["teams"], "TOP 3", "multi", {"pick": 3, "ranked": True}, 2),
+            ("multi", "Which 6 teams will qualify for BMIC?", s["teams"], "BMIC", "multi", {"pick": 6}, 3),
+            ("text", "Final MVP", [], "FINAL MVP", "text", {}, 4),
+            ("text", "MVP of the Tournament", [], "TOURNAMENT MVP", "text", {}, 5),
+            ("text", "Best IGL", [], "BEST IGL", "text", {}, 6),
+            ("text", "The Eliminator", [], "THE ELIMINATOR", "text", {}, 7),
+            ("peak", "What will the tournament's peak viewership be?", bucket_labels(), "PEAK VIEWERS", "buttons",
+             {"scope": "event", "date": s["days"]["3"], "auto": True, "buckets": s["buckets"]}, 8)], close
+
+
+def create_event_set(close_ts: float = None) -> list:
+    spec, close = event_spec(close_ts)
     ids = []
-    for kind, title, opts, close, tag, style, meta, sort in spec:
+    for kind, title, opts, tag, style, meta, sort in spec:
         if not _exists(kind, title):
             ids.append(add_question(kind, title, opts, close, 0, tag, style, meta, sort))
     return ids
+
+
+def sync_event_set(close_ts: float = None) -> dict:
+    """Make the database match event_spec: add missing questions, delete any others, set one close time."""
+    spec, close = event_spec(close_ts)
+    want = {(k, t) for k, t, *_ in spec}
+    removed = []
+    for q in questions():
+        if (q["kind"], q["title"]) not in want:
+            update_question(q["id"], "delete")
+            removed.append(q["title"])
+    added = create_event_set(close_ts)
+    for q in questions():
+        if q["close_ts"] != close:
+            update_question(q["id"], "close_ts", close)
+    return {"added": len(added), "removed": removed, "close": close}
 
 
 def create_day_set(day: int, close_ts: float = None) -> list:
@@ -448,6 +469,8 @@ def tracker_answer(q: dict, st: dict = None):
         st = events.stats(EVENT_KEY) or {}
     if q["kind"] == "yesno":
         return "Yes" if int(st.get("peak") or 0) > int(q["meta"].get("record", settings()["record"])) else "No"
+    if q["meta"].get("scope") == "event":
+        return bucket_for(int(st["peak"]), q["meta"].get("buckets")) if st.get("peak") else None
     label = datetime.strptime(q["meta"]["date"], "%Y-%m-%d").strftime("%a %d %b")
     d = next((d for d in st.get("days") or [] if d.get("day") == label), None)
     if not d or not d.get("peak"):
