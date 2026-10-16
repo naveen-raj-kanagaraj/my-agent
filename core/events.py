@@ -51,7 +51,7 @@ PRESETS = {
                     "snax", "sriop", "mayur", "neonxpawan", "pawanop", "ladypredator", "soulaman"],
         "videos_extra": ["kf7OYvjee_k"],        # specific streams to track (Soul Aman's finals stream)
         # checked directly every minute, even if search misses them
-        "always_check": ["@ShreemanLegend", "@SoulAman", "@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
+        "always_check": ["@ShreemanLegend", "@VAADHIYAAR", "@SoulAman", "@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
                          "@sriop-sr70", "@MayurGaming", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
@@ -899,7 +899,7 @@ ROSTER = [  # (match token, display name, channel handle) of the permitted watch
     ("lolzz", "LoLzZz Gaming", "@LoLzZzGaming"), ("sharkshe", "Sharkshe", "@SHARKSHE"), ("mafianinja", "Mafia Ninja", "@MafiaNinja"),
     ("ruthless", "Im Ruthless", "@ImRuthlessceopubg"), ("rakazone", "RakaZone Gaming", "@RakaZoneGaming"), ("ansh", "Ansh YT", "@AnshYT"),
     ("casetoo", "Casetoo", "@casetooop"), ("sheek", "Sheek Gaming", "@sheekgaming"), ("ipreeet", "iPreeet", "@IPREEET.69"),
-    ("shreeman", "Shreeman Legend", "@ShreemanLegend"), ("mortal", "MortaL", "@MortaLyt"), ("vaadhiyaar", "Vaadhiyaar", "channel/UC1ihHXPtRojN6ZBTjm1Sjog"),
+    ("shreeman", "Shreeman Legend", "@ShreemanLegend"), ("mortal", "MortaL", "@MortaLyt"), ("vaadhiyaar", "Vaadhiyaar", "@VAADHIYAAR"),
     ("regaltos", "Soul Regaltos", "@soulregaltos9810"), ("snax", "Snax Gaming", "@SnaxGaming"), ("sriop", "SRI OP", "@sriop-sr70"),
     ("mayur", "Mayur Gaming", "@MayurGaming"), ("neonxpawan", "Neon X Pawan", "@NEONXPAWANOP"),
     ("ladypredator", "Lady Predator", "@LadyPredatorGaming"), ("soulaman", "Soul Aman", "@SoulAman")]
