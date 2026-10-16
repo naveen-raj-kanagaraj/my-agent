@@ -575,6 +575,8 @@ def run_fast_forever():
                     if ev.get("active"):
                         eventlog.check(ev)
                         eventlog.check_roster(ev)
+                        from core import dataexport
+                        dataexport.tick(ev)
             except Exception as e:
                 print(f"Event log failed: {str(e)[:150]}")
         t0 = time.time()

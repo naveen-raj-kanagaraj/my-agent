@@ -22,3 +22,6 @@ __pycache__/
 
 # Server connection details
 .server
+
+# Predict & Win player data (Instagram IDs): stays on this computer
+exports/private/
