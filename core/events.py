@@ -51,6 +51,7 @@ PRESETS = {
                     "snax", "sriop", "neonxpawan", "pawanop", "ladypredator", "soulaman"],
         "videos_extra": ["kf7OYvjee_k"],        # specific streams to track (Soul Aman's finals stream)
         # checked directly every minute, even if search misses them
+        "official_channels": ["UCugG6-k5QGbq_iDEPAnG4NQ"],   # KRAFTON INDIA ESPORTS: every live stream is tracked
         "always_check": ["@shreemanlegendliveofficial", "@Casetoolive", "@ShreemanLegend", "@VAADHIYAAR", "@SoulAman", "@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
@@ -191,6 +192,30 @@ def check_channel(handle: str):
         return None
     return {"vid": i["id"], "title": i.get("title") or "", "channel": i.get("channel") or "",
             "channel_id": i.get("channel_id") or "", "viewers": int(i.get("concurrent_view_count") or 0)}
+
+
+def channel_live_all(channel: str, limit: int = 8) -> list:
+    """Every stream that is live right now on a channel (an official channel runs Hindi, English and map streams
+    at once; /live only returns one of them)."""
+    base = f"https://www.youtube.com/channel/{channel}" if channel.startswith("UC") else \
+        f"https://www.youtube.com/@{channel.lstrip('@')}"
+    with _ydl(flat=True) as y:
+        info = y.extract_info(base + "/streams", download=False)
+    out = []
+    for e in (info.get("entries") or [])[:limit]:
+        vid = e.get("id")
+        if not vid or e.get("live_status") in ("was_live", "is_upcoming", "not_live", "post_live"):
+            continue
+        try:
+            n = count_live(vid)
+        except Exception:
+            n = None
+        if n is None:
+            continue
+        out.append({"vid": vid, "title": e.get("title") or "", "channel": info.get("channel") or info.get("uploader") or "",
+                    "channel_id": info.get("channel_id") or (channel if channel.startswith("UC") else ""),
+                    "viewers": int(n)})
+    return out
 
 
 def api_counts(vids: list) -> dict:
@@ -341,7 +366,7 @@ def fast_tick(ev: dict, now: float = None) -> dict:
         if n is None:
             f = fast.setdefault(vid, {"viewers": 0, "ts": now, "misses": 0})
             f["misses"] += 1
-            if f["misses"] >= 3:          # ended
+            if f["misses"] >= (10 if live.get(vid, {}).get("kind") == "official" else 3):   # ended
                 _ENDED[vid] = now
                 live.pop(vid, None)
                 _LIVE.get(key, {}).pop(vid, None)
@@ -606,6 +631,17 @@ def poll(ev: dict, now: int = None) -> dict:
         except Exception as e:
             errors += 1
             print(f"Event search '{q}' failed: {str(e)[:120]}")
+    official_now = set()
+    for oc in PRESETS.get(ev["key"], {}).get("official_channels", []):
+        try:
+            for s in channel_live_all(oc):
+                official_now.add(s["vid"])
+                if s["vid"] not in found:
+                    found[s["vid"]] = s
+        except Exception as e:
+            print(f"Official channel check failed: {str(e)[:120]}")
+    for v in official_now:           # the channel itself says these are live: never drop them as ended
+        _ENDED.pop(v, None)
     chans = list(dict.fromkeys(ev.get("channels", []) + PRESETS.get(ev["key"], {}).get("always_check", [])))[:40]
     with ThreadPoolExecutor(max_workers=8) as pool:
         for s in pool.map(check_channel, chans):
