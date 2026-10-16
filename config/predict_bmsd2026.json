@@ -6,6 +6,7 @@
     "days": {"1": "2026-10-16", "2": "2026-10-17", "3": "2026-10-18"},
     "close": "14:45",
     "matches": 6,
+    "maps": {"1": ["Rondo", "Erangel", "Erangel", "Erangel", "Miramar", "Miramar"]},
     "buckets": [350, 450, 500, 550, 600, 650, 700],
     "prize": "Top 5 on the overall leaderboard win a gift card of their choice.",
     "record": 730000,

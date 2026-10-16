@@ -176,7 +176,8 @@ class PredictTests(unittest.TestCase):
         d = predict.create_day_set(1)
         self.assertEqual(len(d), 8)                          # 6 match chicken dinners + most chickens + peak
         self.assertEqual(predict.create_day_set(1), [])
-        self.assertEqual(predict.get_question(d[0])["title"], "Match 1: Which team gets the chicken dinner?")
+        self.assertEqual(predict.get_question(d[0])["title"], "Match 1 · Rondo: Which team gets the chicken dinner?")
+        self.assertEqual(predict.get_question(d[4])["tag"], "MATCH 5 · MIRAMAR")
         peak = predict.get_question(d[-1])
         self.assertEqual(peak["options"][0], "Under 350K")
         self.assertIn("350K-450K", peak["options"])

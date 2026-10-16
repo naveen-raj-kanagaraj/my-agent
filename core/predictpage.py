@@ -33,7 +33,7 @@ def build_demo_html() -> str:
     from core import predict
     s = predict.settings()
     seed = {"teams": s["teams"], "buckets": predict.bucket_labels(), "days": s["days"], "prize": s["prize"],
-            "close": s["close"], "matches": s["matches"]}
+            "close": s["close"], "matches": s["matches"], "maps": s.get("maps", {})}
     return build_html(True, seed)
 
 
@@ -390,7 +390,7 @@ function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.c
  add('team','Who will win the BMSD 2026 Grand Finals?',T,cl('3'),0,'CHAMPION','grid');
  add('multi','Which teams will finish in the top 3?',T,cl('1'),0,'TOP 3','multi',{pick:3,ranked:true});
  add('multi','Which 6 teams will qualify for BMIC?',T,cl('1'),0,'BMIC','multi',{pick:6});
- for(let m=1;m<=SEED.matches;m++)add('match',`Match ${m}: Which team gets the chicken dinner?`,T,cl('1'),1,`MATCH ${m}`,'grid');
+ const MAPS=(SEED.maps||{})['1']||[];for(let m=1;m<=SEED.matches;m++){const mp=MAPS[m-1]||'';add('match',mp?`Match ${m} · ${mp}: Which team gets the chicken dinner?`:`Match ${m}: Which team gets the chicken dinner?`,T,cl('1'),1,`MATCH ${m}`+(mp?` · ${mp.toUpperCase()}`:''),'grid')}
  add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKEN DINNERS','grid');
  add('peak','How many people will watch at the peak on Day 1?',SEED.buckets,cl('1'),1,'PEAK VIEWERS','buttons');
  const pw=o=>{const ws=o.map((v,i)=>[v,1/Math.pow(i+1,.8)]),s=ws.reduce((a,b)=>a+b[1],0);let r=Math.random()*s;for(const [v,x] of ws){r-=x;if(r<=0)return v}return o[0]};

@@ -27,6 +27,7 @@ DEFAULTS = {
     "days": {"1": "2026-10-16", "2": "2026-10-17", "3": "2026-10-18"},
     "close": "14:45",                                             # IST, default close time on a match day
     "matches": 6,
+    "maps": {"1": ["Rondo", "Erangel", "Erangel", "Erangel", "Miramar", "Miramar"]},   # per day; other days reuse Day 1
     "prize": "Top 5 on the overall leaderboard win a gift card of their choice.",
     "record": 730000,                                             # BMPS 2026 peak, for the yes/no question
 }
@@ -293,10 +294,16 @@ def create_day_set(day: int, close_ts: float = None) -> list:
     day = int(day)
     close = _close(day, close_ts)
     ids = []
+    maps = (s.get("maps") or {}).get(str(day)) or (s.get("maps") or {}).get("1") or []
     for m in range(1, int(s["matches"]) + 1):
-        t = f"Match {m}: Which team gets the chicken dinner?"
-        if not _exists("match", t, day):
-            ids.append(add_question("match", t, s["teams"], close, day, f"MATCH {m}", "grid", {"match": m}, sort=m))
+        mp = maps[m - 1] if m - 1 < len(maps) else ""
+        t = f"Match {m} · {mp}: Which team gets the chicken dinner?" if mp else f"Match {m}: Which team gets the chicken dinner?"
+        with store._lock:
+            have = _db().execute("SELECT 1 FROM pw_questions WHERE kind='match' AND day=? AND json_extract(meta,'$.match')=?",
+                                 (day, m)).fetchone()
+        if not have:
+            ids.append(add_question("match", t, s["teams"], close, day, f"MATCH {m}" + (f" · {mp.upper()}" if mp else ""),
+                                    "grid", {"match": m, "map": mp}, sort=m))
     t = f"Which team gets the most chicken dinners on Day {day}?"
     if not _exists("team", t, day):
         ids.append(add_question("team", t, s["teams"], close, day, "MOST CHICKEN DINNERS", "grid", sort=10))
