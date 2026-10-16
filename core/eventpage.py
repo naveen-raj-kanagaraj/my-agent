@@ -616,7 +616,7 @@ function logoOf(ch){const n=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]/g,
 function loadImg(u){return new Promise(r=>{if(!u)return r(null);const i=new Image();i.crossOrigin='anonymous';i.onload=()=>r(i);i.onerror=()=>r(null);i.src=u})}
 function wpByPeak(){const live={};(D.live||[]).forEach(s=>live[s.vid]=s.viewers);
  return dayStreams().filter(s=>s.kind==='watch party').map(s=>({vid:s.vid,channel:s.channel,logo:s.logo||logoOf(s.channel),peak:s.viewers,avg:s.avg||0,at:s.at,now:D.official_live?(live[s.vid]||0):null})).sort((a,b)=>b.peak-a.peak)}
-function histCard(){const W=1080,H=1350,SC=3,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);
+function histCard(){const W=1080,H=1350,SC=2,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);
  const g=x.createRadialGradient(W*.8,0,40,W*.8,0,1200);g.addColorStop(0,'#2a1d5c');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,W,H);
  const T=(t,X,Y,f,c,a)=>{x.font=f;x.fillStyle=c;x.textAlign=a||'left';x.textBaseline='top';x.fillText(t,X,Y)};const h=hist(),top=[...h].sort((a,b)=>b[2]-a[2]);
  T('letsgrowesports',80,70,'30px "Share Tech Mono",monospace','#b6f23a');T('BGMI VIEWERSHIP TILL DATE',80,110,'700 64px "Chakra Petch",sans-serif','#ffffff');
@@ -632,7 +632,7 @@ function avatarAt(x,im,cx,cy,r,ring,name){x.save();x.beginPath();x.arc(cx,cy,r,0
  x.restore();x.beginPath();x.arc(cx,cy,r,0,7);x.lineWidth=Math.max(2,r/14);x.strokeStyle=ring;x.stroke();x.textBaseline='top';x.textAlign='left'}
 let avs={};
 function card(type,vid,avatar){if(type==='history')return histCard();
- const W=1080,H=1350,SC=3,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);x.imageSmoothingQuality='high';
+ const W=1080,H=1350,SC=2,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);x.imageSmoothingQuality='high';
  const g=x.createRadialGradient(W*.8,0,40,W*.8,0,1200);g.addColorStop(0,'#1f1a3d');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,W,H);
  x.fillStyle='rgba(255,255,255,.02)';for(let yy=0;yy<H;yy+=4)x.fillRect(0,yy,W,1);
  x.strokeStyle='#b6f23a';x.lineWidth=5;x.beginPath();x.moveTo(40,80);x.lineTo(40,40);x.lineTo(80,40);x.stroke();
@@ -733,8 +733,10 @@ async function openShare(type,vid){
   const me=type==='streamer'?(w.find(x=>x.vid===vid)||(D.wp||[]).find(x=>x.vid===vid)):w[0];
   const ims=await Promise.all(list.slice(0,12).map(l=>loadImg(big(l.logo))));list.slice(0,12).forEach((l,k)=>{if(ims[k]){avs[l.vid]=ims[k];if(l.name)avs[l.name]=ims[k]}});
   if(me&&type!=='board')av=avs[me.vid]||await loadImg(big(me.logo||logoOf(me.channel)))}
- let c=opaque(card(type,vid,av));const done=b=>{cur={blob:b,name:`bmsd-${type}.png`};document.getElementById('mimg').src=URL.createObjectURL(b)};
- try{c.toBlob(done,'image/png')}catch(e){avs={};c=opaque(card(type,vid,null));c.toBlob(done,'image/png')}
+ let c=opaque(card(type,vid,av));const done=(b,ext)=>{cur={blob:b,name:`bmsd-${type}.${ext||'png'}`};document.getElementById('mimg').src=URL.createObjectURL(b)};
+ // X re-compresses images over 5 MB hard: keep the PNG if it's under 4.5 MB, else a near-lossless JPEG
+ const enc=cv=>cv.toBlob(b=>{if(b&&b.size<=4.5e6)done(b,'png');else cv.toBlob(j=>done(j,'jpg'),'image/jpeg',.95)},'image/png');
+ try{enc(c)}catch(e){avs={};c=opaque(card(type,vid,null));enc(c)}
  const wp=D.wp||[],i=wp.findIndex(w=>w.vid===vid);
  const dpk=wp.slice().sort((a,b)=>b.peak-a.peak),today=(D.days||[]).slice(-1)[0]||{},nowT=(D.live||[]).reduce((a,s)=>a+s.viewers,0);
  const LB=D.last_broadcast||{},wpp=wpByPeak();let text;
@@ -753,7 +755,7 @@ async function openShare(type,vid){
 document.getElementById('mclose').onclick=()=>document.getElementById('modal').classList.remove('on');
 document.getElementById('modal').onclick=e=>{if(e.target.id==='modal')e.target.classList.remove('on')};
 document.getElementById('mdl').onclick=()=>{if(!cur)return;const a=document.createElement('a');a.href=URL.createObjectURL(cur.blob);a.download=cur.name;a.click()};
-async function shareTo(app){if(!cur)return;const f=new File([cur.blob],cur.name,{type:'image/png'}),t=window._shareText+' '+URLX+' @letsgrowesports';
+async function shareTo(app){if(!cur)return;const f=new File([cur.blob],cur.name,{type:cur.blob.type||'image/png'}),t=window._shareText+' '+URLX+' @letsgrowesports';
  const mob=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
  if(mob&&navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],text:t});return}catch(e){if(e&&e.name==='AbortError')return}}
  document.getElementById('mdl').click();
