@@ -154,6 +154,9 @@ def _roster(out: dict) -> list:
     return rows
 
 
+PWB = """<a class="pwb" href="/predict"><span class="pwt">// NEW · FREE TO PLAY</span><b>PREDICT &amp; WIN</b><span class="pws">Call the BMSD 2026 champion, top 3 and more. Top 5 win a gift card.</span><i>PLAY NOW &rarr;</i></a>"""
+
+
 def _social() -> str:
     return "".join(f'<a class="soc" href="{html.escape(u, quote=True)}" target="_blank" rel="noopener">'
                    f'<b>{html.escape(n.upper())}</b><span>{html.escape(h)}</span></a>' for n, u, h in SOCIAL)
@@ -198,6 +201,7 @@ def build_html(key: str = None, live: bool = False, style: str = None) -> str:
                 .replace("__ROSTERN__", json.dumps([n for _, n, _ in events.ROSTER]))
                 .replace("__REFRESH__", str(REFRESH_SEC))
                 .replace("__SOCIAL__", _social())
+                .replace("__PWB__", PWB if os.getenv("PREDICT_OPEN", "0") == "1" else "")
                 .replace("__BRAND__", html.escape(BRAND)).replace("__BRANDURL__", html.escape(BRAND_URL, quote=True)))
 
 
@@ -230,6 +234,11 @@ a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,77,94,.7)}70%{box-shadow:0 0 0 8px rgba(255,77,94,0)}100%{box-shadow:0 0 0 0 rgba(255,77,94,0)}}
 .ring{width:14px;height:14px}.ring circle{fill:none;stroke:var(--line);stroke-width:3}.ring .p{stroke:var(--lime);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%}
 .follow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;font:12px "Share Tech Mono",monospace;color:var(--muted)}.follow>span{margin-right:auto}
+.pwb{display:grid;grid-template-columns:1fr auto;grid-template-areas:"t i" "b i" "s i";gap:0 12px;align-items:center;margin-top:12px;padding:12px 14px;border:1px solid rgba(245,196,81,.55);background:linear-gradient(90deg,rgba(245,196,81,.18),rgba(245,196,81,.03));color:var(--ink)}
+.pwb:hover{text-decoration:none;border-color:#f5c451}.pwt{grid-area:t;font:11px "Share Tech Mono",monospace;color:#ff4d5e;letter-spacing:.08em}
+.pwb b{grid-area:b;font:700 20px "Chakra Petch",sans-serif;color:#f5c451;letter-spacing:.02em}.pws{grid-area:s;font-size:13px;color:var(--muted)}
+.pwb i{grid-area:i;font:700 13px "Chakra Petch",sans-serif;font-style:normal;background:#f5c451;color:#0a0a14;padding:9px 12px;white-space:nowrap;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+@media(max-width:600px){.pwb{padding:10px 12px;margin-top:8px}.pwb b{font-size:17px}.pws{font-size:12px}.pwb i{padding:8px 10px;font-size:12px}}
 .soc{display:inline-flex;gap:6px;padding:5px 11px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:12px "Share Tech Mono",monospace}
 .soc b{color:var(--lime);font-weight:400}.soc span{color:var(--muted)}.soc:hover{border-color:var(--lime);text-decoration:none}
 @media(max-width:600px){.follow>span{width:100%}.soc span{display:none}}
@@ -316,12 +325,13 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 .mbox img{width:100%;display:block;border:1px solid var(--line);margin:10px 0}.mrow{display:flex;gap:8px;flex-wrap:wrap}
 </style></head><body>
 <div class="bar"><div class="in">
- <div class="title"><a class="brand" href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a><h1>__TITLE__ <span>live viewership</span></h1></div>
+ <div class="title"><span class="brand">__BRAND__</span><h1>__TITLE__ <span>live viewership</span></h1></div>
  <span id="st" class="pill"><span class="dot"></span><span id="stt">Live</span></span>
  <span class="pill" title="Time since the newest reading">UPDATED <span id="ago">-</span></span>
  <span class="pill" id="nx"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle class="p" id="rp" cx="10" cy="10" r="7" stroke-dasharray="44" stroke-dashoffset="0"/></svg>NEXT <span id="nxt">-</span></span>
 </div></div>
-<div class="wrap" style="padding-bottom:0"><div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
+<div class="wrap" style="padding-bottom:0">__PWB__
+<div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
 <div class="wrap" id="app"></div>
 <div class="modal" id="modal"><div class="mbox"><div class="head"><div><h2 id="mt">Share</h2></div><button class="btn ghost sm" id="mclose">Close</button></div>
  <img id="mimg" alt="Share card"><div class="mrow"><button class="btn" id="mig">Instagram</button><button class="btn" id="mxb">X</button><button class="btn ghost" id="mdl">Download</button></div>
@@ -374,14 +384,16 @@ function historyHTML(){const h=hist(),top=[...h].sort((a,b)=>b[2]-a[2]),best={},
  <div class="lbl" style="margin:10px 0 6px">// All-time ranking, peak concurrent viewers</div>
  <div class="rank">${top.map((x,i)=>`<div class="rrow"><span class="rk ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</span>${eimg(ekey(x),30)}<span class="rn">${HNAME[x[0]]} 20${x[1]}${i===0?' <span class="tagx lime">ALL-TIME HIGH</span>':''}${x[0]==='BMSD'&&x[1]==='26'?' <span class="tagx red">\u25CF ONGOING</span>':''}</span><b>${x[2]}K</b></div>`).join('')}</div>
  <div class="muted" style="font-size:11px;margin-top:8px">Earlier events: peak concurrent viewers as reported for each event. BMSD 2026 updates from this tracker.</div></div>`}
-function cdMode(){return !!(D.next_start&&!D.official_live&&D.next_start-nowS()>0)}
+function cdMode(){const ns=D.next_start,LB=D.last_broadcast;if(!ns||D.official_live)return false;
+ // keep the countdown ('starting soon') after the scheduled time until that day's broadcast actually starts (max 12h)
+ const started=LB&&LB.end>=ns-1800;return ns-nowS()>0||(!started&&nowS()-ns<12*3600)}
 function render(){
  const app=document.getElementById('app');
  if(cdMode()){
   if(mode!=='cd'){mode='cd';app.innerHTML=`<div class="card cd" id="cd" style="margin-top:12px"><div class="lbl">// Grand finals go live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>${historyHTML()}
    <div class="card" id="wpCard" style="margin-top:12px"><div class="head"><div><h2 id="wph">Watch party streamers</h2><div class="muted" style="font-size:12px">Official watch parties for the grand finals.</div></div><button class="btn sm" id="shareBoard">Share</button></div>
    <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Status</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
-   <div class="foot" id="foot"><div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div><div class="disc">Unofficial viewership tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON.</div></div>`;
+   <div class="foot" id="foot"><div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div><div class="disc">Unofficial viewership tracker by __BRAND__. Not affiliated with or endorsed by KRAFTON.</div></div>`;
    document.getElementById('shareHist').onclick=()=>openShare('history');window.addEventListener('resize',drawHistCanvas)}
   wpRows();drawHistCanvas();return}
  if(mode==='cd'){mode=null;app.innerHTML=''}
@@ -448,7 +460,7 @@ function render(){
  document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
  document.getElementById('foot').innerHTML=`Concurrent viewers = people watching at the same moment, summed across every live YouTube stream (official, watch parties, community). Recorded only while the official broadcast is live. Counted from: ${esc(D.method)}.
   <div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div>
-  <div class="disc">Unofficial viewership tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included.</div>`;
+  <div class="disc">Unofficial viewership tracker by __BRAND__. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included.</div>`;
  rows();wpRows();chips();drawChart();mark();
 }
 function wpRows(){const sb=document.getElementById('shareBoard');if(sb)sb.onclick=()=>openShare('board');
@@ -458,7 +470,7 @@ function wpRows(){const sb=document.getElementById('shareBoard');if(sb)sb.onclic
  let rank=0;const lim=D.official_live&&!wpAll?10:999,RR=R.slice(0,lim),mb=document.getElementById('wpmore');
  if(mb){mb.style.display=R.length>lim||wpAll&&D.official_live?'block':'none';mb.textContent=wpAll?'\u25B2 SHOW TOP 10':`\u25BC SHOW ALL ${R.length} STREAMERS`;mb.onclick=()=>{wpAll=!wpAll;wpRows()}}
  document.getElementById('wprows').innerHTML=RR.map(w=>{const has=w.status!=='upcoming';if(has)rank++;
-  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?`<span class="muted">PEAK</span> <b>${full(w.peak||0)}</b>`:'<span class="muted">YET TO START</span>';
+  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?`<span class="muted">PEAK</span> <b>${full(w.peak||0)}</b>`:(D.official_live?'<span style="color:var(--red)">NOT LIVE</span>':'<span class="muted">YET TO START</span>');
   const logo=w.logo?`<img class="lg" src="${esc(w.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="lg" style="display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${esc(w.name.slice(0,2).toUpperCase())}</span>`;
   const nm=w.url?`<a class="ch" href="${esc(w.url)}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(w.name)}</a>`:`<span class="ch">${esc(w.name)}</span>`;
   return `<tr><td class="rk ${has?'watch':''}" style="${has?'':'background:var(--line);color:var(--muted)'}">${has?rank:'-'}</td><td class="t">${logo}${nm}</td>
@@ -737,7 +749,8 @@ async function shareTo(app){if(!cur)return;const f=new File([cur.blob],cur.name,
 document.getElementById('mig').onclick=()=>shareTo('ig');document.getElementById('mxb').onclick=()=>shareTo('x');
 // ---------- status + polling ----------
 function countdown(){const el=document.getElementById('cd');if(!el)return null;
- const ns=D.next_start,left=ns?ns-nowS():0;if(D.official_live||!ns||left<=0){el.style.display='none';return null}
+ const ns=D.next_start,left=ns?ns-nowS():0;if(D.official_live||!ns||!cdMode()){el.style.display='none';return null}
+ if(left<=0){el.style.display='block';document.getElementById('cdv').textContent='STARTING SOON';document.getElementById('cdw').textContent='The page switches to live viewers as soon as the stream starts.';return 1}
  el.style.display='block';const d=Math.floor(left/86400),h=Math.floor(left%86400/3600),m=Math.floor(left%3600/60),sec=Math.floor(left%60),p=n=>String(n).padStart(2,'0');
  document.getElementById('cdv').textContent=(d?d+'D ':'')+`${p(h)}:${p(m)}:${p(sec)}`;
  document.getElementById('cdw').textContent=new Date(ns*1000).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})+' IST';
