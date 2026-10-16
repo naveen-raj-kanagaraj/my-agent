@@ -332,17 +332,26 @@ def _count_one(vid: str):
     The counter sometimes stops answering for one big stream while the stream is still live."""
     try:
         n = count_live(vid)
-        if n is not None:
+        if n:                                   # 0 / None: confirm on the watch page (cached 10s, it is slow)
             return vid, n, "YouTube live counter"
     except Exception:
         pass
+    hit = _PAGE.get(vid)
+    if hit and time.time() - hit[0] < 10:
+        return vid, hit[1], "watch page (slower)"
     try:
         s = check_video(vid)
-        if s is not None and s.get("viewers"):
-            return vid, s["viewers"], "watch page (slower)"
-        return vid, None, "watch page (slower)"
-    except Exception:
+        v = (s["viewers"] or None) if s is not None else None
+        _PAGE[vid] = (time.time(), v)
+        if v is None:
+            print(f"Live counter and watch page show no viewers for {vid}")
+        return vid, v, "watch page (slower)"
+    except Exception as e:
+        print(f"Watch page check failed for {vid}: {str(e)[:120]}")
         return vid, "err", ""
+
+
+_PAGE = {}
 
 
 _fast_pool = ThreadPoolExecutor(max_workers=12)
