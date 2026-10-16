@@ -81,6 +81,8 @@ def _db():
     CREATE INDEX IF NOT EXISTS ev_samples_ix ON ev_samples(event, ts);
     CREATE TABLE IF NOT EXISTS ev_anomalies (event TEXT, ts INTEGER, vid TEXT, channel TEXT, kind TEXT, before INTEGER,
         after INTEGER, change INTEGER, pct REAL, seconds INTEGER);
+    CREATE TABLE IF NOT EXISTS ev_fine (event TEXT, ts INTEGER, vid TEXT, viewers INTEGER);
+    CREATE INDEX IF NOT EXISTS ev_fine_ix ON ev_fine(event, ts);
     CREATE TABLE IF NOT EXISTS ev_ticks (event TEXT, ts INTEGER, total INTEGER, live INTEGER, official INTEGER,
         watch INTEGER, community INTEGER, PRIMARY KEY (event, ts));
     """)
@@ -406,6 +408,8 @@ def fast_tick(ev: dict, now: float = None) -> dict:
                       (now, r["viewers"], now, r["viewers"], key, r["vid"]))
         if write_samples:
             c.executemany("INSERT INTO ev_samples VALUES (?,?,?,?)", [(key, int(now), r["vid"], r["viewers"]) for r in rows])
+        # every stream at full resolution (every reading, ~2s), kept for later analysis; nothing on the site reads it
+        c.executemany("INSERT INTO ev_fine VALUES (?,?,?,?)", [(key, int(now), r["vid"], r["viewers"]) for r in rows])
         c.commit()
     if write_samples:
         store.kv_set(f"event_last_sample:{key}", now)
