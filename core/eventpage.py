@@ -202,7 +202,65 @@ def build_html(key: str = None, live: bool = False, style: str = None) -> str:
                 .replace("__REFRESH__", str(REFRESH_SEC))
                 .replace("__SOCIAL__", _social())
                 .replace("__PWB__", PWB if os.getenv("PREDICT_OPEN", "0") == "1" else "")
+                .replace("__CROWD__", _crowd_block() if live else "")
                 .replace("__BRAND__", html.escape(BRAND)).replace("__BRANDURL__", html.escape(BRAND_URL, quote=True)))
+
+CROWD = r"""<style>
+.cw{margin-top:12px}.cw .sub{color:var(--muted);font-size:12px;margin-top:2px}
+.cwg{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-top:12px}.cwq{grid-column:span 4}.cwq.pl{grid-column:span 3}
+@media(max-width:1000px){.cwq,.cwq.pl{grid-column:span 6}}@media(max-width:640px){.cwq,.cwq.pl{grid-column:1/-1}}
+.cwq{background:var(--card2);border:1px solid var(--line);padding:12px 14px}
+.cwq .t{font:12px "Share Tech Mono",monospace;color:var(--red);letter-spacing:.04em}
+.cwq h3{margin:2px 0 10px;font:700 15px "Chakra Petch",sans-serif}
+.cwr{display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:4px 8px;margin:7px 0}
+.cwr .lg{width:22px;height:22px;border-radius:50%;background:var(--card);border:1px solid var(--line);object-fit:cover;display:grid;place-items:center;font:700 9px "Chakra Petch",sans-serif;color:var(--muted)}
+.cwr .n{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cwr .p{font:15px "Share Tech Mono",monospace;text-align:right}
+.cwr .b{grid-column:2/4;height:4px;background:var(--line);position:relative;overflow:hidden}
+.cwr .b i{position:absolute;inset:0 auto 0 0;background:var(--muted);transform-origin:left;animation:cwg .9s cubic-bezier(.2,.8,.2,1) both}
+.cwr.top .n,.cwr.top .p{color:var(--lime)}.cwr.top .b i{background:var(--lime);box-shadow:0 0 10px rgba(182,242,58,.6)}
+.cwr.oth .n,.cwr.oth .p{color:var(--muted);font-weight:400}.cwr.oth .b i{background:#3a3a4e}
+.cwr.ok .n:after{content:" \2713";color:var(--lime)}
+.cwq .ft{font:11px "Share Tech Mono",monospace;color:var(--muted);margin-top:8px}
+.cwpk{display:flex;align-items:flex-end;gap:5px;height:120px;margin-top:8px}
+.cwpk div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
+.cwpk i{width:100%;background:var(--muted);opacity:.55;animation:cwh .9s cubic-bezier(.2,.8,.2,1) both;transform-origin:bottom}
+.cwpk .top i{background:var(--lime);opacity:1;box-shadow:0 0 12px rgba(182,242,58,.55)}
+.cwpk span{font:11px "Share Tech Mono",monospace;color:var(--muted)}.cwpk .top span{color:var(--lime)}
+.cwpk b{font:10px "Share Tech Mono",monospace;color:var(--muted);font-weight:400;white-space:nowrap}
+@keyframes cwg{from{transform:scaleX(0)}}@keyframes cwh{from{transform:scaleY(0)}}
+.cwq.wide{grid-column:1/-1!important}
+.cwpr{display:none}@media(max-width:640px){.cwpk{display:none}.cwpr{display:block}}
+</style>
+<div class="wrap" style="padding-top:0;padding-bottom:0"><div class="card cw" id="crowd"></div></div>
+<script>(function(){const C=__CROWDDATA__;const el=document.getElementById('crowd');if(!C||!C.questions||!C.questions.length){el.parentNode.remove();return}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const key=s=>String(s).toUpperCase().replace(/[^A-Z0-9]/g,'');
+const pc=v=>(v>=10?Math.round(v):v.toFixed(1)).toString().replace(/\.0$/,'')+'%';
+const qb=q=>{const ans=(q.answer||[]).map(a=>a.toLowerCase());
+ if(q.kind==='peak'){const mx=Math.max(...q.rows.map(r=>r.pct))||1;
+  return `<div class="cwq wide"><div class="t">// ${esc(q.tag)}</div><h3>${esc(q.title)}</h3><div class="cwpk">${q.rows.map(r=>`<div class="${r.pct===mx?'top':''}"><span>${pc(r.pct)}</span><i style="height:${Math.max(3,r.pct/mx*84)}%"></i><b>${esc(r.label.replace('Under ','<'))}</b></div>`).join('')}</div><div class="cwpr">${q.rows.map(r=>`<div class="cwr ${r.pct===mx?'top':''}"><span class="lg">\u25B2</span><span class="n">${esc(r.label)}</span><span class="p">${pc(r.pct)}</span><span class="b"><i style="width:${r.pct/mx*100}%"></i></span></div>`).join('')}</div><div class="ft">${esc(q.note)}</div></div>`}
+ const mx=Math.max(...q.rows.filter(r=>!r.other).map(r=>r.pct))||1,scale=q.kind==='multi'?100:mx;
+ return `<div class="cwq${q.kind==='text'?' pl':''}"><div class="t">// ${esc(q.tag)}</div><h3>${esc(q.title)}</h3>${q.rows.map((r,i)=>{
+  const lg=r.team?`<img class="lg" src="tlogo/${key(r.label)}.webp" alt="" onerror="this.outerHTML='<span class=lg>${esc(r.label.slice(0,2).toUpperCase())}</span>'">`:`<span class="lg">${r.other?'+':esc(r.label.slice(0,2).toUpperCase())}</span>`;
+  const cls=[i===0&&!r.other?'top':'',r.other?'oth':'',ans.includes(r.label.toLowerCase())?'ok':''].join(' ');
+  return `<div class="cwr ${cls}">${lg}<span class="n">${esc(r.label)}</span><span class="p">${pc(r.pct)}</span><span class="b"><i style="width:${Math.min(100,r.pct/scale*100)}%;animation-delay:${i*60}ms"></i></span></div>`}).join('')}<div class="ft">${esc(q.note)}</div></div>`};
+el.innerHTML=`<div class="head"><div><div class="lbl">// Predict &amp; Win</div><h2 style="font-size:22px;margin-top:4px">What the community predicted</h2><div class="sub">Predictions closed 4 PM IST, 16 Oct. Results after the grand finals.</div></div></div><div class="cwg">${C.questions.map(qb).join('')}</div>`;
+// sit just above the page footer, inside the live layout (the layout is rebuilt when the broadcast state changes)
+const app=document.getElementById('app'),wr=el.parentNode,place=()=>{const f=document.getElementById('foot');if(f&&el.nextElementSibling!==f){f.parentNode.insertBefore(el,f);wr.remove()}};
+if(app){new MutationObserver(place).observe(app,{childList:true,subtree:true});place()}})();</script>
+"""
+
+
+def _crowd_block() -> str:
+    if os.getenv("PREDICT_SPLIT", "1") != "1":
+        return ""
+    try:
+        from core import crowd
+        data = crowd.split()
+    except Exception:
+        return ""
+    return CROWD.replace("__CROWDDATA__", json.dumps(data).replace("</", "<\\/"))
 
 
 PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -339,6 +397,7 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 <div class="wrap" style="padding-bottom:0">__PWB__
 <div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
 <div class="wrap" id="app"></div>
+__CROWD__
 <script>function pwGo(e,u){if(e.metaKey||e.ctrlKey||e.shiftKey||matchMedia('(prefers-reduced-motion: reduce)').matches)return true;
  const o=document.createElement('div');o.className='pwx';o.innerHTML='<b>PREDICT &amp; WIN</b>';o.style.setProperty('--x',e.clientX+'px');o.style.setProperty('--y',e.clientY+'px');
  document.body.appendChild(o);requestAnimationFrame(()=>requestAnimationFrame(()=>o.classList.add('on')));setTimeout(()=>{location.href=u},480);return false}</script>
