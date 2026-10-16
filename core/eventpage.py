@@ -207,8 +207,8 @@ def build_html(key: str = None, live: bool = False, style: str = None) -> str:
 
 PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>__TITLE__ live viewership | __BRAND__</title>
-<meta name="description" content="Live concurrent viewers across every __TITLE__ YouTube stream: official broadcast and watch parties, updated every few seconds.">
-<meta property="og:title" content="__TITLE__ live viewership"><meta property="og:description" content="Official vs watch parties, live. Who is winning the watch party battle?">
+<meta name="description" content="Track BMSD 2026 Grand Finals viewership live, anywhere, anytime. Official stream and every watch party, peak and average viewers, watch party battles and full stats, updated every 2 seconds.">
+<meta property="og:title" content="BMSD 2026 Live Viewership Tracker | letsgrowesports"><meta property="og:description" content="Track BMSD 2026 Grand Finals viewership live, anywhere, anytime. Official stream and every watch party, peak and average viewers, watch party battles and full stats, updated every 2 seconds."><meta name="twitter:description" content="Track BMSD 2026 Grand Finals viewership live, anywhere, anytime. Official stream and every watch party, peak and average viewers, watch party battles and full stats, updated every 2 seconds.">
 <meta name="theme-color" content="#07051a">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
