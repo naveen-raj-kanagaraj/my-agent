@@ -50,7 +50,7 @@ PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 body{background:radial-gradient(800px 380px at 80% -15%,rgba(124,92,255,.14),transparent 60%),var(--bg);min-height:100vh}
 body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;background:repeating-linear-gradient(0deg,rgba(255,255,255,.012) 0 1px,transparent 1px 3px)}
 a{color:var(--cyan);text-decoration:none}.mono{font-family:"Share Tech Mono",monospace}
-.bar{position:sticky;top:0;z-index:20;background:rgba(11,11,18,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.bar{position:sticky;top:0;z-index:20;background:rgba(11,11,18,.9);backdrop-filter:blur(10px)}
 .bar .in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:10px}
 .brand{display:block;font:12px "Share Tech Mono",monospace;color:var(--lime);letter-spacing:.04em}
 h1{margin:2px 0 0;font-size:19px;text-transform:uppercase;letter-spacing:.02em;line-height:1.1}h1 span{color:var(--muted);font-weight:600}
@@ -96,14 +96,15 @@ h1{margin:2px 0 0;font-size:19px;text-transform:uppercase;letter-spacing:.02em;l
 .sleg{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;margin-top:12px}.sleg div{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 .sleg i{width:10px;height:10px;flex:none}.sleg span:not(.av){margin-left:auto;font:14px "Share Tech Mono",monospace}
 /* treemap */
-.tm{position:relative;height:260px}.tm div{position:absolute;border:2px solid var(--card);padding:8px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.tm{position:relative;height:260px}@media(max-width:640px){.tm{height:330px}}@media(min-width:641px){.tm .tight{padding-right:30px}.tm .tight b{font-size:12px}}.tm div{position:absolute;border:2px solid var(--card);padding:8px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
 .tm b{font-size:14px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tm span{font:20px "Share Tech Mono",monospace}
 /* gauge */
 .gg{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.gg svg{width:220px;flex:none}
 .rk{flex:1;min-width:170px}.rk div{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-weight:600}.rk div:last-child{border:0}
 .rk em{font:normal 13px "Share Tech Mono",monospace;color:var(--muted);width:22px;display:inline-block;flex:none}.rk span:not(.av){margin-left:auto;font:14px "Share Tech Mono",monospace}
 /* players */
-.av{width:24px;height:24px;border-radius:50%;object-fit:cover;object-position:top;background:var(--card2);border:1px solid var(--line);flex:none;display:inline-grid;place-items:center;font:700 9px "Chakra Petch",sans-serif;color:var(--muted)}
+.av{width:38px;height:38px;border-radius:4px;object-fit:cover;background:linear-gradient(180deg,#22222f,#15151e);flex:none;display:inline-grid;place-items:center;font:700 11px "Chakra Petch",sans-serif;color:var(--muted)}
+span.av{border:1px solid var(--line)}
 .c.ph{overflow:hidden}.cut{position:absolute;right:-6px;bottom:0;height:88%;max-height:330px;width:auto;pointer-events:none;
  -webkit-mask-image:linear-gradient(to top,transparent 0,#000 34%);mask-image:linear-gradient(to top,transparent 0,#000 34%);filter:saturate(.95) contrast(1.03)}
 .c.ph>*:not(.cut){position:relative;z-index:1}
@@ -114,13 +115,13 @@ h1{margin:2px 0 0;font-size:19px;text-transform:uppercase;letter-spacing:.02em;l
 .elimP .cut{position:relative;right:auto;bottom:auto;height:170px;margin-right:-8px}
 .tm .tc{position:absolute;right:0;bottom:0;height:92%;width:auto;-webkit-mask-image:linear-gradient(to top,transparent 0,#000 30%);mask-image:linear-gradient(to top,transparent 0,#000 30%);pointer-events:none}
 .tav{width:30px;height:30px;border-color:rgba(0,0,0,.25)}
-.pills span{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 3px}
+.pills span{display:inline-flex;gap:8px;padding:4px 10px 4px 4px}.pills span em{align-self:center}.pills span{align-items:center}.pills .av{width:30px;height:30px}
 /* leader strip on player cards */
 .lead{position:relative;height:150px;margin:-4px 0 12px;border-bottom:1px solid var(--line);overflow:hidden}
 .lead .lc{position:absolute;right:-10px;bottom:0;height:150px;max-height:none;-webkit-mask-image:linear-gradient(to top,transparent 0,#000 30%);mask-image:linear-gradient(to top,transparent 0,#000 30%)}
 .lead .ln{position:relative;font:700 52px/1 "Chakra Petch",sans-serif;margin-top:18px;text-shadow:0 0 20px rgba(182,242,58,.3)}
 .lead .lw{position:relative;font-size:20px;font-weight:700;text-transform:uppercase;margin-top:4px}.lead small{position:relative;font:11px "Share Tech Mono",monospace;color:var(--muted)}
-.tm div{gap:2px}.tm .tav{position:absolute;top:6px;right:6px;width:28px;height:28px;border-color:rgba(0,0,0,.25)}
+.tm div{gap:2px}.tm .tav{position:absolute;top:6px;right:6px;aspect-ratio:1;border-radius:4px;object-fit:cover;background:rgba(0,0,0,.28);pointer-events:none}.tm b,.tm span{position:relative;z-index:1;text-shadow:0 1px 6px rgba(0,0,0,.25)}
 /* curve */
 .cv svg{width:100%;height:auto;display:block}
 .foot{margin-top:22px;font:12px "Share Tech Mono",monospace;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
@@ -170,7 +171,8 @@ function squarify(items,x,y,w,h){const out=[],tot=items.reduce((a,r)=>a+r.pct,0)
   else{const ch=s/w;let xx=x;row.forEach(r=>{const cw=r.a/ch;out.push({...r,x:xx,y,w:cw,h:ch});xx+=cw});y+=ch;h-=ch}rest=rest.slice(k)}return out}
 function tree(q){const W=400,H=260,cells=squarify(q.rows.map((r,i)=>({...r,c:r.other?OTH:COL[i]})),0,0,W,H);
  return card(q,'s4 ph',lead(q)+`<div class="tm">${cells.map(r=>{const dark=['#b6f23a','#f5c451','#3fd6a4','#4cc9f0'].includes(r.c),narrow=r.w<118,u=!r.other&&ph(r.label);
-  return `<div class="${ok(q,r.label)}" style="left:${r.x/W*100}%;top:${r.y/H*100}%;width:${r.w/W*100}%;height:${r.h/H*100}%;background:${r.c};color:${dark?'#0b0b12':'#eeeef5'}" title="${esc(r.label)} ${pc(r.pct)}">${u?`<img class="av tav" src="${u}" alt="${esc(r.label)}" style="${narrow||r.h<70?'width:20px;height:20px;top:4px;right:4px':''}">`:''}<b style="${narrow?'font-size:12px':''}">${esc(r.label)}</b><span style="${narrow?'font-size:16px':''}">${pc(r.pct)}</span></div>`}).join('')}</div>`)}
+  const tight=u&&r.h<80,sz=tight?24:Math.round(Math.max(30,Math.min(r.h*.42,r.w*.42,76)));
+  return `<div class="${ok(q,r.label)} ${tight?'tight':''}" style="left:${r.x/W*100}%;top:${r.y/H*100}%;width:${r.w/W*100}%;height:${r.h/H*100}%;background:${r.c};color:${dark?'#0b0b12':'#eeeef5'};" title="${esc(r.label)} ${pc(r.pct)}">${u?`<img class="tav" src="${u}" alt="${esc(r.label)}" style="width:${sz}px;height:${sz}px">`:''}<b style="${narrow?'font-size:12px':''}">${esc(r.label)}</b><span style="${narrow?'font-size:16px':''}">${pc(r.pct)}</span></div>`}).join('')}</div>`)}
 // 7. eliminator: gauge + ranking
 function gauge(q){const L=q.rows[0],a1=Math.PI+Math.PI*L.pct/100;
  return card(q,'s4 elimP',`<div class="gtop"><svg viewBox="0 0 220 130" style="width:62%;max-width:230px"><path d="${arc(110,115,90,Math.PI,2*Math.PI-.0001)}" stroke="#262636" stroke-width="18" fill="none"/><path d="${arc(110,115,90,Math.PI,a1)}" stroke="#ff4d5e" stroke-width="18" fill="none" class="gp" style="filter:drop-shadow(0 0 6px rgba(255,77,94,.6))"/><text x="110" y="100" text-anchor="middle" fill="#eeeef5" font-family="Chakra Petch,sans-serif" font-weight="700" font-size="34">${pc(L.pct)}</text><text x="110" y="122" text-anchor="middle" fill="#8d8ca3" font-family="Share Tech Mono,monospace" font-size="12">${esc(L.label.toUpperCase())}</text></svg>${cut(L.label)}</div>
