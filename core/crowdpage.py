@@ -22,12 +22,26 @@ def player_imgs(embed: bool = False) -> dict:
     return out
 
 
+MDIR = os.path.join(os.path.dirname(PDIR), "teammarks")
+
+
+def _logos(embed: bool) -> dict:
+    """Team logos; sponsor-prefixed ones (iQOO | Soul) use just the team's own mark so it reads at small sizes."""
+    import base64
+    out = team_logos(embed=embed)
+    for f in sorted(os.listdir(MDIR)) if os.path.isdir(MDIR) else []:
+        if f.endswith(".webp"):
+            out[f[:-5]] = ("data:image/webp;base64," + base64.b64encode(open(os.path.join(MDIR, f), "rb").read()).decode()
+                           if embed else f"/tmark/{f}")
+    return out
+
+
 def build_html(data: dict = None, embed_logos: bool = False) -> str:
     if data is None:
         from core import crowd
         data = crowd.split(top=6, all_teams=True)
     return (PAGE.replace("__PUBLIC__", PUBLIC_URL)
-                .replace("__TLOGO__", json.dumps(team_logos(embed=embed_logos)))
+                .replace("__TLOGO__", json.dumps(_logos(embed_logos)))
                 .replace("__PIMG__", json.dumps(player_imgs(embed=embed_logos)))
                 .replace("__DATA__", json.dumps(data).replace("</", "<\\/")))
 
@@ -67,7 +81,9 @@ h1{margin:2px 0 0;font-size:19px;text-transform:uppercase;letter-spacing:.02em;l
 .t{font:12px "Share Tech Mono",monospace;color:var(--red);letter-spacing:.05em}.c h3{margin:2px 0 12px;font-size:17px}
 .ft{font:11px "Share Tech Mono",monospace;color:var(--muted);margin-top:10px}
 @media(max-width:900px){.c,.c.s4,.c.s8{grid-column:1/-1}}
-.lg{width:26px;height:26px;border-radius:50%;object-fit:cover;background:var(--card2);border:1px solid var(--line);flex:none;display:inline-grid;place-items:center;font:700 10px "Chakra Petch",sans-serif;color:var(--muted)}
+.lg{width:64px;height:30px;object-fit:contain;flex:none;display:inline-grid;place-items:center;font:700 10px "Chakra Petch",sans-serif;color:var(--muted)}
+span.lg{width:30px;border:1px solid var(--line);border-radius:4px;background:var(--card2)}
+.tile .lg{width:100%;max-width:120px;height:48px}
 .ok:after{content:" \2713";color:var(--lime)}
 /* donut */
 .dn{display:flex;gap:18px;align-items:center;flex-wrap:wrap}.dn svg{flex:none;width:210px;height:210px}
@@ -149,11 +165,11 @@ const arc=(cx,cy,r,a0,a1)=>{const p=a=>[cx+r*Math.cos(a),cy+r*Math.sin(a)],[x0,y
 function donut(q){let a=-Math.PI/2;const tot=q.rows.reduce((s,r)=>s+r.pct,0)||1,L=q.rows[0];
  const segs=q.rows.map((r,i)=>{const da=r.pct/tot*2*Math.PI,d=arc(105,105,80,a+.012,a+da-.012);a+=da;return `<path d="${d}" stroke="${r.other?OTH:COL[i]}" stroke-width="30" fill="none" class="seg" style="--d:${i*90}ms"/>`}).join('');
  const lg=TL[key(L.label)];
- return card(q,'s4',`<div class="dn"><svg viewBox="0 0 210 210">${segs}${lg?`<image href="${lg}" x="75" y="52" width="60" height="60"/>`:''}<text x="105" y="140" text-anchor="middle" fill="#b6f23a" font-family="Share Tech Mono,monospace" font-size="28">${pc(L.pct)}</text><text x="105" y="160" text-anchor="middle" fill="#8d8ca3" font-family="Share Tech Mono,monospace" font-size="11">${esc(L.label.toUpperCase())}</text></svg>
+ return card(q,'s4',`<div class="dn"><svg viewBox="0 0 210 210">${segs}${lg?`<image href="${lg}" x="55" y="58" width="100" height="56" preserveAspectRatio="xMidYMid meet"/>`:''}<text x="105" y="140" text-anchor="middle" fill="#b6f23a" font-family="Share Tech Mono,monospace" font-size="28">${pc(L.pct)}</text><text x="105" y="160" text-anchor="middle" fill="#8d8ca3" font-family="Share Tech Mono,monospace" font-size="11">${esc(L.label.toUpperCase())}</text></svg>
  <div class="leg">${q.rows.map((r,i)=>`<div class="${ok(q,r.label)}"><i style="background:${r.other?OTH:COL[i]}"></i>${logo(r)}${esc(r.label)}<span class="p">${pc(r.pct)}</span></div>`).join('')}</div></div>`)}
 // 2. top 3: rings
 function rings(q){const rows=q.rows.slice(0,8);
- return card(q,'s8',`<div class="rings">${rows.map((r,i)=>{const L=2*Math.PI*40,src=TL[key(r.label)];return `<div class="ring ${ok(q,r.label)}"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" stroke="#262636" stroke-width="8" fill="none"/><circle cx="50" cy="50" r="40" stroke="${i<3?'#b6f23a':'#8d8ca3'}" stroke-width="8" fill="none" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="${L}" stroke-dashoffset="${L}" data-off="${L*(1-r.pct/100)}" class="rg" ${i<3?'style="filter:drop-shadow(0 0 4px rgba(182,242,58,.6))"':''}/>${src?`<image href="${src}" x="30" y="30" width="40" height="40"/>`:''}</svg><b>${esc(r.label)}</b><span>${pc(r.pct)}</span></div>`}).join('')}</div>`)}
+ return card(q,'s8',`<div class="rings">${rows.map((r,i)=>{const L=2*Math.PI*40,src=TL[key(r.label)];return `<div class="ring ${ok(q,r.label)}"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" stroke="#262636" stroke-width="8" fill="none"/><circle cx="50" cy="50" r="40" stroke="${i<3?'#b6f23a':'#8d8ca3'}" stroke-width="8" fill="none" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="${L}" stroke-dashoffset="${L}" data-off="${L*(1-r.pct/100)}" class="rg" ${i<3?'style="filter:drop-shadow(0 0 4px rgba(182,242,58,.6))"':''}/>${src?`<image href="${src}" x="22" y="28" width="56" height="44" preserveAspectRatio="xMidYMid meet"/>`:''}</svg><b>${esc(r.label)}</b><span>${pc(r.pct)}</span></div>`}).join('')}</div>`)}
 // 3. BMIC: heat tiles
 function heat(q){const k=6;
  return card(q,'s12',`<div class="tiles">${q.rows.map((r,i)=>`<div class="tile ${i<k?'top6':''} ${ok(q,r.label)}" style="background:rgba(182,242,58,${(.04+.5*r.pct/100).toFixed(3)})">${logo(r)}<b>${esc(r.label)}</b><span style="color:${r.pct>=50?'#eeeef5':'#8d8ca3'}">${pc(r.pct)}</span></div>`).join('')}</div><div class="keyrow">0%<i></i>100%<span style="margin-left:12px">outlined: the community's top 6</span></div>`)}
