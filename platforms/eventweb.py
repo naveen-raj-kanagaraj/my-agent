@@ -7,6 +7,9 @@ import gzip
 import json
 import logging
 import os
+import threading
+import time
+import queue
 
 from flask import Flask, Response, request
 
@@ -33,12 +36,46 @@ def _headers(resp):
         resp.headers["CDN-Cache-Control"] = f"max-age={secs}"
     resp.headers["Referrer-Policy"] = "no-referrer"
     resp.headers["Access-Control-Allow-Origin"] = "*"
-    if (resp.status_code == 200 and not resp.direct_passthrough and "gzip" in request.headers.get("Accept-Encoding", "")
+    if (resp.status_code == 200 and not resp.direct_passthrough and "Content-Encoding" not in resp.headers and "gzip" in request.headers.get("Accept-Encoding", "")
             and len(resp.get_data()) > 1024):
         resp.set_data(gzip.compress(resp.get_data(), 5))
         resp.headers["Content-Encoding"] = "gzip"
         resp.headers["Vary"] = "Accept-Encoding"
     return resp
+
+
+# ---- in-memory response cache: thousands of viewers poll the same numbers, so each response is built once
+# per TTL (one thread builds it, the rest wait for that copy) and handed out as ready-made gzip bytes.
+_MEMO, _MLOCK = {}, {}
+
+
+def _memo(key, ttl, build, mimetype):
+    hit = _MEMO.get(key)
+    if not (hit and time.time() - hit[0] < ttl):
+        lock = _MLOCK.setdefault(key, threading.Lock())
+        with lock:
+            hit = _MEMO.get(key)
+            if not (hit and time.time() - hit[0] < ttl):
+                body = build()
+                if isinstance(body, str):
+                    body = body.encode()
+                hit = (time.time(), body, gzip.compress(body, 5) if len(body) > 1024 else None)
+                _MEMO[key] = hit
+    _, body, gz = hit
+    if gz is not None and "gzip" in request.headers.get("Accept-Encoding", ""):
+        r = Response(gz, mimetype=mimetype)
+        r.headers["Content-Encoding"] = "gzip"
+        r.headers["Vary"] = "Accept-Encoding"
+        return r
+    return Response(body, mimetype=mimetype)
+
+
+def _jdump(fn):
+    return lambda: json.dumps(fn(), separators=(",", ":"))
+
+
+def _file(path):
+    return lambda: open(path, "rb").read()
 
 
 def _json(obj):
@@ -47,17 +84,17 @@ def _json(obj):
 
 @app.route("/")
 def index():
-    return Response(eventpage.build_html(live=True), mimetype="text/html")
+    return _memo("/", 5, lambda: eventpage.build_html(live=True), "text/html")
 
 
 @app.route("/data")
 def data():
-    return _json(eventpage.live_data())
+    return _memo("/data", 1, _jdump(eventpage.live_data), "application/json")
 
 
 @app.route("/series")
 def series():
-    return _json(eventpage.series_data())
+    return _memo("/series", 20, _jdump(eventpage.series_data), "application/json")
 
 
 @app.route("/hit", methods=["POST"])
@@ -65,12 +102,27 @@ def hit():
     j = request.get_json(silent=True) or {}
     try:
         from urllib.parse import unquote
-        visitors.hit(str(j.get("sid", "")), request.headers.get("CF-IPCountry", ""), str(j.get("ref", "")),
-                     request.headers.get("User-Agent", ""), int(j.get("w") or 0),
-                     unquote(request.headers.get("cf-ipcity", "")), unquote(request.headers.get("cf-region", "")))
+        _HITS.put_nowait((str(j.get("sid", "")), request.headers.get("CF-IPCountry", ""), str(j.get("ref", "")),
+                          request.headers.get("User-Agent", ""), int(j.get("w") or 0),
+                          unquote(request.headers.get("cf-ipcity", "")), unquote(request.headers.get("cf-region", ""))))
     except Exception:
-        pass
+        pass                                  # queue full: drop the visit count, never slow the page
     return Response(status=204)
+
+
+_HITS = queue.Queue(maxsize=20000)
+
+
+def _hit_writer():   # visitor counts are written here, one at a time, so page requests never wait on the database
+    while True:
+        a = _HITS.get()
+        try:
+            visitors.hit(*a)
+        except Exception:
+            pass
+
+
+threading.Thread(target=_hit_writer, daemon=True).start()
 
 
 @app.route("/elogo/<name>")
@@ -81,7 +133,7 @@ def elogo(name):
     path = os.path.join(eventpage.ELOGO_DIR, name)
     if not os.path.isfile(path):
         return Response(status=404)
-    r = Response(open(path, "rb").read(), mimetype="image/webp")
+    r = _memo(path, 3600, _file(path), "image/webp")
     r.headers["Cache-Control"] = "public, max-age=86400"
     return r
 
@@ -112,7 +164,7 @@ def _tok():
 
 @app.route("/predict")
 def predict_page():
-    return Response(predictpage.build_html(), mimetype="text/html")
+    return _memo("/predict", 20, predictpage.build_html, "text/html")
 
 
 @app.route("/predict/og.png")
@@ -120,12 +172,12 @@ def predict_og():
     path = os.path.join(os.path.dirname(eventpage.ELOGO_DIR), "predict_og.png")
     if not os.path.isfile(path):
         return Response(status=404)
-    return Response(open(path, "rb").read(), mimetype="image/png")
+    return _memo(path, 3600, _file(path), "image/png")
 
 
 @app.route("/predict/api/board")
 def predict_board():
-    return _json(predict.board())
+    return _memo("/board", 3, _jdump(predict.board), "application/json")
 
 
 @app.route("/predict/api/profile/<handle>")
@@ -177,7 +229,7 @@ def tlogo(name):
     path = os.path.join(predictpage.TLOGO_DIR, name)
     if not os.path.isfile(path):
         return Response(status=404)
-    r = Response(open(path, "rb").read(), mimetype="image/webp")
+    r = _memo(path, 3600, _file(path), "image/webp")
     r.headers["Cache-Control"] = "public, max-age=86400"
     return r
 
