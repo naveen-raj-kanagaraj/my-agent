@@ -191,7 +191,7 @@ def run():
     print(f"Event dashboard: http://localhost:{PORT}")
     try:
         from waitress import serve   # production server if installed (pip install waitress)
-        serve(app, host="127.0.0.1", port=PORT, threads=16, channel_timeout=30, _quiet=True)
+        serve(app, host="127.0.0.1", port=PORT, threads=48, connection_limit=2000, channel_timeout=30, _quiet=True)
     except ImportError:
         logging.getLogger("werkzeug").setLevel(logging.ERROR)
         app.run(host="127.0.0.1", port=PORT, debug=False, use_reloader=False, threaded=True)

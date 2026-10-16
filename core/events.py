@@ -328,15 +328,21 @@ def count_live(vid: str):
 
 
 def _count_one(vid: str):
+    """Live counter first; if it has no 'watching' count (or fails), read the watch page before calling it ended.
+    The counter sometimes stops answering for one big stream while the stream is still live."""
     try:
         n = count_live(vid)
-        return vid, n, "YouTube live counter"
+        if n is not None:
+            return vid, n, "YouTube live counter"
     except Exception:
-        try:
-            s = check_video(vid)
-            return vid, (s["viewers"] if s else None), "watch page (slower)"
-        except Exception:
-            return vid, "err", ""
+        pass
+    try:
+        s = check_video(vid)
+        if s is not None and s.get("viewers"):
+            return vid, s["viewers"], "watch page (slower)"
+        return vid, None, "watch page (slower)"
+    except Exception:
+        return vid, "err", ""
 
 
 _fast_pool = ThreadPoolExecutor(max_workers=12)
