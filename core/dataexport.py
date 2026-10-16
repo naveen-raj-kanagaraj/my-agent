@@ -49,7 +49,13 @@ def viewership(key: str) -> dict:
                            (key,)).fetchall()
         streams = {r["vid"]: dict(r) for r in db.execute(
             "SELECT vid, channel, title, kind FROM ev_streams WHERE event=?", (key,))}
+        fine = db.execute("SELECT 1 FROM sqlite_master WHERE name='ev_fine'").fetchone()
         samples = db.execute("SELECT ts, vid, viewers FROM ev_samples WHERE event=? ORDER BY ts", (key,)).fetchall()
+        if fine:   # full-resolution readings exist from the finals on: use them, older days fall back to ev_samples
+            fs = db.execute("SELECT ts, vid, viewers FROM ev_fine WHERE event=? ORDER BY ts", (key,)).fetchall()
+            if fs:
+                first = fs[0]["ts"]
+                samples = [x for x in samples if x["ts"] < first] + list(fs)
     out_dir = os.path.join(OUT, key)
     # 2-minute rows: the reading at the end of each window, plus the highest total inside it
     rows, cur, hi = [], None, 0
@@ -79,6 +85,24 @@ def viewership(key: str) -> dict:
                       st.get("kind", ""), vid, s["viewers"], st.get("title", "")])
     shead = ["date_ist", "time_ist", "unix_ts", "channel", "kind", "video_id", "viewers", "title"]
     _write(os.path.join(out_dir, "streams_2min.csv"), shead, srows)
+    # every reading (about every 2 seconds), one file per day
+    byday = {}
+    for x in samples:
+        tm = _t(int(x["ts"]))
+        st = streams.get(x["vid"], {})
+        byday.setdefault(tm.strftime("%Y-%m-%d"), []).append(
+            [tm.strftime("%H:%M:%S"), int(x["ts"]), st.get("channel", ""), st.get("kind", ""), x["vid"], x["viewers"]])
+    for day, r in byday.items():
+        _write(os.path.join(out_dir, "full", f"streams_{day}.csv"),
+               ["time_ist", "unix_ts", "channel", "kind", "video_id", "viewers"], r)
+    tday = {}
+    for t in ticks:
+        tm = _t(int(t["ts"]))
+        tday.setdefault(tm.strftime("%Y-%m-%d"), []).append(
+            [tm.strftime("%H:%M:%S"), int(t["ts"]), t["total"], t["official"], t["watch"], t["community"]])
+    for day, r in tday.items():
+        _write(os.path.join(out_dir, "full", f"viewership_{day}.csv"),
+               ["time_ist", "unix_ts", "total_viewers", "official", "watch_parties", "community"], r)
     # daily peaks
     days = {}
     for t in ticks:
