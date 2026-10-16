@@ -23,3 +23,12 @@ Free, points-only prediction game at `live.letsgrowesports.com/predict`.
 - Top 3 is ranked by tap order (#1, #2, #3); points are given per correct team.
 - Public data never shows the number of players, only percentages and the top 10.
 - Player data (Instagram IDs, picks) stays in `data/agent.db` on the Mac. It is never committed.
+
+## Data for analysis
+The tracker rewrites these every 10 minutes (or run `python3 scripts/export_data.py`):
+- `exports/bmsd/viewership_2min.csv`: total, official, watch parties, community every 2 minutes while the official stream is live, plus the highest total inside each 2-minute window.
+- `exports/bmsd/streams_2min.csv`: every live stream's viewers every 2 minutes.
+- `exports/bmsd/daily_peaks.csv`: peak, peak time, official/watch-party split, average, per day.
+- `exports/bmsd/viewership.xlsx`: the three tables as sheets.
+- `exports/predict/questions.csv`: questions, answers and the crowd split.
+- `exports/private/`: Predict & Win players and picks (Instagram IDs). Git-ignored; never pushed to the public repo.
