@@ -48,13 +48,13 @@ PRESETS = {
         # only these watch-party channels are permitted to restream; everyone else is ignored (with official channels kept)
         "allowed": ["dynamo", "bixi", "zgod", "neyoo", "mizo", "mrspike", "lolzz", "sharkshe", "mafianinja", "ruthless",
                     "rakazone", "ansh", "casetoo", "sheek", "ipreeet", "shreeman", "mortal", "vaadhiyaar", "regaltos",
-                    "snax", "sriop", "mayur", "neonxpawan", "pawanop", "ladypredator", "soulaman"],
+                    "snax", "sriop", "neonxpawan", "pawanop", "ladypredator", "soulaman"],
         "videos_extra": ["kf7OYvjee_k"],        # specific streams to track (Soul Aman's finals stream)
         # checked directly every minute, even if search misses them
         "always_check": ["@shreemanlegendliveofficial", "@Casetoolive", "@ShreemanLegend", "@VAADHIYAAR", "@SoulAman", "@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
-                         "@sriop-sr70", "@MayurGaming", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
+                         "@sriop-sr70", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
         "next_start": "2026-10-16 14:30",       # IST; shown as a countdown while the official stream is offline
         "match": ["bmsd", "bgmi showdown", "battlegrounds mobile india showdown", "battlegrounds mobile showdown",
                   "bgmi show down", "bm showdown"],
@@ -904,7 +904,7 @@ ROSTER = [  # (match token, display name, channel handle) of the permitted watch
     ("casetoo", "Casetoo", "@Casetoolive"), ("sheek", "Sheek Gaming", "@sheekgaming"), ("ipreeet", "iPreeet", "@IPREEET.69"),
     ("shreeman", "Shreeman Legend", "@shreemanlegendliveofficial"), ("mortal", "MortaL", "@MortaLyt"), ("vaadhiyaar", "Vaadhiyaar", "@VAADHIYAAR"),
     ("regaltos", "Soul Regaltos", "@soulregaltos9810"), ("snax", "Snax Gaming", "@SnaxGaming"), ("sriop", "SRI OP", "@sriop-sr70"),
-    ("mayur", "Mayur Gaming", "@MayurGaming"), ("neonxpawan", "Neon X Pawan", "@NEONXPAWANOP"),
+    ("neonxpawan", "Neon X Pawan", "@NEONXPAWANOP"),
     ("ladypredator", "Lady Predator", "@LadyPredatorGaming"), ("soulaman", "Soul Aman", "@SoulAman")]
 _RBUSY = set()
 
