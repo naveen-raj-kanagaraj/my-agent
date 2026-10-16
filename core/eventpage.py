@@ -365,7 +365,7 @@ function hist(){const h=HIST.map(x=>x.slice());const cur=Math.round((D.peak||0)/
 const EIMG={};function elogo(k){const u=ELOGO[k];if(!u)return null;let im=EIMG[k];if(!im){im=EIMG[k]=new Image();im.onload=()=>{drawHistCanvas()};im.src=u}return im.complete&&im.naturalWidth?im:null}
 const ekey=x=>x[0]+x[1];
 function drawHist(ctx,W,H,fs){fs=fs||1;const h=hist(),n=h.length,pl=34*fs,pr=34*fs,LS=Math.min(54*fs,(W-68*fs)/(n-1)*.86),pt=46*fs,pb=LS+30*fs,cw=W-pl-pr,ch=H-pt-pb,max=820;
- const X=i=>pl+i*cw/(n-1),Y=v=>pt+ch-v/max*ch,top=h.reduce((a,x,i)=>x[2]>h[a][2]?i:a,0);ctx.clearRect(0,0,W,H);
+ const X=i=>pl+i*cw/(n-1),Y=v=>pt+ch-v/max*ch,top=h.reduce((a,x,i)=>x[2]>h[a][2]?i:a,0);if(!ctx._keep)ctx.clearRect(0,0,W,H);
  ctx.strokeStyle=css('--line');ctx.lineWidth=1;ctx.fillStyle=css('--muted');ctx.font=`${11*fs}px "Share Tech Mono",monospace`;ctx.textAlign='left';ctx.textBaseline='bottom';
  [200,400,600,800].forEach(v=>{ctx.globalAlpha=.6;ctx.beginPath();ctx.moveTo(pl,Y(v));ctx.lineTo(W-pr,Y(v));ctx.stroke();ctx.globalAlpha=1;ctx.fillText(v+'K',pl+2,Y(v)-2)});
  ctx.beginPath();h.forEach((x,i)=>i?ctx.lineTo(X(i),Y(x[2])):ctx.moveTo(X(i),Y(x[2])));ctx.lineTo(X(n-1),pt+ch);ctx.lineTo(X(0),pt+ch);ctx.closePath();
@@ -524,7 +524,7 @@ function headLogo(ctx,e,fs){const r=11*fs,x=Math.max(r,e.x-r-6*fs),y=e.y;ctx.sav
  if(e.logo){let im=IMG[e.logo];if(!im){im=IMG[e.logo]=new Image();im.referrerPolicy='no-referrer';im.src=e.logo}if(im.complete&&im.naturalWidth)ctx.drawImage(im,x-r,y-r,2*r,2*r);else draw0()}else draw0();
  function draw0(){ctx.fillStyle=e.c;ctx.font=`700 ${9*fs}px "Chakra Petch",sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(e.ini||'',x,y+1)}ctx.restore()}
 function plot(ctx,W,H,L,o){
- ctx.clearRect(0,0,W,H);
+ if(!o.keep)ctx.clearRect(0,0,W,H);   // share cards keep their dark background (a cleared hole shows up white on X)
  const live=o.live,now=nowS()-LAG;let t0,t1;
  const any=L.filter(l=>l.pts.length);
  if(live){t1=now;t0=now-WIN}else{t0=Math.min(...any.map(l=>l.pts[0][0]));t1=Math.max(...any.map(l=>l.pts[l.pts.length-1][0]));if(!(t1>t0))t1=t0+1}
@@ -622,7 +622,7 @@ function histCard(){const W=1080,H=1350,SC=3,c=document.createElement('canvas');
  T('letsgrowesports',80,70,'30px "Share Tech Mono",monospace','#b6f23a');T('BGMI VIEWERSHIP TILL DATE',80,110,'700 64px "Chakra Petch",sans-serif','#ffffff');
  T(`// ALL-TIME HIGH // ${HNAME[top[0][0]].toUpperCase()} 20${top[0][1]}`,80,200,'30px "Share Tech Mono",monospace','#ff4d5e');T(top[0][2]+'K',72,240,'700 150px "Chakra Petch",sans-serif','#ffffff');
  T(`${h.length} EVENTS // 2021 TO 2026`,W-80,300,'30px "Share Tech Mono",monospace','#b6f23a','right');
- x.save();x.translate(40,420);drawHist(x,W-80,420,2);x.restore();
+ x.save();x.translate(40,420);x._keep=1;drawHist(x,W-80,420,2);x._keep=0;x.restore();
  let y=880;T('// ALL-TIME RANKING',80,y,'26px "Share Tech Mono",monospace','#ff4d5e');y+=44;
  top.slice(0,8).forEach((r,i)=>{const col=i%2,row=Math.floor(i/2),X=80+col*470,Y=y+row*48,c=r[0]==='BMSD'&&r[1]==='26'?'#ff4d5e':i===0?'#b6f23a':'#eeeef5';
   T(`${i+1}. ${HNAME[r[0]].toUpperCase()} 20${r[1]}`.slice(0,26),X,Y,'700 28px "Chakra Petch",sans-serif',c);T(r[2]+'K',X+430,Y,'700 28px "Chakra Petch",sans-serif',c,'right')});
@@ -658,7 +658,7 @@ function card(type,vid,avatar){if(type==='history')return histCard();
   box(80+2*(bw+20),490,bw,170,'WATCH PARTIES',fmt(sp.watch),'at peak','#4cc9f0');
   L=[{label:'Total',color:'#b6f23a',pts:dayTotal(),w:5,fill:true}];y0=700;
   if(type==='split')L=[{label:'Official',color:'#ff8a3d',pts:dayTotal(2),w:5},{label:'Watch parties',color:'#4cc9f0',pts:dayTotal(3),w:5}];
-  x.save();x.translate(60,y0);plot(x,W-120,290,L,{live:false,multi:type==='split',nologo:true,key:'cardT'+type,padR:130,padT:40,fs:2,markPeak:type!=='split'});x.restore();
+  x.save();x.translate(60,y0);plot(x,W-120,290,L,{keep:1,live:false,multi:type==='split',nologo:true,key:'cardT'+type,padR:130,padT:40,fs:2,markPeak:type!=='split'});x.restore();
   let ly=1015;T('// WATCH PARTY LEADERS (PEAK)',80,ly,M(26),'#ff4d5e');ly+=42;
   wp.slice(0,3).forEach((w,j)=>{T(`${j+1}. ${w.channel.toUpperCase().slice(0,26)}`,80,ly,B(34),j?'#eeeef5':'#b6f23a');T(full(w.peak),W-80,ly,B(34),j?'#eeeef5':'#b6f23a','right');ly+=46});
  }else if(type==='streams'){
@@ -721,6 +721,7 @@ function card(type,vid,avatar){if(type==='history')return histCard();
 function dayTotal(col){col=col||1;const LB=D.last_broadcast;let src=(D.series_all||[]).concat((D.series_recent||[]));
  const m=new Map();src.forEach(r=>m.set(r[0],r));src=[...m.values()].sort((a,b)=>a[0]-b[0]);
  if(LB)src=src.filter(r=>r[0]>=LB.start-60&&r[0]<=LB.end+120);const step=Math.max(1,Math.floor(src.length/900));return src.filter((_,i)=>i%step===0).map(r=>[r[0],r[col]])}
+function opaque(c){const x=c.getContext('2d');x.save();x.setTransform(1,0,0,1,0,0);x.globalCompositeOperation='destination-over';x.fillStyle='#0b0b12';x.fillRect(0,0,c.width,c.height);x.restore();return c}   // no see-through pixels: apps show them white
 let cur=null;
 async function openShare(type,vid){
  const mi=document.getElementById('mimg');mi.removeAttribute('src');mi.alt='Making the image...';cur=null;document.getElementById('modal').classList.add('on');
@@ -732,8 +733,8 @@ async function openShare(type,vid){
   const me=type==='streamer'?(w.find(x=>x.vid===vid)||(D.wp||[]).find(x=>x.vid===vid)):w[0];
   const ims=await Promise.all(list.slice(0,12).map(l=>loadImg(big(l.logo))));list.slice(0,12).forEach((l,k)=>{if(ims[k]){avs[l.vid]=ims[k];if(l.name)avs[l.name]=ims[k]}});
   if(me&&type!=='board')av=avs[me.vid]||await loadImg(big(me.logo||logoOf(me.channel)))}
- let c=card(type,vid,av);const done=b=>{cur={blob:b,name:`bmsd-${type}.png`};document.getElementById('mimg').src=URL.createObjectURL(b)};
- try{c.toBlob(done,'image/png')}catch(e){avs={};c=card(type,vid,null);c.toBlob(done,'image/png')}
+ let c=opaque(card(type,vid,av));const done=b=>{cur={blob:b,name:`bmsd-${type}.png`};document.getElementById('mimg').src=URL.createObjectURL(b)};
+ try{c.toBlob(done,'image/png')}catch(e){avs={};c=opaque(card(type,vid,null));c.toBlob(done,'image/png')}
  const wp=D.wp||[],i=wp.findIndex(w=>w.vid===vid);
  const dpk=wp.slice().sort((a,b)=>b.peak-a.peak),today=(D.days||[]).slice(-1)[0]||{},nowT=(D.live||[]).reduce((a,s)=>a+s.viewers,0);
  const LB=D.last_broadcast||{},wpp=wpByPeak();let text;
