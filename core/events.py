@@ -814,6 +814,15 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
         for v, p_ in per.items():
             p_["avg"] = round(sums[v][0] / sums[v][1]) if v in sums else 0
         ls["streams"] = sorted(per.values(), key=lambda p: -p["peak"])
+        bt = [t for t in ticks if ls["start"] <= t["ts"] <= ls["end"]]
+        hw = air = 0.0
+        for i, t in enumerate(bt):
+            dt = min((bt[i + 1]["ts"] - t["ts"]) if i + 1 < len(bt) else POLL_SEC, gap_cap)
+            hw += t["total"] * dt
+            air += dt
+        ls["avg"] = hw / air if air else 0
+        ls["peak_official"] = max((t["official"] for t in bt), default=0)
+        ls["peak_watch"] = max((t["watch"] for t in bt), default=0)
         out["last_broadcast"] = ls
     out["method"] = (f"{_FASTSTATE['method']}, every {FAST_SEC * 2 ** _FASTSTATE.get('slow', 0):g}s" if fast_healthy()
                      else f"search results, every {POLL_SEC}s")
