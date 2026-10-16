@@ -13,9 +13,10 @@ Each poll stores one sample per live stream and one total ("tick").
 """
 import os
 import re
+import threading
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime
 from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
@@ -352,10 +353,11 @@ def _count_one(vid: str):
 
 
 _PAGE = {}
+_INFLIGHT = {}   # vid -> count still running from an earlier tick
 _JUMP = {}       # vid -> (ts, viewers) of an unconfirmed big jump from the watch page
 
 
-_fast_pool = ThreadPoolExecutor(max_workers=12)
+_fast_pool = ThreadPoolExecutor(max_workers=24)
 
 
 def fast_tick(ev: dict, now: float = None) -> dict:
@@ -371,10 +373,25 @@ def fast_tick(ev: dict, now: float = None) -> dict:
     for vid, st in live.items():
         f = fast.get(vid)
         big = (f["viewers"] if f else st.get("viewers", 0)) >= MINOR_VIEWERS or st.get("kind") == "official"
-        if not f or now - f["ts"] >= (FAST_SEC if big else MINOR_SEC):
+        if not f or now - f["ts"] >= (FAST_SEC * .75 if big else MINOR_SEC):   # .75: a tick 1.99s later still counts
             due.append(vid)
     methods, errs, anomalies = [], 0, []
-    for vid, n, how in _fast_pool.map(_count_one, due):
+    # Never let one slow stream hold the tick: give the counts ~1.5s, use what's back, and pick up the rest next tick.
+    for vid in due:
+        if vid not in _INFLIGHT:
+            _INFLIGHT[vid] = _fast_pool.submit(_count_one, vid)
+    pending = [_INFLIGHT[v] for v in due if v in _INFLIGHT]
+    if pending:
+        wait(pending, timeout=max(0.5, FAST_SEC * .75))
+    results = []
+    for v, fu in list(_INFLIGHT.items()):
+        if fu.done():
+            _INFLIGHT.pop(v, None)
+            try:
+                results.append(fu.result())
+            except Exception:
+                results.append((v, "err", ""))
+    for vid, n, how in results:
         if n == "err":
             _FASTSTATE["errors"] += 1
             errs += 1
@@ -613,20 +630,21 @@ def fast_healthy() -> bool:
 def run_fast_forever():
     """Background thread: live counters for every active event."""
     repair_once()
-    last_log = 0
-    while True:
-        if time.time() - last_log > 60:
-            last_log = time.time()
+
+    def minutely():   # alerts and the 10-minute data export run on their own thread so they never delay a count
+        while True:
             try:
-                from core import eventlog
+                from core import eventlog, dataexport
                 for ev in events().values():
                     if ev.get("active"):
                         eventlog.check(ev)
                         eventlog.check_roster(ev)
-                        from core import dataexport
                         dataexport.tick(ev)
             except Exception as e:
                 print(f"Event log failed: {str(e)[:150]}")
+            time.sleep(60)
+    threading.Thread(target=minutely, daemon=True).start()
+    while True:
         t0 = time.time()
         for ev in events().values():
             if ev.get("active") and _LIVE.get(ev["key"]):
