@@ -352,6 +352,7 @@ def _count_one(vid: str):
 
 
 _PAGE = {}
+_JUMP = {}       # vid -> (ts, viewers) of an unconfirmed big jump from the watch page
 
 
 _fast_pool = ThreadPoolExecutor(max_workers=12)
@@ -389,16 +390,19 @@ def fast_tick(ev: dict, now: float = None) -> dict:
             continue
         f = fast.get(vid)
         base = f["viewers"] if f else live.get(vid, {}).get("viewers", 0)
-        if (base >= 500 and n > base * 2.5) or (base > 0 and n >= 20000 and n > base * 2.5):
-            # impossible jump in a few seconds: almost always the stream ending and the counter turning into total views
-            f = fast.setdefault(vid, {"viewers": base, "ts": now, "misses": 0})
-            f["misses"] += 1
-            if f["misses"] >= 3:
-                _ENDED[vid] = now
-                live.pop(vid, None)
-                _LIVE.get(key, {}).pop(vid, None)
-                fast.pop(vid, None)
-            continue
+        jump = (base >= 500 and n > base * 2.5) or (base > 0 and n >= 20000 and n > base * 2.5)
+        if jump and how != "YouTube live counter":
+            # A big jump from the watch page can be total views after the stream ended. Accept it only when the next
+            # reading agrees. (The live counter only returns "N watching", so its jumps are real: a stream going
+            # from 16K to 100K when the matches start is normal and was wrongly being thrown away.)
+            p = _JUMP.get(vid)
+            if not (p and now - p[0] < 60 and abs(n - p[1]) <= max(2000, p[1] * .25)):
+                _JUMP[vid] = (now, n)
+                print(f"Holding a jump for {vid}: {base} -> {n} ({how}), waiting for a second reading")
+                continue
+        if jump:
+            print(f"Accepted a jump for {vid}: {base} -> {n} ({how})")
+        _JUMP.pop(vid, None)
         if f and not f.get("misses") and now - f["ts"] <= 15 and f["viewers"]:
             d = n - f["viewers"]
             if abs(d) >= ANOM_MIN and abs(d) >= f["viewers"] * ANOM_PCT:   # sudden bulk jump or drop
