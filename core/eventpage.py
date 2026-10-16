@@ -236,6 +236,8 @@ a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}
 .follow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;font:12px "Share Tech Mono",monospace;color:var(--muted)}.follow>span{margin-right:auto}
 .pwb{display:grid;grid-template-columns:1fr auto;grid-template-areas:"t i" "b i" "s i";gap:0 12px;align-items:center;margin-top:12px;padding:12px 14px;border:1px solid rgba(245,196,81,.55);background:linear-gradient(90deg,rgba(245,196,81,.18),rgba(245,196,81,.03));color:var(--ink)}
 .pwb:hover{text-decoration:none;border-color:#f5c451}
+.wpwait{margin-top:12px}.wpw{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.wpc{display:inline-flex;align-items:center;gap:6px;padding:4px 9px 4px 4px;border:1px solid var(--line);background:var(--card2);color:var(--muted);font-size:12px}
+.wpc img{width:20px;height:20px;border-radius:50%;opacity:.7}.wpc:hover{text-decoration:none;color:var(--ink);border-color:var(--muted)}
 @view-transition{navigation:auto}
 .pwx{position:fixed;inset:0;z-index:999;pointer-events:none;background:#0b0b12;clip-path:circle(0 at var(--x,50%) var(--y,50%));transition:clip-path .45s cubic-bezier(.7,0,.3,1)}
 .pwx.on{clip-path:circle(150% at var(--x,50%) var(--y,50%))}
@@ -474,15 +476,18 @@ function wpRows(){const sb=document.getElementById('shareBoard');if(sb)sb.onclic
  const off=isOff(),R=D.roster||[],cd=!!(D.next_start&&!D.official_live);
  document.getElementById('wph').textContent=cd?'Watch party streamers, yet to start':off?'Watch party streamers, last broadcast':'Watch party streamers, live';
  document.getElementById('wpth').textContent='Status';
- let rank=0;const lim=D.official_live&&!wpAll?10:999,RR=R.slice(0,lim),mb=document.getElementById('wpmore');
- if(mb){mb.style.display=R.length>lim||wpAll&&D.official_live?'block':'none';mb.textContent=wpAll?'\u25B2 SHOW TOP 10':`\u25BC SHOW ALL ${R.length} STREAMERS`;mb.onclick=()=>{wpAll=!wpAll;wpRows()}}
+ const LV=D.official_live?R.filter(w=>w.status!=='upcoming'):R,WAIT=D.official_live?R.filter(w=>w.status==='upcoming'):[];
+ let rank=0;const lim=D.official_live&&!wpAll?10:999,RR=LV.slice(0,lim),mb=document.getElementById('wpmore');
+ if(mb){mb.style.display=LV.length>lim||wpAll&&D.official_live&&LV.length>10?'block':'none';mb.textContent=wpAll?'\u25B2 SHOW TOP 10':`\u25BC SHOW ALL ${LV.length} LIVE STREAMERS`;mb.onclick=()=>{wpAll=!wpAll;wpRows()}}
+ let wt=document.getElementById('wpwait');if(!wt&&mb){wt=document.createElement('div');wt.id='wpwait';wt.className='wpwait';mb.after(wt)}
+ if(wt)wt.innerHTML=WAIT.length?`<div class="lbl" style="color:var(--muted)">// not started yet (${WAIT.length})</div><div class="wpw">${WAIT.map(w=>`<a class="wpc" href="${esc(w.url||'#')}" target="_blank" rel="noopener">${w.logo?`<img src="${esc(w.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:''}<span>${esc(w.name)}</span></a>`).join('')}</div>`:'';
  document.getElementById('wprows').innerHTML=RR.map(w=>{const has=w.status!=='upcoming';if(has)rank++;
-  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?`<span class="muted">PEAK</span> <b>${full(w.peak||0)}</b>`:(D.official_live?'<span style="color:var(--red)">NOT LIVE</span>':'<span class="muted">YET TO START</span>');
+  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?`<span class="muted">PEAK</span> <b>${full(w.peak||0)}</b>`:'<span class="muted">YET TO START</span>';
   const logo=w.logo?`<img class="lg" src="${esc(w.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="lg" style="display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${esc(w.name.slice(0,2).toUpperCase())}</span>`;
   const nm=w.url?`<a class="ch" href="${esc(w.url)}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(w.name)}</a>`:`<span class="ch">${esc(w.name)}</span>`;
   return `<tr><td class="rk ${has?'watch':''}" style="${has?'':'background:var(--line);color:var(--muted)'}">${has?rank:'-'}</td><td class="t">${logo}${nm}</td>
   <td class="num" style="font-size:13px">${st}</td><td class="num hide-m muted">${w.peak?fmt(w.peak):'-'}</td>
-  <td style="text-align:right">${w.vid&&has?`<button class="btn sm ghost" data-share="${esc(w.vid)}">Share</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=5 class="muted">No watch parties yet</td></tr>';
+  <td style="text-align:right">${w.vid&&has?`<button class="btn sm ghost" data-share="${esc(w.vid)}">Share</button>`:''}</td></tr>`}).join('')||`<tr><td colspan=5 class="muted">${D.official_live?'No watch parties live yet. They appear here as soon as they go live.':'No watch parties yet'}</td></tr>`;
  document.querySelectorAll('[data-share]').forEach(b=>b.onclick=()=>openShare('streamer',b.dataset.share));
 }
 function rows(){
