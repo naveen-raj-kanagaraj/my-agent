@@ -130,11 +130,14 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.mo{all:unset;cursor:pointer;padding:10px 10px;border:1px solid var(--line);background:var(--bg2);font:700 13px "Chakra Petch";text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-tap-highlight-color:transparent}
 .mo.on{border-color:var(--lime);background:rgba(182,242,58,.16);color:var(--lime)}
 .mbar{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-.tl{height:20px;max-width:46px;object-fit:contain;vertical-align:middle;margin-right:8px;flex:none}
-.mo{display:flex;align-items:center;justify-content:flex-start;gap:0;text-align:left}.mo span{overflow:hidden;text-overflow:ellipsis}.mo .tl{height:18px;max-width:38px;margin-right:7px}
-.cbv{display:flex;align-items:center}.cbl button{display:flex;align-items:center}.cr>span:first-child{display:flex;align-items:center;min-width:0}
+.tlb{flex:none;width:44px;height:24px;display:inline-flex;align-items:center;justify-content:center;margin-right:10px}.tlb img{max-width:44px;max-height:24px;object-fit:contain;display:block}
+.mgrid{grid-template-columns:repeat(4,1fr)}.mo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:10px 4px;font-size:13px;white-space:normal;line-height:1.15;min-height:64px}
+.mo .tlb{margin:0;width:60px;height:30px}.mo .tlb img{max-width:60px;max-height:30px}.mo>span:last-child{white-space:normal;overflow:visible}
+.nmx{display:flex;align-items:center;min-width:0}.nmx>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cbl button{display:flex;align-items:center}.how{font-size:13px;color:var(--muted);margin-top:-4px}.ch{font-size:12px;margin-bottom:2px}
+.rules ul{margin:8px 0 0;padding-left:18px}.rules li{margin:5px 0;font-size:14px;color:var(--ink)}
 .tx{display:flex;gap:8px}.tx .inp{flex:1;min-width:0}
-@media(max-width:600px){.wrap{padding:0 10px 90px}.bar .in{padding:8px 10px}.title h1{font-size:16px}.hero h2{font-size:24px}
+@media(max-width:600px){.mgrid{grid-template-columns:repeat(4,1fr);gap:5px}.mo{font-size:11px;padding:8px 2px;min-height:60px;gap:5px}.mo .tlb{width:50px;height:26px}.mo .tlb img{max-width:50px;max-height:26px}.wrap{padding:0 10px 90px}.bar .in{padding:8px 10px}.title h1{font-size:16px}.hero h2{font-size:24px}
  .card{padding:12px}.qs{grid-template-columns:1fr}.tabs button{padding:8px 10px;font-size:12px}td{padding:8px 5px}.hide-m{display:none}
  .prize{padding:10px}.prize b{font-size:14px}}
 """
@@ -159,23 +162,27 @@ PAGE = r"""<!doctype html>
 <div class="wrap">
  <div class="card hero">
   <div class="lbl">// free to play · points only</div>
-  <h2>Call the numbers. <b>Climb the board.</b></h2>
-  <p>Predict the champion, top 3, BMIC qualifiers, top eliminator and more for the BMSD 2026 Grand Finals. Picks lock when each question closes, then everyone's calls go public. Underdog calls score more.</p>
-  <div class="prize"><b id="prizeT">Top 5 win a gift card of their choice</b><span id="prizeS">Overall leaderboard when the Grand Finals end on Sun 18 Oct. Free to enter.</span></div>
-  <div class="stats"><span class="pill red" id="nl">PICKS LOCK <b id="nlt">-</b></span><span class="pill">QUESTIONS <b id="nq">-</b></span></div>
+  <h2>Predict the <b>BMSD 2026</b> Grand Finals</h2>
+  <p>Pick the winners. Get points when you're right. The top 5 win a gift card of their choice.</p>
+  <div class="stats"><span class="pill red" id="nl">PICKS LOCK <b id="nlt">-</b></span></div>
  </div>
  <div class="card" id="joinCard"></div>
- <div class="card" id="qcard"><div class="head"><div><div class="lbl">// step 2 · predict</div><h2>Make your calls</h2></div></div>
+ <div class="card" id="qcard"><div class="lbl">// step 2</div><h2 style="margin:4px 0 12px">Make your picks</h2>
   <div class="tabs" id="dtabs"></div><div class="qs" id="qs"></div></div>
- <div class="card" id="lbCard"><div class="head"><div><div class="lbl">// leaderboard</div><h2>Top 10</h2></div><button class="btn sm" id="shareLb">Share leaderboard</button></div>
+ <div class="card" id="lbCard"><div class="head"><div><div class="lbl">// leaderboard</div><h2>Top 10</h2></div><button class="btn sm" id="shareLb">Share</button></div>
   <div class="tabs" id="ltabs"></div>
-  <table><thead><tr><th>#</th><th>Player</th><th class="num">Pts</th><th class="num hide-m">Correct</th></tr></thead><tbody id="lb"></tbody></table>
-  <div class="muted mono" style="font-size:12px;margin-top:8px">Gold bar = prize zone (top 5 overall). Tap a name to see their closed picks.</div></div>
- <div class="card rules"><div class="lbl">// how it works</div>
-  <p><b>Scoring:</b> a correct pick earns 100 points plus an underdog bonus of up to 100 (the fewer people who got it right, the bigger the bonus). On pick-several questions (top 3, BMIC 6) each correct team earns its share of that. Wrong picks score 0. You can change a pick until the question closes. Ties are ranked by points, then number of correct picks, then who joined first.</p>
-  <p><b>Prizes:</b> <span id="prizeR"></span> Winners are announced on Instagram <a href="https://www.instagram.com/letsgrowesports.igc/" target="_blank" rel="noopener">@letsgrowesports.igc</a> and contacted by DM from that account only. We will never ask for money, passwords, OTPs or bank details. To claim, the winner must message us from the Instagram handle they played with.</p>
-  <p><b>Fair play:</b> one Instagram handle per person. Fake, duplicate or abusive entries are removed and can't win. Your handle, display name and picks on closed questions are public; picks on open questions stay private (only crowd percentages show). Nothing else is stored.</p>
-  <p>Free to play, points only. No money or bets, no purchase needed. Unofficial fan game, not affiliated with KRAFTON, BGMI or Instagram.</p>
+  <table><thead><tr><th>#</th><th>Player</th><th class="num">Points</th></tr></thead><tbody id="lb"></tbody></table>
+  <div class="muted" style="font-size:12px;margin-top:8px">Gold = gift card zone. Tap a name to see their picks.</div></div>
+ <div class="card rules"><div class="lbl">// rules</div>
+  <ul>
+   <li>Free to play. No money, no bets.</li>
+   <li>Right pick = 100 points. If few people got it right, you get up to 100 bonus points.</li>
+   <li>Top 3 and BMIC: you get points for each team you got right.</li>
+   <li>You can change your picks until they lock.</li>
+   <li>Top 5 on the leaderboard after the finals (Sun 18 Oct) win a gift card. Ties go to whoever joined first.</li>
+   <li>One Instagram ID per person. Fake accounts are removed.</li>
+   <li>Fan-made game. Not linked to KRAFTON or Instagram.</li>
+  </ul>
  </div>
 </div>
 <div class="modal" id="smodal"><div class="mbox"><div class="head"><div><h2 id="smt">Share</h2></div><button class="btn ghost sm" data-close>Close</button></div>
@@ -214,87 +221,94 @@ function renderJoin(){const c=$('joinCard');
    <div class="mono rkbox"><div style="font-size:22px;color:var(--lime)">${r.pts?'#'+r.rank:'-'}</div><div class="muted" style="font-size:12px">${r.pts||0} PTS · ${Object.keys(ME.picks||{}).length} PICKS</div></div>
    <button class="btn sm" id="shareMe">Share my rank</button></div>`;
   $('shareMe').onclick=()=>share('me');return}
- c.innerHTML=`<div class="lbl">// step 1 · join</div><h2 style="margin-top:4px">Enter your Instagram ID</h2>
-  <div class="muted" style="font-size:13px;margin-top:4px">If you finish in the top 5 we'll DM you from <b style="color:var(--ink)">@letsgrowesports.igc</b>. You can share your rank on your socials too. No password; this phone remembers you.</div>
+ c.innerHTML=`<div class="lbl">// step 1</div><h2 style="margin-top:4px">Enter your Instagram ID</h2>
+  <div class="muted" style="font-size:13px;margin-top:4px">If you finish in the top 5, we'll DM you on Instagram. No password needed.</div>
   <form id="jf" autocomplete="off"><label class="field"><span>INSTAGRAM ID</span><div class="at"><i>@</i><input class="inp" id="jh" maxlength="80" placeholder="yourhandle" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></div></label>
-  <label class="field"><span>DISPLAY NAME (OPTIONAL)</span><input class="inp" id="jn" maxlength="32" placeholder="Shown on the leaderboard next to your ID"></label>
-  <label class="chk"><input type="checkbox" id="jc"> <span>I'm OK with my Instagram ID, name and closed picks being shown publicly.</span></label>
-  <button class="btn wide" type="submit" id="jb">Join and start predicting</button><div class="err" id="je"></div></form>`;
+  <label class="field"><span>NAME (OPTIONAL)</span><input class="inp" id="jn" maxlength="32" placeholder="Shown on the leaderboard"></label>
+  <label class="chk"><input type="checkbox" id="jc"> <span>Show my Instagram ID and picks on the leaderboard.</span></label>
+  <button class="btn wide" type="submit" id="jb">Start playing</button><div class="err" id="je"></div></form>`;
  $('jf').onsubmit=async e=>{e.preventDefault();$('je').textContent='';$('jb').disabled=true;
-  try{const j=await api('join',{handle:$('jh').value,name:$('jn').value,consent:$('jc').checked});saveTok(j.token);await loadMe();await loadBoard();toast('You\'re in. Make your picks.');$('qcard').scrollIntoView({behavior:'smooth'})}
+  try{const j=await api('join',{handle:$('jh').value,name:$('jn').value,consent:$('jc').checked});saveTok(j.token);await loadMe();await loadBoard();toast('You\'re in. Now make your picks.');$('qcard').scrollIntoView({behavior:'smooth'})}
   catch(err){$('je').textContent=err.message}finally{const b=$('jb');if(b)b.disabled=false}}}
 async function loadMe(){if(!TOKEN){ME=null;renderJoin();return}
  try{ME=await api('me',{})}catch(e){if(e.code===401){saveTok(null);ME=null}}renderJoin()}
 
 // ---------- questions ----------
-let draft={};
+let draft={},cardHtml={};
 function dayTabs(){const ds=[...new Set(B.questions.filter(q=>q.day).map(q=>q.day))].sort();if(!ds.length)ds.push(1);$('dtabs').style.display=ds.length>1?'':'none';if(dayTab!==null&&!ds.includes(dayTab))dayTab=null;
- if(dayTab===null){const open=B.questions.filter(q=>q.day&&!q.closed&&!q.void).sort((a,b)=>a.close_ts-b.close_ts)[0];dayTab=open?open.day:1}
+ if(dayTab===null){const open=B.questions.filter(q=>q.day&&!q.closed&&!q.void).sort((a,b)=>a.close_ts-b.close_ts)[0];dayTab=open?open.day:ds[0]}
  $('dtabs').innerHTML=ds.map(d=>`<button data-d="${d}" class="${d===dayTab?'on':''}">Day ${d}<small>${dayName(d)}</small></button>`).join('');
- $('dtabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{dayTab=+b.dataset.d;openCb=null;renderQs();dayTabs()})}
+ $('dtabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{dayTab=+b.dataset.d;openCb=null;cardHtml={};renderQs();dayTabs()})}
 const cnt=(q,o)=>(q.pct||{})[o]||0;
 function pct(q,o){return cnt(q,o)}
 const tkey=o=>String(o).toUpperCase().replace(/[^A-Z0-9]/g,'');
-const tl=(o,cls)=>TLOGO[tkey(o)]?`<img class="tl ${cls||''}" src="${TLOGO[tkey(o)]}" alt="" loading="lazy">`:'';
+const tl=o=>TLOGO[tkey(o)]?`<span class="tlb"><img src="${TLOGO[tkey(o)]}" alt="" decoding="async"></span>`:'';
 const isAns=(q,o)=>Array.isArray(q.answer)?q.answer.includes(o):q.answer===o;
 const myOf=q=>ME?ME.picks[q.id]:undefined;
+const shutQ=q=>q.closed||q.void||nowS()>=q.close_ts;
 function crowdBars(q,limit){const my=myOf(q),mine=Array.isArray(my)?my:[my];const ent=Object.entries(q.pct||{}).sort((a,b)=>b[1]-a[1]);let top=ent.slice(0,limit);
- (Array.isArray(q.answer)?q.answer:q.answer?[q.answer]:[]).forEach(a=>{if(q.kind!=='text'&&!top.some(e=>e[0]===a))top.push([a,cnt(q,a)])});
+ (Array.isArray(q.answer)?q.answer:q.answer?[q.answer]:[]).forEach(a=>{if(!top.some(e=>e[0]===a))top.push([a,cnt(q,a)])});
  const rest=q.kind==='multi'?0:ent.slice(limit).reduce((a,e)=>a+e[1],0);
- return `<div class="crowd">${top.map(([o,n])=>`<div class="cr ${mine.includes(o)?'mine':''} ${isAns(q,o)?'ok':''}"><div class="fill" style="width:${n}%"></div><span>${tl(o)}${esc(o)}</span><span class="pc">${n}%</span></div>`).join('')}${rest?`<div class="cr"><div class="fill" style="width:${rest}%"></div><span>Others</span><span class="pc">${rest}%</span></div>`:''}${!ent.length?`<div class="muted" style="font-size:13px">${q.kind==='text'&&!q.closed?'Names are revealed when picks lock.':'No picks were made.'}</div>`:''}</div>`}
+ return `<div class="crowd"><div class="muted ch">What everyone picked</div>${top.map(([o,n])=>`<div class="cr ${mine.includes(o)?'mine':''} ${isAns(q,o)?'ok':''}"><div class="fill" style="width:${n}%"></div><span class="nmx">${tl(o)}<span>${esc(o)}</span></span><span class="pc">${n}%</span></div>`).join('')}${rest?`<div class="cr"><div class="fill" style="width:${rest}%"></div><span class="nmx"><span>Others</span></span><span class="pc">${rest}%</span></div>`:''}${!ent.length?'<div class="muted" style="font-size:13px">No picks were made.</div>':''}</div>`}
+function tiles(q,sel,attr){return `<div class="mgrid">${q.options.map(o=>`<button class="mo ${sel.includes(o)?'on':''}" ${attr}="${q.id}" data-o="${esc(o)}">${tl(o)}<span>${esc(o)}</span></button>`).join('')}</div>`}
 function qBody(q,shut){const my=myOf(q);
  if(q.kind==='multi'){if(shut)return crowdBars(q,Math.max(q.pick,5));const sel=draft[q.id]||(my?[...my]:[]);
-  return `<div class="mgrid">${q.options.map(o=>`<button class="mo ${sel.includes(o)?'on':''}" data-mq="${q.id}" data-o="${esc(o)}">${tl(o)}<span>${esc(o)}</span></button>`).join('')}</div>
-   <div class="mbar"><span class="mono">${sel.length}/${q.pick} SELECTED</span><button class="btn sm" data-msave="${q.id}" ${sel.length===q.pick?'':'disabled'}>${my?'Update picks':'Save picks'}</button></div>`}
+  return tiles(q,sel,'data-mq')+`<div class="mbar"><span class="mono">${sel.length} of ${q.pick} picked</span><button class="btn sm" data-msave="${q.id}" ${sel.length===q.pick?'':'disabled'}>${my?'Update':'Save'}</button></div>`}
+ if(q.style==='grid'){if(shut)return crowdBars(q,5);return tiles(q,my?[my]:[],'data-gq')}
  if(q.kind==='text'){if(shut)return crowdBars(q,5);
-  return `<div class="tx"><input class="inp" data-tq="${q.id}" maxlength="40" placeholder="Type a player name" value="${esc(draft[q.id]??my??'')}" autocapitalize="words"><button class="btn sm" data-tsave="${q.id}">${my?'Update':'Save'}</button></div>`}
- if(q.style==='dropdown'&&!shut)return `<div class="cb" data-q="${q.id}"><button class="cbb ${my?'mine':''}" data-cb="${q.id}">${my?`<span class="cbv">${tl(my)}${esc(my)}</span>`:`<span class="ph">${q.kind==='mvp'?'Pick a player':'Pick a team'}</span>`}</button></div>`;
+  return `<div class="tx"><input class="inp" data-tq="${q.id}" maxlength="40" placeholder="Type a player name" value="${esc(draft[q.id]??my??'')}"><button class="btn sm" data-tsave="${q.id}">${my?'Update':'Save'}</button></div>`}
+ if(q.style==='dropdown'&&!shut)return `<div class="cb" data-q="${q.id}"><button class="cbb ${my?'mine':''}" data-cb="${q.id}">${my?`<span class="nmx">${tl(my)}<span>${esc(my)}</span></span>`:`<span class="ph">${q.kind==='mvp'?'Choose a player':'Choose a team'}</span>`}</button></div>`;
  if(q.style==='dropdown')return crowdBars(q,5);
- return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut?'disabled':''}><div class="fill" style="width:${pct(q,o)}%"></div><span>${esc(o)}</span><span class="pc">${q.picked?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
-function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=q.closed||q.void||nowS()>=q.close_ts,has=Array.isArray(my)?my.length:my;
+ return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut?'disabled':''}><div class="fill" style="width:${shut?pct(q,o):0}%"></div><span>${esc(o)}</span><span class="pc">${shut&&q.picked?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
+const HOW={multi:q=>`Tap ${q.pick} teams, then press Save.`,grid:()=>'Tap a team. It saves right away.',dropdown:()=>'Choose from the list. It saves right away.',buttons:()=>'Tap one. It saves right away.'};
+function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=Array.isArray(my)?my.length:my;
  let foot='';const got=ME&&ME.pts?ME.pts[q.id]:undefined;const ans=Array.isArray(q.answer)?q.answer.join(', '):q.answer;
- if(q.answer&&has)foot+=got>0?`<span class="good">+${got} PTS</span>`:`<span class="bad">MISSED · ${esc(ans)}</span>`;
- else if(q.answer)foot+=`<span>ANSWER: ${esc(ans)}</span>`;
- else if(has)foot+=`<span class="saved">SAVED${shut?' · LOCKED':''}: ${esc(Array.isArray(my)?my.join(', '):my)}</span>`;
- else if(!shut)foot+=`<span>${ME?'NOT PICKED YET':'JOIN TO PICK'}</span>`;
- const sub=q.kind==='multi'?`<div class="muted" style="font-size:12px">Pick ${q.pick}. Each correct team scores.</div>`:'';
- return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}"><div class="qt"><span class="tag">${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${sub}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
-function renderQs(){const ev=B.questions.filter(q=>!q.day),dq=B.questions.filter(q=>q.day===dayTab);
- const evOpen=ev.filter(q=>!(q.closed||q.void||nowS()>=q.close_ts)||dayTab===1);
- const shown=dayTab===1?ev:ev.filter(q=>q.kind==='team'||!q.closed);
- $('qs').innerHTML=(shown.length?`<div class="qsec">// whole tournament</div>`+shown.map(qCard).join(''):'')+
-  `<div class="qsec">// day ${dayTab} · ${dayName(dayTab)}</div>`+(dq.map(qCard).join('')||`<div class="muted" style="font-size:14px">Day ${dayTab} questions open after Day ${dayTab-1} ends. Check back then.</div>`);
- $('qs').querySelectorAll('.opt:not([disabled])').forEach(b=>b.onclick=()=>doPick(+b.dataset.q,b.dataset.o));
- $('qs').querySelectorAll('[data-cb]').forEach(b=>b.onclick=e=>{e.stopPropagation();toggleCb(+b.dataset.cb)});
- $('qs').querySelectorAll('[data-mq]').forEach(b=>b.onclick=()=>{const id=+b.dataset.mq,q=B.questions.find(x=>x.id===id),my=myOf(q);const sel=draft[id]||(my?[...my]:[]);const o=b.dataset.o,i=sel.indexOf(o);
-  if(i>=0)sel.splice(i,1);else if(sel.length<q.pick)sel.push(o);else{toast(`You can pick ${q.pick}. Tap one to remove it first.`);return}draft[id]=sel;renderQs()});
- $('qs').querySelectorAll('[data-msave]').forEach(b=>b.onclick=()=>{const id=+b.dataset.msave;doPick(id,draft[id]||myOf(B.questions.find(x=>x.id===id)))});
- $('qs').querySelectorAll('[data-tq]').forEach(i=>i.oninput=()=>{draft[+i.dataset.tq]=i.value});
- $('qs').querySelectorAll('[data-tsave]').forEach(b=>b.onclick=()=>{const id=+b.dataset.tsave,v=document.querySelector(`[data-tq="${id}"]`).value.trim();if(v.length<2){toast('Type a player name');return}doPick(id,v)});
+ if(q.answer&&has)foot=got>0?`<span class="good">Correct · +${got} points</span>`:`<span class="bad">Missed · Answer: ${esc(ans)}</span>`;
+ else if(q.answer)foot=`<span>Answer: ${esc(ans)}</span>`;
+ else if(has)foot=`<span class="saved">✓ Saved${shut?' · locked':''}</span>`;
+ else if(!shut)foot=`<span>${ME?'Not picked yet':'Enter your Instagram ID above to play'}</span>`;
+ const how=!shut?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.style]||HOW.buttons)(q)}</div>`:'';
+ return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}" data-id="${q.id}"><div class="qt"><span class="tag">${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
+function visibleQs(){const ev=B.questions.filter(q=>!q.day),dq=B.questions.filter(q=>q.day===dayTab);return{ev:dayTab===1?ev:ev.filter(q=>!shutQ(q)||q.answer),dq}}
+function renderQs(){const {ev,dq}=visibleQs(),ids=[...ev,...dq].map(q=>q.id).join(',');const box=$('qs');
+ if(box.dataset.ids===ids){[...ev,...dq].forEach(q=>{const h=qCard(q);if(cardHtml[q.id]!==h){cardHtml[q.id]=h;const el=box.querySelector(`.q[data-id="${q.id}"]`);if(el)el.outerHTML=h}});if(openCb)toggleCb(openCb,true);return}
+ box.dataset.ids=ids;cardHtml={};
+ box.innerHTML=(ev.length?`<div class="qsec">Whole tournament</div>`+ev.map(q=>(cardHtml[q.id]=qCard(q))).join(''):'')+
+  `<div class="qsec">Day ${dayTab} · ${dayName(dayTab)}</div>`+(dq.map(q=>(cardHtml[q.id]=qCard(q))).join('')||`<div class="muted" style="font-size:14px">Day ${dayTab} questions open after Day ${dayTab-1}.</div>`);
  if(openCb)toggleCb(openCb,true)}
+function updCard(id){const q=B.questions.find(x=>x.id===id),el=$('qs').querySelector(`.q[data-id="${id}"]`);if(!q||!el)return renderQs();const h=qCard(q);cardHtml[id]=h;el.outerHTML=h}
+$('qs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
+ if(d.cb){e.stopPropagation();toggleCb(+d.cb);return}
+ if(d.gq){doPick(+d.gq,d.o);return}
+ if(d.mq){const id=+d.mq,q=B.questions.find(x=>x.id===id),my=myOf(q);const sel=draft[id]||(my?[...my]:[]);const i=sel.indexOf(d.o);
+  if(i>=0)sel.splice(i,1);else if(sel.length<q.pick)sel.push(d.o);else{toast(`You already picked ${q.pick}. Tap one to remove it.`);return}draft[id]=sel;updCard(id);return}
+ if(d.msave){const id=+d.msave;doPick(id,draft[id]||myOf(B.questions.find(x=>x.id===id)));return}
+ if(d.tsave){const id=+d.tsave,v=$('qs').querySelector(`[data-tq="${id}"]`).value.trim();if(v.length<2){toast('Type a player name');return}doPick(id,v);return}
+ if(d.q&&b.classList.contains('opt')){doPick(+d.q,d.o)}});
+$('qs').addEventListener('input',e=>{const t=e.target;if(t.dataset.tq)draft[+t.dataset.tq]=t.value});
 function toggleCb(qid,force){document.querySelectorAll('.cbp').forEach(p=>p.remove());if(openCb===qid&&!force){openCb=null;return}
  const q=B.questions.find(x=>x.id===qid),host=document.querySelector(`.cb[data-q="${qid}"]`);if(!q||!host){openCb=null;return}openCb=qid;
  const my=myOf(q),p=document.createElement('div');p.className='cbp';
- p.innerHTML=`<input class="inp" placeholder="Search ${q.options.length} ${q.kind==='mvp'?'players':'teams'}" aria-label="Search"><div class="cbl" role="listbox"></div>`;host.appendChild(p);
+ p.innerHTML=`<input class="inp" placeholder="Search" aria-label="Search"><div class="cbl" role="listbox"></div>`;host.appendChild(p);
  const inp=p.querySelector('input'),list=p.querySelector('.cbl');
- const draw=()=>{const f=inp.value.trim().toLowerCase();list.innerHTML=q.options.filter(o=>!f||o.toLowerCase().includes(f)).map(o=>`<button role="option" class="${o===my?'sel':''}" data-o="${esc(o)}">${tl(o)}${esc(o)}</button>`).join('')||'<div class="muted" style="padding:10px">No match</div>';
+ const draw=()=>{const f=inp.value.trim().toLowerCase();list.innerHTML=q.options.filter(o=>!f||o.toLowerCase().includes(f)).map(o=>`<button role="option" class="${o===my?'sel':''}" data-o="${esc(o)}">${tl(o)}<span>${esc(o)}</span></button>`).join('')||'<div class="muted" style="padding:10px">No match</div>';
   list.querySelectorAll('button').forEach(b=>b.onclick=e=>{e.stopPropagation();openCb=null;p.remove();doPick(qid,b.dataset.o)})};
  draw();inp.oninput=draw;p.onclick=e=>e.stopPropagation();if(window.innerWidth>600)inp.focus();
  inp.onkeydown=e=>{if(e.key==='Escape'){openCb=null;p.remove()}if(e.key==='Enter'){const b=list.querySelector('button');if(b)b.click()}}}
 document.addEventListener('click',()=>{if(openCb){openCb=null;document.querySelectorAll('.cbp').forEach(p=>p.remove())}});
 async function doPick(qid,o){if(!ME){toast('Enter your Instagram ID first');$('joinCard').scrollIntoView({behavior:'smooth'});return}
- if(busy[qid])return;busy[qid]=1;const prev=ME.picks[qid];ME.picks[qid]=Array.isArray(o)?[...o]:o;delete draft[qid];renderQs();
- try{await api('pick',{qid,option:o});toast('Saved: '+(Array.isArray(o)?o.join(', '):o));renderJoin();loadBoard()}catch(e){if(prev!==undefined)ME.picks[qid]=prev;else delete ME.picks[qid];toast(e.message);renderQs()}finally{delete busy[qid]}}
+ if(busy[qid])return;busy[qid]=1;const prev=ME.picks[qid];ME.picks[qid]=Array.isArray(o)?[...o]:o;delete draft[qid];updCard(qid);
+ try{await api('pick',{qid,option:o});toast('Saved');renderJoin()}catch(e){if(prev!==undefined)ME.picks[qid]=prev;else delete ME.picks[qid];toast(e.message);updCard(qid)}finally{delete busy[qid]}}
 
 // ---------- leaderboard ----------
 function lbTabs(){const ds=[...new Set(B.questions.filter(q=>q.day).map(q=>String(q.day)))].sort();const t=[['all','Overall'],...ds.map(d=>[d,'Day '+d])];$('ltabs').style.display=t.length>2?'':'none';
  $('ltabs').innerHTML=t.map(([k,l])=>`<button data-k="${k}" class="${k===lbTab?'on':''}">${l}</button>`).join('');
- $('ltabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{lbTab=b.dataset.k;lbTabs();renderLb()})}
-function lbRow(r,cls){return `<tr class="${cls} ${r.rank<=3?'r'+r.rank:''} ${lbTab==='all'&&r.rank<=5?'top5':''}"><td class="rk">${r.rank}</td><td style="max-width:0;width:100%"><div class="pl"><button class="nm" data-h="${esc(r.handle)}">${esc(disp(r))}</button>${r.name&&r.name!==r.handle?`<a class="hd" href="https://www.instagram.com/${esc(r.handle)}/" target="_blank" rel="noopener nofollow">@${esc(r.handle)}</a>`:''}</div></td><td class="num"><b>${r.pts}</b></td><td class="num hide-m">${r.correct}</td></tr>`}
+ $('ltabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{lbTab=b.dataset.k;lbSig='';lbTabs();renderLb()})}
+function lbRow(r,cls){return `<tr class="${cls} ${r.rank<=3?'r'+r.rank:''} ${lbTab==='all'&&r.rank<=5?'top5':''}"><td class="rk">${r.rank}</td><td style="max-width:0;width:100%"><div class="pl"><button class="nm" data-h="${esc(r.handle)}">${esc(disp(r))}</button>${r.name&&r.name!==r.handle?`<a class="hd" href="https://www.instagram.com/${esc(r.handle)}/" target="_blank" rel="noopener nofollow">@${esc(r.handle)}</a>`:''}</div></td><td class="num"><b>${r.pts}</b></td></tr>`}
 function renderLb(){const rows=(B.boards[lbTab]||[]);const meH=ME&&ME.player.handle;
- let h=rows.map(r=>lbRow(r,r.handle===meH?'you':'')).join('')||'<tr><td colspan=4 class="muted">No points yet. The board fills up as questions are settled.</td></tr>';
+ let h=rows.map(r=>lbRow(r,r.handle===meH?'you':'')).join('')||'<tr><td colspan=3 class="muted">No points yet. Points appear after each result.</td></tr>';
  const mr=ME&&ME.ranks&&ME.ranks[lbTab];
- if(mr&&!rows.some(r=>r.handle===meH)&&rows.length)h+=`<tr class="you pin"><td class="rk">${mr.rank}</td><td colspan=3><b>You: #${mr.rank} · ${mr.pts} pts</b> </td></tr>`;
+ if(mr&&!rows.some(r=>r.handle===meH)&&rows.length)h+=`<tr class="you pin"><td class="rk">${mr.rank}</td><td colspan=2><b>You: #${mr.rank} · ${mr.pts} points</b></td></tr>`;
  $('lb').innerHTML=h;$('lb').querySelectorAll('.nm').forEach(b=>b.onclick=()=>showProfile(b.dataset.h))}
 async function showProfile(h){$('pmt').textContent='@'+h;$('pms').textContent='Loading...';$('pmb').innerHTML='';$('pmodal').classList.add('on');
  try{const p=await api('profile/'+encodeURIComponent(h));$('pmt').textContent=disp(p);
@@ -345,12 +359,12 @@ document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('.m
 document.querySelectorAll('.modal').forEach(m=>m.onclick=e=>{if(e.target===m)m.classList.remove('on')});
 
 // ---------- refresh ----------
-function header(){$('nq').textContent=B.questions.filter(q=>!q.void).length;
+function header(){
  const nx=B.questions.filter(q=>!q.closed&&!q.void&&q.close_ts>nowS()).sort((a,b)=>a.close_ts-b.close_ts)[0];
  $('nlt').textContent=nx?`${istT(nx.close_ts)} IST · ${left(nx.close_ts-nowS())}`:'ALL LOCKED';
- const pz=B.prize||'';$('prizeR').textContent=pz;}
-async function loadBoard(){try{B=await api('board')}catch(e){return}header();dayTabs();renderQs();lbTabs();renderLb()}
-function tick(){if(!B)return;B.questions.forEach(q=>{if(!q.closed&&nowS()>=q.close_ts){q.closed=true;if(openCb===q.id)openCb=null;renderQs()}});
+}
+let lbSig='';async function loadBoard(){try{B=await api('board')}catch(e){return}header();dayTabs();renderQs();const sg=JSON.stringify(B.boards)+lbTab;if(sg!==lbSig){lbSig=sg;lbTabs();renderLb()}}
+function tick(){if(!B)return;B.questions.forEach(q=>{if(!q.closed&&nowS()>=q.close_ts){q.closed=true;if(openCb===q.id)openCb=null;updCard(q.id)}});
  document.querySelectorAll('[data-cl]').forEach(el=>{const q=B.questions.find(x=>x.id===+el.dataset.cl);if(q)el.textContent=closeTxt(q)[0]});header()}
 (async()=>{if(DEMO)demoInit();await loadBoard();await loadMe();renderLb();setInterval(tick,15000);
  setInterval(()=>{if(!document.hidden&&!openCb)loadBoard()},DEMO?4000:20000);setInterval(()=>{if(!document.hidden&&TOKEN)loadMe().then(renderLb)},60000)})();
@@ -360,16 +374,17 @@ function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.c
  const names=['Aarav','Ishaan','Kabir','Vihaan','Rohan','Arjun','Neha','Priya','Sneha','Ananya','Rahul','Karan','Dev','Aditya','Tanvi','Meera','Yash','Om','Riya','Zoya','Sahil','Varun','Manav','Nikhil','Pooja','Kriti','Harsh','Siddh','Tara','Ira','Aryan','Ayaan','Diya','Jay','Laksh','Mihir','Nisha','Parth','Rehan','Veer'];
  DB={players:names.map((n,i)=>({id:i+1,handle:(n+'_'+['gg','op','x','bgmi','yt','fps'][i%6]).toLowerCase(),name:i%4?n+(i%3?'':' OP'):'',created:t0-9000+i*60,hidden:false})),qs:[],picks:{},me:null,seq:1};
  const add=(kind,title,opts,close,day,tag,style,extra)=>DB.qs.push(Object.assign({id:DB.seq++,kind,title,options:opts,close_ts:close,day,tag,style,locked:false,answer:null,void:false},extra||{}));
- add('team','Which team will win the BMSD 2026 Grand Finals?',T,cl('3'),0,'CHAMPION','dropdown');
- add('multi','Predict the top 3 teams of the Grand Finals',T,cl('1'),0,'TOP 3','multi',{pick:3});
- add('multi','Which 6 teams qualify for BMIC?',T,cl('1'),0,'BMIC QUALIFIERS','multi',{pick:6});
- add('text','Who will be the top eliminator of the Grand Finals?',[],cl('1'),0,'TOP ELIMINATOR','text');
- add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKENS','dropdown');
- add('peak','What will Day 1 peak viewers be?',SEED.buckets,cl('1'),1,'PEAK VIEWERS','buttons');
+ add('team','Who will win the BMSD 2026 Grand Finals?',T,cl('3'),0,'CHAMPION','grid');
+ add('multi','Which teams will finish in the top 3?',T,cl('1'),0,'TOP 3','multi',{pick:3});
+ add('multi','Which 6 teams will qualify for BMIC?',T,cl('1'),0,'BMIC','multi',{pick:6});
+ for(let m=1;m<=SEED.matches;m++)add('match',`Match ${m}: Which team gets the chicken dinner?`,T,m<=2?t0-1800:cl('1'),1,`MATCH ${m}`,'dropdown');
+ add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKEN DINNERS','dropdown');
+ add('peak','How many people will watch at the peak on Day 1?',SEED.buckets,cl('1'),1,'PEAK VIEWERS','buttons');
  const pw=o=>{const ws=o.map((v,i)=>[v,1/Math.pow(i+1,.8)]),s=ws.reduce((a,b)=>a+b[1],0);let r=Math.random()*s;for(const [v,x] of ws){r-=x;if(r<=0)return v}return o[0]};
  const elim=['Jonathan','Jonathan','Goblin','Spower','jonathan ','Aditya','Neyoo','Clutchgod'];
  DB.players.forEach(p=>DB.qs.forEach(q=>{if(Math.random()>.8)return;let v;
-  if(q.kind==='multi'){const s=new Set();while(s.size<q.pick)s.add(pw(q.options));v=[...s]}else if(q.kind==='text')v=elim[Math.floor(Math.random()*elim.length)];else v=pw(q.options);DB.picks[p.id+':'+q.id]=v}))}
+  if(q.kind==='multi'){const s=new Set();while(s.size<q.pick)s.add(pw(q.options));v=[...s]}else if(q.kind==='text')v=elim[Math.floor(Math.random()*elim.length)];else v=pw(q.options);DB.picks[p.id+':'+q.id]=v}));
+ DB.qs.filter(q=>q.close_ts<t0).forEach((q,i)=>{q.locked=true;q.answer=q.options[i]})}
 const dClosed=q=>q.locked||nowS()>=q.close_ts;
 const tn=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function dStats(q){const s={n:0,inc:{},names:{}};DB.players.forEach(p=>{if(p.hidden)return;const v=DB.picks[p.id+':'+q.id];if(v===undefined)return;s.n++;
@@ -434,8 +449,8 @@ td{font-size:13px;vertical-align:top}.cnt{font:11px "Share Tech Mono",monospace;
 <div class="grid">
  <div class="card"><div class="lbl">// create questions</div><div class="row2"><label class="field"><span>DAY</span><select class="inp" id="mdDay"><option>1</option><option>2</option><option>3</option></select></label>
   <label class="field"><span>CLOSE (IST)</span><input class="inp" id="mdClose" type="datetime-local"></label></div>
-  <p class="muted" style="font-size:12px">Tournament questions (once): champion (closes Day 3), top 3, BMIC 6, top eliminator (close at the time above). Day questions: most chicken dinners + peak viewers for the chosen day. Nothing is duplicated.</p>
-  <div class="acts"><button class="btn" data-a="eventset">Create tournament questions</button><button class="btn" data-a="dayset">Create day questions</button><button class="btn ghost" data-a="matchday">+ Match winners x6</button><button class="btn ghost" data-a="peak">+ Peak viewers (auto)</button><button class="btn ghost" data-a="mvpday">+ Day MVP</button><button class="btn ghost" data-a="mvpevent">+ Event MVP</button><button class="btn ghost" data-a="record">+ Beat 730K?</button></div></div>
+  <p class="muted" style="font-size:12px">Tournament questions (once): champion (closes Day 3), top 3, BMIC 6 (close at the time above). Day questions: chicken dinner for matches 1-6, most chicken dinners, and peak viewers for the chosen day. Nothing is duplicated.</p>
+  <div class="acts"><button class="btn" data-a="eventset">Create tournament questions</button><button class="btn" data-a="dayset">Create day questions</button><button class="btn ghost" data-a="peak">+ Peak viewers (auto)</button><button class="btn ghost" data-a="mvpday">+ Day MVP</button><button class="btn ghost" data-a="mvpevent">+ Event MVP</button><button class="btn ghost" data-a="record">+ Beat 730K?</button></div></div>
  <div class="card"><div class="lbl">// custom question</div><label class="field"><span>TITLE</span><input class="inp" id="cqT" placeholder="Which team gets the most finishes on Day 1?"></label>
   <div class="row2"><label class="field"><span>TAG</span><input class="inp" id="cqTag" value="BONUS"></label><label class="field"><span>DAY (0 = event)</span><select class="inp" id="cqD"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label><label class="field"><span>STYLE</span><select class="inp" id="cqS"><option>buttons</option><option>dropdown</option></select></label></div>
   <label class="field"><span>OPTIONS (one per line)</span><textarea class="inp" id="cqO" style="min-height:90px"></textarea></label>

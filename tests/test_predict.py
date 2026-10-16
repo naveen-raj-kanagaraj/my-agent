@@ -168,14 +168,16 @@ class PredictTests(unittest.TestCase):
 
     def test_event_and_day_sets(self):
         ids = predict.create_event_set()
-        self.assertEqual(len(ids), 4)
+        self.assertEqual(len(ids), 3)
         self.assertEqual(predict.create_event_set(), [])
         champ = predict.get_question(ids[0])
         self.assertEqual(champ["close_ts"], predict.ist_ts("2026-10-18", "14:45"))
         self.assertEqual(predict.get_question(ids[1])["close_ts"], predict.ist_ts("2026-10-16", "14:45"))
         d = predict.create_day_set(1)
-        self.assertEqual(len(d), 2)
-        peak = predict.get_question(d[1])
+        self.assertEqual(len(d), 8)                          # 6 match chicken dinners + most chickens + peak
+        self.assertEqual(predict.create_day_set(1), [])
+        self.assertEqual(predict.get_question(d[0])["title"], "Match 1: Which team gets the chicken dinner?")
+        peak = predict.get_question(d[-1])
         self.assertEqual(peak["options"][0], "Under 350K")
         self.assertIn("350K-450K", peak["options"])
 

@@ -263,20 +263,22 @@ def create_match_day(day: int, close_ts: float = None) -> list:
     return ids
 
 
-def _exists(kind, title) -> bool:
+def _exists(kind, title, day=None) -> bool:
     with store._lock:
-        return bool(_db().execute("SELECT 1 FROM pw_questions WHERE kind=? AND title=?", (kind, title)).fetchone())
+        if day is None:
+            return bool(_db().execute("SELECT 1 FROM pw_questions WHERE kind=? AND title=?", (kind, title)).fetchone())
+        return bool(_db().execute("SELECT 1 FROM pw_questions WHERE kind=? AND title=? AND day=?",
+                                  (kind, title, int(day))).fetchone())
 
 
 def create_event_set(close_ts: float = None) -> list:
-    """Whole-event questions: champion (open until the last day), top 3, BMIC qualifiers, top eliminator."""
+    """Whole-event questions: champion (open until the last day), top 3, BMIC qualifiers."""
     s = settings()
     first = _close(1, close_ts)
     last = ist_ts(s["days"]["3"], s["close"])
-    spec = [("team", "Which team will win the BMSD 2026 Grand Finals?", s["teams"], last, "CHAMPION", "dropdown", {}, 1),
-            ("multi", "Predict the top 3 teams of the Grand Finals", s["teams"], first, "TOP 3", "multi", {"pick": 3}, 2),
-            ("multi", "Which 6 teams qualify for BMIC?", s["teams"], first, "BMIC QUALIFIERS", "multi", {"pick": 6}, 3),
-            ("text", "Who will be the top eliminator of the Grand Finals?", [], first, "TOP ELIMINATOR", "text", {}, 4)]
+    spec = [("team", "Who will win the BMSD 2026 Grand Finals?", s["teams"], last, "CHAMPION", "grid", {}, 1),
+            ("multi", "Which teams will finish in the top 3?", s["teams"], first, "TOP 3", "multi", {"pick": 3}, 2),
+            ("multi", "Which 6 teams will qualify for BMIC?", s["teams"], first, "BMIC", "multi", {"pick": 6}, 3)]
     ids = []
     for kind, title, opts, close, tag, style, meta, sort in spec:
         if not _exists(kind, title):
@@ -285,15 +287,19 @@ def create_event_set(close_ts: float = None) -> list:
 
 
 def create_day_set(day: int, close_ts: float = None) -> list:
-    """Per-day questions: most chicken dinners that day, and that day's peak viewers (auto-resolved)."""
+    """Per-day questions: chicken dinner for each match, most chicken dinners that day, peak viewers (auto)."""
     s = settings()
     day = int(day)
     close = _close(day, close_ts)
     ids = []
+    for m in range(1, int(s["matches"]) + 1):
+        t = f"Match {m}: Which team gets the chicken dinner?"
+        if not _exists("match", t, day):
+            ids.append(add_question("match", t, s["teams"], close, day, f"MATCH {m}", "dropdown", {"match": m}, sort=m))
     t = f"Which team gets the most chicken dinners on Day {day}?"
-    if not _exists("team", t):
-        ids.append(add_question("team", t, s["teams"], close, day, "MOST CHICKENS", "dropdown", sort=10))
-    if not _exists("peak", f"What will Day {day} peak viewers be?"):
+    if not _exists("team", t, day):
+        ids.append(add_question("team", t, s["teams"], close, day, "MOST CHICKEN DINNERS", "dropdown", sort=10))
+    if not _exists("peak", f"How many people will watch at the peak on Day {day}?", day):
         ids.append(create_peak(day, close))
     return ids
 
@@ -310,7 +316,7 @@ def create_mvp(day: int = 0, close_ts: float = None) -> int:
 def create_peak(day: int, close_ts: float = None, auto: bool = True) -> int:
     s = settings()
     day = int(day)
-    return add_question("peak", f"What will Day {day} peak viewers be?", bucket_labels(), _close(day, close_ts), day,
+    return add_question("peak", f"How many people will watch at the peak on Day {day}?", bucket_labels(), _close(day, close_ts), day,
                         "PEAK VIEWERS", "buttons", {"date": s["days"][str(day)], "auto": bool(auto),
                                                     "buckets": s["buckets"]}, sort=60)
 
