@@ -49,7 +49,7 @@ def _headers(resp):
         secs = 15
     if request.method != "GET" or resp.status_code >= 400:
         secs = None                       # POSTs, personal and error responses are never cached
-    if request.path.startswith(("/elogo/", "/tlogo/")):
+    if request.path.startswith(("/elogo/", "/tlogo/", "/pimg/")):
         return resp
     resp.headers["Cache-Control"] = f"public, max-age={secs}, s-maxage={secs}" if secs else "no-store"
     if secs:   # Cloudflare's Browser Cache TTL can override max-age; this one it passes through for its own cache
@@ -239,6 +239,20 @@ def predict_submit():
         return _json(predict.submit_all(_tok(), clean))
     except predict.GameError as e:
         return _err(e)
+
+
+@app.route("/pimg/<name>")
+def pimg(name):
+    import re as _re
+    from core import crowdpage
+    if not _re.fullmatch(r"[A-Za-z0-9]+(_h)?\.webp", name):
+        return Response(status=404)
+    path = os.path.join(crowdpage.PDIR, name)
+    if not os.path.isfile(path):
+        return Response(status=404)
+    r = _memo(path, 3600, _file(path), "image/webp")
+    r.headers["Cache-Control"] = "public, max-age=86400"
+    return r
 
 
 @app.route("/tlogo/<name>")
