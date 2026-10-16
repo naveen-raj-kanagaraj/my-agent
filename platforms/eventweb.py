@@ -142,7 +142,8 @@ def predict_join():
         return _err(predict.GameError("Too many attempts. Try again in a few minutes.", 429))
     j = request.get_json(silent=True) or {}
     try:
-        return _json(predict.join(str(j.get("handle", "")), str(j.get("name", "")), bool(j.get("consent"))))
+        ip = request.headers.get("CF-Connecting-IP") or request.remote_addr or ""
+        return _json(predict.join(str(j.get("handle", "")), str(j.get("name", "")), bool(j.get("consent")), ip))
     except predict.GameError as e:
         return _err(e)
 
@@ -155,17 +156,17 @@ def predict_me():
         return _err(e)
 
 
-@app.route("/predict/api/pick", methods=["POST"])
-def predict_pick():
+@app.route("/predict/api/submit", methods=["POST"])
+def predict_submit():
     j = request.get_json(silent=True) or {}
+    picks = j.get("picks") if isinstance(j.get("picks"), dict) else {}
+    clean = {}
+    for k, v in list(picks.items())[:50]:
+        clean[str(k)] = [str(x) for x in v][:20] if isinstance(v, list) else str(v)[:60]
     try:
-        opt = j.get("option", "")
-        opt = [str(x) for x in opt][:20] if isinstance(opt, list) else str(opt)
-        return _json(predict.pick(_tok(), int(j.get("qid") or 0), opt))
+        return _json(predict.submit_all(_tok(), clean))
     except predict.GameError as e:
         return _err(e)
-    except (TypeError, ValueError):
-        return _err(predict.GameError("Bad request."))
 
 
 @app.route("/tlogo/<name>")
