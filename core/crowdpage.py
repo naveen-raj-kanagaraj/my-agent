@@ -94,14 +94,14 @@ h1{margin:2px 0 0;font-size:19px;text-transform:uppercase;letter-spacing:.02em;l
 .stk{display:flex;height:44px;overflow:hidden;border:1px solid var(--line)}.stk div{height:100%;transform-origin:left;transition:flex-grow 1s}
 .stk div+div{border-left:2px solid var(--bg)}
 .sleg{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;margin-top:12px}.sleg div{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
-.sleg i{width:10px;height:10px;flex:none}.sleg span{margin-left:auto;font:14px "Share Tech Mono",monospace}
+.sleg i{width:10px;height:10px;flex:none}.sleg span:not(.av){margin-left:auto;font:14px "Share Tech Mono",monospace}
 /* treemap */
-.tm{position:relative;height:280px}.tm div{position:absolute;border:2px solid var(--card);padding:8px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.tm{position:relative;height:260px}.tm div{position:absolute;border:2px solid var(--card);padding:8px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
 .tm b{font-size:14px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tm span{font:20px "Share Tech Mono",monospace}
 /* gauge */
 .gg{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.gg svg{width:220px;flex:none}
 .rk{flex:1;min-width:170px}.rk div{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line);font-weight:600}.rk div:last-child{border:0}
-.rk em{font:normal 13px "Share Tech Mono",monospace;color:var(--muted);width:22px;display:inline-block;flex:none}.rk span{margin-left:auto;font:14px "Share Tech Mono",monospace}
+.rk em{font:normal 13px "Share Tech Mono",monospace;color:var(--muted);width:22px;display:inline-block;flex:none}.rk span:not(.av){margin-left:auto;font:14px "Share Tech Mono",monospace}
 /* players */
 .av{width:24px;height:24px;border-radius:50%;object-fit:cover;object-position:top;background:var(--card2);border:1px solid var(--line);flex:none;display:inline-grid;place-items:center;font:700 9px "Chakra Petch",sans-serif;color:var(--muted)}
 .c.ph{overflow:hidden}.cut{position:absolute;right:-6px;bottom:0;height:88%;max-height:330px;width:auto;pointer-events:none;
@@ -113,8 +113,14 @@ h1{margin:2px 0 0;font-size:19px;text-transform:uppercase;letter-spacing:.02em;l
 .elimP .gtop{display:flex;align-items:flex-end;justify-content:space-between;min-height:150px}
 .elimP .cut{position:relative;right:auto;bottom:auto;height:170px;margin-right:-8px}
 .tm .tc{position:absolute;right:0;bottom:0;height:92%;width:auto;-webkit-mask-image:linear-gradient(to top,transparent 0,#000 30%);mask-image:linear-gradient(to top,transparent 0,#000 30%);pointer-events:none}
-.tm b{display:flex;align-items:center;gap:6px}.tav{width:30px;height:30px;border-color:rgba(0,0,0,.25)}
+.tav{width:30px;height:30px;border-color:rgba(0,0,0,.25)}
 .pills span{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 3px}
+/* leader strip on player cards */
+.lead{position:relative;height:150px;margin:-4px 0 12px;border-bottom:1px solid var(--line);overflow:hidden}
+.lead .lc{position:absolute;right:-10px;bottom:0;height:150px;max-height:none;-webkit-mask-image:linear-gradient(to top,transparent 0,#000 30%);mask-image:linear-gradient(to top,transparent 0,#000 30%)}
+.lead .ln{position:relative;font:700 52px/1 "Chakra Petch",sans-serif;margin-top:18px;text-shadow:0 0 20px rgba(182,242,58,.3)}
+.lead .lw{position:relative;font-size:20px;font-weight:700;text-transform:uppercase;margin-top:4px}.lead small{position:relative;font:11px "Share Tech Mono",monospace;color:var(--muted)}
+.tm div{gap:2px}.tm .tav{position:absolute;top:6px;right:6px;width:28px;height:28px;border-color:rgba(0,0,0,.25)}
 /* curve */
 .cv svg{width:100%;height:auto;display:block}
 .foot{margin-top:22px;font:12px "Share Tech Mono",monospace;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
@@ -134,6 +140,7 @@ const logo=(r,cls)=>{const src=TL[key(r.label)];return src?`<img class="lg ${cls
 const PK=n=>Object.keys(PI).find(k=>k.toLowerCase()===String(n).toLowerCase()),ph=(n,k)=>{const x=PI[PK(n)];return x&&x[k||'h']},
  av=r=>{const u=!r.other&&ph(r.label);return u?`<img class="av" src="${u}" alt="" loading="lazy">`:`<span class="av">${r.other?'+':esc(r.label.slice(0,2).toUpperCase())}</span>`},
  cut=(n,cls)=>{const u=ph(n,'f');return u?`<img class="cut ${cls||''}" src="${u}" alt="${esc(n)}">`:''};
+const lead=(q,col)=>{const L=q.rows[0];return `<div class="lead">${cut(L.label,'lc')}<div class="ln" style="color:${col||'var(--lime)'}">${pc(L.pct)}</div><div class="lw ${ok(q,L.label)}">${esc(L.label)}</div><small>top pick</small></div>`};
 const Q=t=>C.questions.find(q=>q.tag===t),ok=(q,l)=>(q.answer||[]).map(a=>a.toLowerCase()).includes(String(l).toLowerCase())?'ok':'';
 const card=(q,cls,inner)=>q?`<section class="c ${cls}"><div class="t">// ${esc(q.tag)}</div><h3>${esc(q.title)}</h3>${inner}<div class="ft">${esc(q.note)}</div></section>`:'';
 const arc=(cx,cy,r,a0,a1)=>{const p=a=>[cx+r*Math.cos(a),cy+r*Math.sin(a)],[x0,y0]=p(a0),[x1,y1]=p(a1);return `M${x0} ${y0}A${r} ${r} 0 ${a1-a0>Math.PI?1:0} 1 ${x1} ${y1}`};
@@ -154,16 +161,16 @@ function hero(q){const L=q.rows[0],sub=L.pct>=50?'picked by more than half':L.pc
  return card(q,'s4 ph heroP',`${cut(L.label)}<div class="big"><div class="n" data-n="${L.pct}">0%</div><div class="who ${ok(q,L.label)}">${esc(L.label)}<small>${sub}</small></div></div><div class="pills">${q.rows.slice(1).map(r=>`<span class="${ok(q,r.label)}">${av(r)}${esc(r.label)}<em>${pc(r.pct)}</em></span>`).join('')}</div>`)}
 // 5. final MVP: 100% stacked bar
 function stacked(q){
- return card(q,'s4',`<div class="stk">${q.rows.map((r,i)=>`<div style="flex:0 0 0;background:${r.other?OTH:COL[i]}" data-g="${r.pct}" title="${esc(r.label)} ${pc(r.pct)}"></div>`).join('')}</div><div class="sleg">${q.rows.map((r,i)=>`<div class="${ok(q,r.label)}"><i style="background:${r.other?OTH:COL[i]}"></i>${av(r)}${esc(r.label)}<span>${pc(r.pct)}</span></div>`).join('')}</div>`)}
+ return card(q,'s4 ph',lead(q)+`<div class="stk">${q.rows.map((r,i)=>`<div style="flex:0 0 0;background:${r.other?OTH:COL[i]}" data-g="${r.pct}" title="${esc(r.label)} ${pc(r.pct)}"></div>`).join('')}</div><div class="sleg">${q.rows.map((r,i)=>`<div class="${ok(q,r.label)}"><i style="background:${r.other?OTH:COL[i]}"></i>${av(r)}${esc(r.label)}<span>${pc(r.pct)}</span></div>`).join('')}</div>`)}
 // 6. best IGL: squarified treemap
 function squarify(items,x,y,w,h){const out=[],tot=items.reduce((a,r)=>a+r.pct,0),sc=w*h/tot;let rest=items.map(r=>({...r,a:r.pct*sc}));
  const worst=(row,len)=>{const s=row.reduce((a,r)=>a+r.a,0);return Math.max(...row.map(r=>Math.max(len*len*r.a/(s*s),s*s/(len*len*r.a))))};
  while(rest.length){const len=Math.min(w,h);let row=[rest[0]],k=1;while(k<rest.length&&worst(row.concat(rest[k]),len)<=worst(row,len)){row.push(rest[k]);k++}
   const s=row.reduce((a,r)=>a+r.a,0);if(w>=h){const cw=s/h;let yy=y;row.forEach(r=>{const ch=r.a/cw;out.push({...r,x,y:yy,w:cw,h:ch});yy+=ch});x+=cw;w-=cw}
   else{const ch=s/w;let xx=x;row.forEach(r=>{const cw=r.a/ch;out.push({...r,x:xx,y,w:cw,h:ch});xx+=cw});y+=ch;h-=ch}rest=rest.slice(k)}return out}
-function tree(q){const W=400,H=280,cells=squarify(q.rows.map((r,i)=>({...r,c:r.other?OTH:COL[i]})),0,0,W,H);
- return card(q,'s4',`<div class="tm">${cells.map(r=>{const dark=['#b6f23a','#f5c451','#3fd6a4','#4cc9f0'].includes(r.c),small=r.w<70||r.h<48;
-  return `<div class="${ok(q,r.label)}" style="left:${r.x/W*100}%;top:${r.y/H*100}%;width:${r.w/W*100}%;height:${r.h/H*100}%;background:${r.c};color:${dark?'#0b0b12':'#eeeef5'}" title="${esc(r.label)} ${pc(r.pct)}">${small?'':`<b>${!r.other&&r.w>=120&&ph(r.label)?`<img class="av tav" src="${ph(r.label)}" alt="">`:''}${esc(r.label)}</b>`}<span style="${small?'font-size:13px':''}">${small?esc(r.label.slice(0,4))+' ':''}${pc(r.pct)}</span></div>`}).join('')}</div>`)}
+function tree(q){const W=400,H=260,cells=squarify(q.rows.map((r,i)=>({...r,c:r.other?OTH:COL[i]})),0,0,W,H);
+ return card(q,'s4 ph',lead(q)+`<div class="tm">${cells.map(r=>{const dark=['#b6f23a','#f5c451','#3fd6a4','#4cc9f0'].includes(r.c),narrow=r.w<118,u=!r.other&&ph(r.label);
+  return `<div class="${ok(q,r.label)}" style="left:${r.x/W*100}%;top:${r.y/H*100}%;width:${r.w/W*100}%;height:${r.h/H*100}%;background:${r.c};color:${dark?'#0b0b12':'#eeeef5'}" title="${esc(r.label)} ${pc(r.pct)}">${u?`<img class="av tav" src="${u}" alt="${esc(r.label)}" style="${narrow||r.h<70?'width:20px;height:20px;top:4px;right:4px':''}">`:''}<b style="${narrow?'font-size:12px':''}">${esc(r.label)}</b><span style="${narrow?'font-size:16px':''}">${pc(r.pct)}</span></div>`}).join('')}</div>`)}
 // 7. eliminator: gauge + ranking
 function gauge(q){const L=q.rows[0],a1=Math.PI+Math.PI*L.pct/100;
  return card(q,'s4 elimP',`<div class="gtop"><svg viewBox="0 0 220 130" style="width:62%;max-width:230px"><path d="${arc(110,115,90,Math.PI,2*Math.PI-.0001)}" stroke="#262636" stroke-width="18" fill="none"/><path d="${arc(110,115,90,Math.PI,a1)}" stroke="#ff4d5e" stroke-width="18" fill="none" class="gp" style="filter:drop-shadow(0 0 6px rgba(255,77,94,.6))"/><text x="110" y="100" text-anchor="middle" fill="#eeeef5" font-family="Chakra Petch,sans-serif" font-weight="700" font-size="34">${pc(L.pct)}</text><text x="110" y="122" text-anchor="middle" fill="#8d8ca3" font-family="Share Tech Mono,monospace" font-size="12">${esc(L.label.toUpperCase())}</text></svg>${cut(L.label)}</div>
