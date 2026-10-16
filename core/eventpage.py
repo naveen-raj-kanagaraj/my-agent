@@ -5,6 +5,7 @@ Only streams that are live right now are listed; ended streams only count toward
 import html
 import io
 import json
+import re
 import os
 import threading
 import time
@@ -95,7 +96,7 @@ def data(key: str = None) -> dict:
                 "peak": lb["peak"], "peak_when": tf(lb["peak_at"]).strftime("%I:%M %p IST"),
                 "split": lb["split"],
                 "streams": [{"vid": x["vid"], "channel": x["channel"], "title": x["title"], "kind": x["kind"],
-                             "logo": events.avatar(x.get("channel_id", "")),
+                             "logo": events.avatar(x.get("channel_id", "")), "avg": x.get("avg", 0),
                              "viewers": x["peak"], "at": tf(x["peak_at"]).strftime("%I:%M %p"), "url": events.yt_link(x["vid"])}
                             for x in lb["streams"][:100]]}
     if out.get("ticks"):
@@ -132,6 +133,8 @@ def _roster(out: dict) -> list:
     rows = []
     for token, name, handle in events.ROSTER:
         card = events.channel_card(handle)
+        if card.get("name") and token not in n(card["name"]) and n(name)[:5] not in n(card["name"]):
+            card = {}
         lv = [x for x in live if token in n(x["channel"])]
         pk = [x for x in done if token in n(x["channel"])]
         logo = card.get("logo") or next((x.get("logo") for x in lv + pk if x.get("logo")), "")
@@ -160,7 +163,10 @@ def build_demo_html(style: str = "v1", logos: dict = None) -> str:
     logos: {channel handle: base64 webp} embedded so the demo shows real channel logos offline."""
     names = {h: n for _, n, h in events.ROSTER if h}
     dl = {names[h]: "data:image/webp;base64," + b for h, b in (logos or {}).items() if h in names}
-    return build_html("bmsd", live=False, style=style).replace("const DEMO=false, DLOGO={}", "const DEMO=true, DLOGO=" + json.dumps(dl))
+    if (logos or {}).get("@KRAFTON"):
+        dl["KRAFTON INDIA ESPORTS"] = "data:image/jpeg;base64," + logos["@KRAFTON"]
+    html_ = build_html("bmsd", live=False, style=style).replace("const DEMO=false, DLOGO={}", "const DEMO=true, DLOGO=" + json.dumps(dl))
+    return re.sub(r"TITLE='[^']*'", "TITLE='BMSD 2026'", html_, count=1)
 
 
 ELOGO_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "eventlogos")
@@ -371,8 +377,8 @@ function cdMode(){return !!(D.next_start&&!D.official_live&&D.next_start-nowS()>
 function render(){
  const app=document.getElementById('app');
  if(cdMode()){
-  if(mode!=='cd'){mode='cd';app.innerHTML=`${historyHTML()}<div class="card cd" id="cd" style="margin-top:12px"><div class="lbl">// Grand finals go live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>
-   <div class="card" id="wpCard" style="margin-top:12px"><div class="head"><div><h2 id="wph">Watch party streamers</h2><div class="muted" style="font-size:12px">Official watch parties for the grand finals.</div></div></div>
+  if(mode!=='cd'){mode='cd';app.innerHTML=`<div class="card cd" id="cd" style="margin-top:12px"><div class="lbl">// Grand finals go live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>${historyHTML()}
+   <div class="card" id="wpCard" style="margin-top:12px"><div class="head"><div><h2 id="wph">Watch party streamers</h2><div class="muted" style="font-size:12px">Official watch parties for the grand finals.</div></div><button class="btn sm" id="shareBoard">Share</button></div>
    <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Status</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
    <div class="foot" id="foot"><div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div><div class="disc">Unofficial viewership tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON.</div></div>`;
    document.getElementById('shareHist').onclick=()=>openShare('history');window.addEventListener('resize',drawHistCanvas)}
@@ -400,7 +406,7 @@ function render(){
     <button class="btn sm" id="shareChart">Share</button></div>
    <div class="chart" id="chartBox"><canvas id="c"></canvas></div><div class="race" id="race" hidden></div><div class="chips" id="chips"></div></div>
   <div class="grid2">
-   <div class="card" id="wpCard"><div class="head"><div><h2 id="wph">Watch party leaderboard</h2><div class="muted" style="font-size:12px">Streamers: share your rank card.</div></div></div>
+   <div class="card" id="wpCard"><div class="head"><div><h2 id="wph">Watch party leaderboard</h2><div class="muted" style="font-size:12px">Streamers: share your rank card.</div></div><button class="btn sm" id="shareBoard">Share</button></div>
     <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Live</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
    <div class="card"><div class="head"><div><h2 id="lh">Live streams</h2></div>
     <div class="seg" id="kf">${[['all','ALL'],['official','OFFICIAL'],['watch party','WATCH PARTIES']].map(([k,l])=>`<button data-k="${k}">${l}</button>`).join('')}</div>
@@ -440,7 +446,7 @@ function render(){
   <div class="disc">Unofficial viewership tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included.</div>`;
  rows();wpRows();chips();drawChart();mark();
 }
-function wpRows(){
+function wpRows(){const sb=document.getElementById('shareBoard');if(sb)sb.onclick=()=>openShare('board');
  const off=isOff(),R=D.roster||[],cd=!!(D.next_start&&!D.official_live);
  document.getElementById('wph').textContent=cd?'Watch party streamers, yet to start':off?'Watch party streamers, last broadcast':'Watch party streamers, live';
  document.getElementById('wpth').textContent='Status';
@@ -471,7 +477,7 @@ function rows(){
 function chips(){
  const el=document.getElementById('chips');
  if(view!=='wp'){el.innerHTML='';return}
- el.innerHTML=(D.wp||[]).slice(0,6).map((w,i)=>`<button class="chip ${hidden[w.vid]?'offc':''}" data-vid="${esc(w.vid)}"><i style="background:${PAL[i%8]}"></i>${w.logo?`<img class="lg" style="width:16px;height:16px;margin:0" src="${esc(w.logo)}" alt="" referrerpolicy="no-referrer">`:''}${esc(w.channel.slice(0,18))} <b>${fmt(w.viewers)}</b></button>`).join('');
+ el.innerHTML=(D.wp||[]).slice(0,5).map((w,i)=>`<button class="chip ${hidden[w.vid]?'offc':''}" data-vid="${esc(w.vid)}"><i style="background:${PAL[i%8]}"></i>${w.logo?`<img class="lg" style="width:16px;height:16px;margin:0" src="${esc(w.logo)}" alt="" referrerpolicy="no-referrer">`:''}${esc(w.channel.slice(0,18))} <b>${fmt(w.viewers)}</b></button>`).join('');
  el.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{hidden[c.dataset.vid]=!hidden[c.dataset.vid];chips();drawChart()});
 }
 // ---------- graphs ----------
@@ -482,7 +488,7 @@ function lines(){
   else if(sr.length){src=src.filter(r=>r[0]>=sr[0][0]);const last=src.length?src[src.length-1][0]:0;src=src.concat(sr.filter(r=>r[0]>last))}tot=src}
  if(view==='total')return[{label:'Total',color:css('--lime'),pts:tot.map(r=>[r[0],r[1]]),w:2.4,fill:true}];
  if(view==='split')return[{label:'Official',color:css('--orange'),pts:tot.map(r=>[r[0],r[2]]),w:2.2},{label:'Watch parties',color:css('--cyan'),pts:tot.map(r=>[r[0],r[3]]),w:2.2}];
- return(D.wp||[]).slice(0,6).map((w,i)=>({label:w.channel,color:PAL[i%8],pts:(D.wp_series||{})[w.vid]||[],w:2.4,vid:w.vid,logo:w.logo,ini:w.channel.slice(0,2).toUpperCase()})).filter(l=>!hidden[l.vid]);
+ return(D.wp||[]).slice(0,5).map((w,i)=>({label:w.channel,color:PAL[i%8],pts:(D.wp_series||{})[w.vid]||[],w:2.4,vid:w.vid,logo:w.logo,ini:w.channel.slice(0,2).toUpperCase()})).filter(l=>!hidden[l.vid]);
 }
 const WIN=180,LAG=4;let ys={};const IMG={};
 function headLogo(ctx,e,fs){const r=11*fs,x=Math.max(r,e.x-r-6*fs),y=e.y;ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fillStyle=css('--card2');ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=e.c;ctx.stroke();ctx.clip();
@@ -541,7 +547,7 @@ function drawHistCanvas(){const cv=document.getElementById('hc');if(!cv)return;c
  cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);drawHist(ctx,W,H,1)}
 function hashc(n){let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))|0;return PAL[Math.abs(h)%PAL.length]}
 function race(){const el=document.getElementById('race');if(!el)return;const RR=D.roster||[];let R=RR.filter(r=>r.status==='live');const lv=R.length>0;if(!lv)R=RR.filter(r=>r.peak).sort((a,b)=>b.peak-a.peak);
- R=R.slice(0,10);const val=r=>lv?r.viewers:r.peak,max=Math.max(1,...R.map(val)),H=window.innerWidth<600?40:46;el.style.height=(R.length*H||60)+'px';
+ R=R.slice(0,5);const val=r=>lv?r.viewers:r.peak,max=Math.max(1,...R.map(val)),H=window.innerWidth<600?48:58;el.style.height=(R.length*H||60)+'px';
  if(!R.length){el.innerHTML='<div class="muted mono" style="padding:20px">WATCH PARTIES APPEAR HERE ONCE THEY GO LIVE</div>';return}
  el.querySelectorAll('.muted').forEach(x=>x.remove());const seen=new Set();
  R.forEach((r,i)=>{let row=[...el.children].find(x=>x.dataset.n===r.name);if(!row){row=document.createElement('div');row.className='rr';row.dataset.n=r.name;
@@ -580,7 +586,7 @@ function dayStreams(){const LB=D.last_broadcast||{};return(LB.streams||[])}
 function logoOf(ch){const n=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'');const r=(D.roster||[]).find(r=>r.logo&&(n(ch).includes(n(r.name))||n(r.name).includes(n(ch))));return r?r.logo:''}
 function loadImg(u){return new Promise(r=>{if(!u)return r(null);const i=new Image();i.crossOrigin='anonymous';i.onload=()=>r(i);i.onerror=()=>r(null);i.src=u})}
 function wpByPeak(){const live={};(D.live||[]).forEach(s=>live[s.vid]=s.viewers);
- return dayStreams().filter(s=>s.kind==='watch party').map(s=>({vid:s.vid,channel:s.channel,logo:s.logo||logoOf(s.channel),peak:s.viewers,at:s.at,now:D.official_live?(live[s.vid]||0):null})).sort((a,b)=>b.peak-a.peak)}
+ return dayStreams().filter(s=>s.kind==='watch party').map(s=>({vid:s.vid,channel:s.channel,logo:s.logo||logoOf(s.channel),peak:s.viewers,avg:s.avg||0,at:s.at,now:D.official_live?(live[s.vid]||0):null})).sort((a,b)=>b.peak-a.peak)}
 function histCard(){const W=1080,H=1350,SC=3,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);
  const g=x.createRadialGradient(W*.8,0,40,W*.8,0,1200);g.addColorStop(0,'#2a1d5c');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,W,H);
  const T=(t,X,Y,f,c,a)=>{x.font=f;x.fillStyle=c;x.textAlign=a||'left';x.textBaseline='top';x.fillText(t,X,Y)};const h=hist(),top=[...h].sort((a,b)=>b[2]-a[2]);
@@ -592,6 +598,10 @@ function histCard(){const W=1080,H=1350,SC=3,c=document.createElement('canvas');
  top.slice(0,8).forEach((r,i)=>{const col=i%2,row=Math.floor(i/2),X=80+col*470,Y=y+row*48,c=r[0]==='BMSD'&&r[1]==='26'?'#ff4d5e':i===0?'#b6f23a':'#eeeef5';
   T(`${i+1}. ${HNAME[r[0]].toUpperCase()} 20${r[1]}`.slice(0,26),X,Y,'700 28px "Chakra Petch",sans-serif',c);T(r[2]+'K',X+430,Y,'700 28px "Chakra Petch",sans-serif',c,'right')});
  x.fillStyle='#b6f23a';x.fillRect(0,H-130,W,130);T('LIVE.LETSGROWESPORTS.COM',80,H-108,'700 44px "Chakra Petch",sans-serif','#0a0a14');T('@letsgrowesports',80,H-52,'24px "Share Tech Mono",monospace','#0a0a14');return c}
+function avatarAt(x,im,cx,cy,r,ring,name){x.save();x.beginPath();x.arc(cx,cy,r,0,7);x.closePath();x.fillStyle='#1a1a26';x.fill();x.clip();
+ if(im)x.drawImage(im,cx-r,cy-r,2*r,2*r);else{x.fillStyle='#8d8ca3';x.font=`700 ${Math.round(r*.8)}px "Chakra Petch",sans-serif`;x.textAlign='center';x.textBaseline='middle';x.fillText(String(name||'').slice(0,2).toUpperCase(),cx,cy+2)}
+ x.restore();x.beginPath();x.arc(cx,cy,r,0,7);x.lineWidth=Math.max(2,r/14);x.strokeStyle=ring;x.stroke();x.textBaseline='top';x.textAlign='left'}
+let avs={};
 function card(type,vid,avatar){if(type==='history')return histCard();
  const W=1080,H=1350,SC=3,c=document.createElement('canvas');c.width=W*SC;c.height=H*SC;const x=c.getContext('2d');x.scale(SC,SC);x.imageSmoothingQuality='high';
  const g=x.createRadialGradient(W*.8,0,40,W*.8,0,1200);g.addColorStop(0,'#1f1a3d');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,W,H);
@@ -622,24 +632,45 @@ function card(type,vid,avatar){if(type==='history')return histCard();
   x.save();x.translate(60,y0);plot(x,W-120,290,L,{live:false,multi:type==='split',nologo:true,key:'cardT'+type,padR:130,padT:40,fs:2,markPeak:type!=='split'});x.restore();
   let ly=1015;T('// WATCH PARTY LEADERS (PEAK)',80,ly,M(26),'#ff4d5e');ly+=42;
   wp.slice(0,3).forEach((w,j)=>{T(`${j+1}. ${w.channel.toUpperCase().slice(0,26)}`,80,ly,B(34),j?'#eeeef5':'#b6f23a');T(full(w.peak),W-80,ly,B(34),j?'#eeeef5':'#b6f23a','right');ly+=46});
+ }else if(type==='board'){
+  const R0=(D.roster||[]),lv=R0.some(r=>r.status==='live');let R=(lv?R0.filter(r=>r.status==='live'):R0.filter(r=>r.peak).sort((a,b)=>b.peak-a.peak)).slice(0,10);
+  T(lv?'// WATCH PARTY LEADERBOARD, LIVE':'// WATCH PARTY LEADERBOARD',80,205,M(30),'#ff4d5e');
+  T(lv?'concurrent viewers right now':'peak concurrent viewers',80,248,M(24),'#8d8ca3');
+  if(!R.length){T('WATCH PARTIES GO LIVE WITH THE BROADCAST',80,330,B(40),'#eeeef5');R0.slice(0,10).forEach((r,j)=>T(r.name.toUpperCase(),80+(j%2)*470,420+Math.floor(j/2)*60,B(30),'#8d8ca3'))}
+  const top=Math.max(1,...R.map(r=>lv?r.viewers:r.peak));
+  R.forEach((r,j)=>{const y=300+j*88,v=lv?r.viewers:r.peak,c=j===0?'#f5c451':j<3?'#b6f23a':'#eeeef5';
+   x.fillStyle=j%2?'rgba(255,255,255,.03)':'rgba(255,255,255,.06)';x.fillRect(60,y-8,W-120,78);
+   x.fillStyle=j===0?'#f5c451':j<3?'#b6f23a':'#262636';x.fillRect(60,y-8,8,78);
+   T(String(j+1),96,y+14,B(36),c);avatarAt(x,avs[r.vid]||avs[r.name],170,y+31,28,j===0?'#f5c451':'#262636',r.name);
+   T(r.name.toUpperCase().slice(0,20),214,y+6,B(34),'#ffffff');
+   x.fillStyle=c;x.globalAlpha=.85;x.fillRect(214,y+50,Math.max(8,(W-520)*v/top),6);x.globalAlpha=1;
+   T(full(v),W-80,y+12,B(40),c,'right')});
  }else{
-  let i=type==='streamer'?wp.findIndex(w=>w.vid===vid):0;if(i<0){const d=(D.wp||[]).find(w=>w.vid===vid);if(d){wp.push({vid:d.vid,channel:d.channel,peak:d.peak,now:d.viewers});wp.sort((a,b)=>b.peak-a.peak);i=wp.findIndex(w=>w.vid===vid)}}
-  const me=wp[i]||wp[0]||{channel:'-',peak:0};
-  T(type==='streamer'?`// #${i+1} WATCH PARTY OF THE DAY`:'// WATCH PARTY BATTLE: LED BY',80,205,M(30),'#ff4d5e');
-  let nx=80;if(avatar){const r=46,cx=80+r,cy=248+38;x.save();x.beginPath();x.arc(cx,cy,r,0,7);x.closePath();x.clip();x.drawImage(avatar,cx-r,cy-r,2*r,2*r);x.restore();
-   x.beginPath();x.arc(cx,cy,r,0,7);x.lineWidth=4;x.strokeStyle='#b6f23a';x.stroke();nx=80+2*r+24}
-  T(me.channel.toUpperCase().slice(0,avatar?18:22),nx,248,B(72),'#b6f23a');
-  x.shadowColor='rgba(182,242,58,.35)';x.shadowBlur=30;T(full(me.peak),72,330,B(150),'#ffffff');x.shadowBlur=0;
-  T('peak concurrent viewers',80,490,M(28),'#8d8ca3');
-  const bw=(W-160-20)/2;
-  box(80,545,bw,170,'WATCHING NOW',live&&me.now!=null?fmt(me.now):'OFFLINE',live?'at time of sharing':'stream ended',live?'#b6f23a':'#8d8ca3');
-  box(80+bw+20,545,bw,170,'DAY PEAK, ALL STREAMS',fmt(LB.peak),LB.peak_when||'','#ff8a3d');
+  let i=type==='streamer'?wp.findIndex(w=>w.vid===vid):0;if(i<0){const d=(D.wp||[]).find(w=>w.vid===vid);if(d){wp.push({vid:d.vid,channel:d.channel,logo:d.logo,peak:d.peak,avg:0});wp.sort((a,b)=>b.peak-a.peak);i=wp.findIndex(w=>w.vid===vid)}}
+  if(i<0)i=0;const me=wp[i]||{channel:'-',peak:0,avg:0},champ=i===0,GOLD='#f5c451',acc=champ?GOLD:'#b6f23a';
+  // spotlight behind the hero
+  const sg=x.createRadialGradient(240,330,10,240,330,420);sg.addColorStop(0,champ?'rgba(245,196,81,.20)':'rgba(182,242,58,.14)');sg.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=sg;x.fillRect(0,150,W,500);
+  T(champ?'// WATCH PARTY CHAMPION':`// #${i+1} WATCH PARTY OF THE DAY`,80,198,M(30),acc);
+  const r=92,cx=80+r,cy=250+r;
+  x.save();x.shadowColor=acc;x.shadowBlur=40;x.beginPath();x.arc(cx,cy,r+8,0,7);x.fillStyle=acc;x.fill();x.restore();
+  avatarAt(x,avatar,cx,cy,r,acc,me.channel);
+  x.beginPath();x.arc(cx+r*.72,cy+r*.72,30,0,7);x.fillStyle=acc;x.fill();T('#'+(i+1),cx+r*.72,cy+r*.72-18,B(30),'#0a0a14','center');
+  const x0=80+2*r+46;let fsz=64;x.font=B(fsz);while(x.measureText(me.channel.toUpperCase()).width>W-80-x0&&fsz>34){fsz-=2;x.font=B(fsz)}
+  T(me.channel.toUpperCase(),x0,262,B(fsz),'#ffffff');
+  T('PEAK CONCURRENT VIEWERS',x0,262+fsz+14,M(24),'#8d8ca3');
+  x.shadowColor=champ?'rgba(245,196,81,.45)':'rgba(182,242,58,.35)';x.shadowBlur=30;T(full(me.peak),x0-4,262+fsz+48,B(104),acc);x.shadowBlur=0;
+  const bw=(W-160-40)/3;
+  box(80,560,bw,140,'PEAK',fmt(me.peak),me.at?me.at+' IST':'',acc);
+  box(80+bw+20,560,bw,140,'AVERAGE',me.avg?fmt(me.avg):'-','while live','#4cc9f0');
+  box(80+2*(bw+20),560,bw,140,'RANK',`#${i+1}`,`of ${wp.length} watch parties`,'#eeeef5');
   const sv=D.wp_series||{};
-  L=wp.slice(0,6).map((w,j)=>({label:w.channel,color:w.vid===me.vid?'#b6f23a':['#4cc9f0','#ff8a3d','#ff5fa2','#a78bfa','#ffd23f'][j%5],pts:sv[w.vid]||[],w:w.vid===me.vid?6:3}));
-  L.push(L.splice(L.findIndex(l=>l.label===me.channel),1)[0]);L=L.filter(Boolean);
-  x.save();x.translate(60,740);plot(x,W-120,270,L,{live:false,multi:true,nologo:true,key:'cardW',padR:130,padT:20,fs:2});x.restore();
-  let ly=1030;T('// RANKING BY PEAK',80,ly,M(26),'#ff4d5e');ly+=40;
-  wp.slice(0,3).forEach((w,j)=>{const hi=w.vid===me.vid;T(`${j+1}. ${w.channel.toUpperCase().slice(0,24)}`,80,ly,B(30),hi?'#b6f23a':'#eeeef5');T(full(w.peak),W-80,ly,B(30),hi?'#b6f23a':'#eeeef5','right');ly+=40});
+  L=wp.slice(0,5).map((w,j)=>({label:w.channel,color:w.vid===me.vid?acc:'rgba(141,140,163,.55)',pts:sv[w.vid]||[],w:w.vid===me.vid?6:3}));
+  const mi=L.findIndex(l=>l.label===me.channel);if(mi>=0)L.push(L.splice(mi,1)[0]);
+  let ly=772;x.fillStyle='rgba(255,255,255,.08)';x.fillRect(80,740,W-160,2);T('// TOP 5 WATCH PARTIES',80,ly,M(26),'#ff4d5e');T('PEAK',W-250,ly,M(22),'#8d8ca3','right');T('AVG',W-80,ly,M(22),'#8d8ca3','right');ly+=56;
+  wp.slice(0,5).forEach((w,j)=>{const hi=w.vid===me.vid,c=j===0?GOLD:hi?'#b6f23a':'#eeeef5';
+   if(hi){x.fillStyle='rgba(182,242,58,.08)';x.fillRect(60,ly-10,W-120,60)}
+   T(String(j+1),84,ly+6,B(28),c);avatarAt(x,avs[w.vid],142,ly+19,22,j===0?GOLD:'#262636',w.channel);
+   T(w.channel.toUpperCase().slice(0,22),176,ly+4,B(30),c);T(full(w.peak),W-250,ly+4,B(30),c,'right');T(w.avg?full(w.avg):'-',W-80,ly+4,B(30),'#8d8ca3','right');ly+=64});
  }
  x.fillStyle='#b6f23a';x.fillRect(0,H-130,W,130);
  T('LIVE.LETSGROWESPORTS.COM',80,H-108,B(44),'#0a0a14');
@@ -652,14 +683,21 @@ function dayTotal(col){col=col||1;const LB=D.last_broadcast;let src=(D.series_al
  if(LB)src=src.filter(r=>r[0]>=LB.start-60&&r[0]<=LB.end+120);const step=Math.max(1,Math.floor(src.length/900));return src.filter((_,i)=>i%step===0).map(r=>[r[0],r[col]])}
 let cur=null;
 async function openShare(type,vid){
- let av=null;if(type==='battle'||type==='streamer'){const w=wpByPeak(),me=type==='streamer'?(w.find(x=>x.vid===vid)||(D.wp||[]).find(x=>x.vid===vid)):w[0];av=await loadImg(me&&String(me.logo||logoOf(me.channel)||'').replace(/=s\d+-/,'=s240-'))}
+ const mi=document.getElementById('mimg');mi.removeAttribute('src');mi.alt='Making the image...';cur=null;document.getElementById('modal').classList.add('on');
+ const big=u=>String(u||'').replace(/=s\d+-/,'=s240-');let av=null;avs={};
+ if(type==='battle'||type==='streamer'||type==='board'){
+  const w=wpByPeak(),list=type==='board'?(D.roster||[]).map(r=>({vid:r.vid,name:r.name,logo:r.logo})):w.slice(0,5).map(x=>({vid:x.vid,logo:x.logo||logoOf(x.channel)}));
+  const me=type==='streamer'?(w.find(x=>x.vid===vid)||(D.wp||[]).find(x=>x.vid===vid)):w[0];
+  const ims=await Promise.all(list.slice(0,12).map(l=>loadImg(big(l.logo))));list.slice(0,12).forEach((l,k)=>{if(ims[k]){avs[l.vid]=ims[k];if(l.name)avs[l.name]=ims[k]}});
+  if(me&&type!=='board')av=avs[me.vid]||await loadImg(big(me.logo||logoOf(me.channel)))}
  let c=card(type,vid,av);const done=b=>{cur={blob:b,name:`bmsd-${type}.png`};document.getElementById('mimg').src=URL.createObjectURL(b)};
- try{c.toBlob(done,'image/png')}catch(e){c=card(type,vid,null);c.toBlob(done,'image/png')}
+ try{c.toBlob(done,'image/png')}catch(e){avs={};c=card(type,vid,null);c.toBlob(done,'image/png')}
  const wp=D.wp||[],i=wp.findIndex(w=>w.vid===vid);
  const dpk=wp.slice().sort((a,b)=>b.peak-a.peak),today=(D.days||[]).slice(-1)[0]||{},nowT=(D.live||[]).reduce((a,s)=>a+s.viewers,0);
  const LB=D.last_broadcast||{},wpp=wpByPeak();let text;
  if(type==='history'){const t=[...hist()].sort((a,b)=>b[2]-a[2])[0];text=`BGMI viewership till date: all-time high ${t[2]}K (${HNAME[t[0]]} 20${t[1]}). BMSD 2026 so far: ${hist()[15][2]}K.`}else
- if(type==='streamer'){const j=wpp.findIndex(w=>w.vid===vid),w=wpp[j]||{};text=`${w.channel} was the #${j+1} watch party of ${TITLE} on ${LB.date||'the day'}, peaking at ${full(w.peak)} concurrent viewers.`}
+ if(type==='board'){const R=(D.roster||[]).filter(r=>r.status==='live');text=R.length?`${TITLE} watch parties live now: ${R.slice(0,3).map((r,j)=>`${j+1}. ${r.name} ${fmt(r.viewers)}`).join(' | ')}.`:`${TITLE} official watch parties: ${(D.roster||[]).length} streamers.`}
+ else if(type==='streamer'){const j=wpp.findIndex(w=>w.vid===vid),w=wpp[j]||{};text=`${w.channel} was the #${j+1} watch party of ${TITLE} on ${LB.date||'the day'}, peaking at ${full(w.peak)} concurrent viewers${w.avg?` (average ${full(w.avg)})`:''}.`}
  else if(type==='split')text=`${TITLE} ${LB.date||''}: official streams peaked at ${full(D.peak_official)}, watch parties at ${full(D.peak_watch)} concurrent viewers on YouTube.`;
  else if(type==='battle'){const w=wpp[0]||{};text=`${TITLE} watch party battle (${LB.date||''}): ${wpp.slice(0,3).map((x,j)=>`${j+1}. ${x.channel} ${fmt(x.peak)}`).join(' | ')}.`}
  else text=`${TITLE} peaked at ${full(LB.peak||D.peak)} concurrent viewers on YouTube on ${LB.date||'the day'} (${LB.peak_when||''})${D.official_live?`, ${full((D.live||[]).reduce((a,s)=>a+s.viewers,0))} watching right now`:''}.`;
@@ -703,7 +741,7 @@ function merge(a,tail){a=a||[];const last=a.length?a[a.length-1][0]:0;for(const 
 let lastSeries=Date.now();
 let DM=null;
 function demoInit(m){const now=Date.now()/1000;DM={mode:m,t0:now-2.5*3600,hist:{},tot:[],last:0};
- DM.off=[{vid:'o1',channel:'KRAFTON INDIA ESPORTS',title:'[HINDI] BMSD 2026 | Grand Finals #BGMILIVE',base:190000,ph:0},{vid:'o2',channel:'KRAFTON INDIA ESPORTS',title:'[ENGLISH] BMSD 2026 | Grand Finals',base:14000,ph:1},{vid:'o3',channel:'KRAFTON INDIA ESPORTS',title:'[MAP STREAM] BMSD 2026 | Grand Finals',base:3500,ph:2}];
+ DM.off=[{vid:'o1',channel:'KRAFTON INDIA ESPORTS',title:'[HINDI] BMSD 2026 | Grand Finals #BGMILIVE',base:190000,ph:0,logo:DLOGO['KRAFTON INDIA ESPORTS']||''},{vid:'o2',channel:'KRAFTON INDIA ESPORTS',title:'[ENGLISH] BMSD 2026 | Grand Finals',base:14000,ph:1,logo:DLOGO['KRAFTON INDIA ESPORTS']||''},{vid:'o3',channel:'KRAFTON INDIA ESPORTS',title:'[MAP STREAM] BMSD 2026 | Grand Finals',base:3500,ph:2,logo:DLOGO['KRAFTON INDIA ESPORTS']||''}];
  DM.st=ROSTERN.map((n,i)=>({vid:'w'+i,channel:n,title:`BMSD 2026 Grand Finals watch party with ${n}`,base:i%5===4?0:Math.round(70000/Math.pow(i+1,.75)),ph:Math.random()*6,logo:DLOGO[n]||''}));
  for(let t=DM.t0;t<=now-200;t+=30)demoStep(t);for(let t=now-200;t<=now;t+=2)demoStep(t)}
 function demoVal(s,t){const p=(t-DM.t0)/3600;return Math.max(0,Math.round(s.base*(.62+.38*Math.sin(p*2.4+s.ph))*(1+.06*Math.sin(t/7+s.ph))*(.97+.06*Math.random())))}
@@ -714,7 +752,7 @@ function demoData(){const now=Date.now()/1000;if(!DM)demoInit('live');while(DM.l
  const wp=DM.st.filter(s=>s.base).map(s=>({vid:s.vid,channel:s.channel,viewers:liveM?s.cur:0,url:'#',logo:s.logo||'',peak:s.peak})).sort((a,b)=>b.viewers-a.viewers||b.peak-a.peak).slice(0,8);
  const ws={};wp.forEach(w=>ws[w.vid]=DM.hist[w.vid]);
  const roster=DM.st.map(s=>({name:s.channel,logo:s.logo||'',url:'#',vid:s.base?s.vid:'',status:!liveM||!s.base?'upcoming':'live',viewers:liveM&&s.base?s.cur:0,peak:liveM?s.peak||0:0})).sort((a,b)=>({live:0,ended:1,upcoming:2}[a.status]-{live:0,ended:1,upcoming:2}[b.status])||b.viewers-a.viewers||a.name.localeCompare(b.name));
- const LBs=all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.peak,at:tf(DM.t0+3600).replace(' IST',''),url:'#',logo:s.logo||''})).sort((a,b)=>b.viewers-a.viewers);
+ const LBs=all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.peak,avg:Math.round((DM.hist[s.vid]||[]).reduce((a,r)=>a+r[1],0)/Math.max(1,(DM.hist[s.vid]||[]).length)),at:tf(DM.t0+3600).replace(' IST',''),url:'#',logo:s.logo||''})).sort((a,b)=>b.viewers-a.viewers);
  return{name:'BMSD 2026',ticks:DM.tot.length,now,every:2,method:'demo data',updated:DM.last,official_live:liveM,next_start:liveM?null:(Date.UTC(2026,9,16,9,0)/1000>now?Date.UTC(2026,9,16,9,0)/1000:now+5*3600),live,wp,wp_series:ws,roster,
   peak:pk[1],peak_when:tf(pk[0]),avg:Math.round(DM.tot.reduce((a,r)=>a+r[1],0)/DM.tot.length),peak_official:Math.max(...DM.tot.map(r=>r[2])),peak_watch:Math.max(...DM.tot.map(r=>r[3])),
   days:[{day:'Fri 16 Oct',peak:pk[1],at:tf(pk[0]).replace(' IST',''),avg:Math.round(pk[1]*.6)}],series_all:DM.tot.filter((_,i)=>i%5===0),series_recent:DM.tot.slice(),

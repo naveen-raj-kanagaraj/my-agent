@@ -51,7 +51,7 @@ PRESETS = {
                     "snax", "sriop", "mayur", "neonxpawan", "pawanop", "ladypredator", "soulaman"],
         "videos_extra": ["kf7OYvjee_k"],        # specific streams to track (Soul Aman's finals stream)
         # checked directly every minute, even if search misses them
-        "always_check": ["@SoulAman", "@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
+        "always_check": ["@ShreemanLegend", "@SoulAman", "@DynamoGaming", "@TheBixiOP", "@ZGODGAMING", "@NEYOOGAMINGYT", "@MizoPlays", "@MrSpike", "@LoLzZzGaming",
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
                          "@sriop-sr70", "@MayurGaming", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
@@ -801,12 +801,18 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
             sess.append(cur)
     if sess:
         ls = dict(sess[-1])
-        per = {}
+        per, sums = {}, {}
         for x in samples:
+            if ls["start"] - 60 <= x["ts"] <= ls["end"] + 60 and x["viewers"] > 0:
+                a = sums.setdefault(x["vid"], [0, 0])
+                a[0] += x["viewers"]
+                a[1] += 1
             if ls["start"] - 60 <= x["ts"] <= ls["end"] + 60 and x["viewers"] > per.get(x["vid"], {}).get("peak", 0):
                 per[x["vid"]] = {"vid": x["vid"], "channel": x["channel"], "title": x["title"], "kind": x["kind"],
                                  "channel_id": x.get("channel_id") or "",
                                  "peak": x["viewers"], "peak_at": x["ts"]}
+        for v, p_ in per.items():
+            p_["avg"] = round(sums[v][0] / sums[v][1]) if v in sums else 0
         ls["streams"] = sorted(per.values(), key=lambda p: -p["peak"])
         out["last_broadcast"] = ls
     out["method"] = (f"{_FASTSTATE['method']}, every {FAST_SEC * 2 ** _FASTSTATE.get('slow', 0):g}s" if fast_healthy()
@@ -884,7 +890,7 @@ ROSTER = [  # (match token, display name, channel handle) of the permitted watch
     ("lolzz", "LoLzZz Gaming", "@LoLzZzGaming"), ("sharkshe", "Sharkshe", "@SHARKSHE"), ("mafianinja", "Mafia Ninja", "@MafiaNinja"),
     ("ruthless", "Im Ruthless", "@ImRuthlessceopubg"), ("rakazone", "RakaZone Gaming", "@RakaZoneGaming"), ("ansh", "Ansh YT", "@AnshYT"),
     ("casetoo", "Casetoo", "@casetooop"), ("sheek", "Sheek Gaming", "@sheekgaming"), ("ipreeet", "iPreeet", "@IPREEET.69"),
-    ("shreeman", "Shreeman Legend", None), ("mortal", "MortaL", "@MortaLyt"), ("vaadhiyaar", "Vaadhiyaar", None),
+    ("shreeman", "Shreeman Legend", "@ShreemanLegend"), ("mortal", "MortaL", "@MortaLyt"), ("vaadhiyaar", "Vaadhiyaar", "channel/UC1ihHXPtRojN6ZBTjm1Sjog"),
     ("regaltos", "Soul Regaltos", "@soulregaltos9810"), ("snax", "Snax Gaming", "@SnaxGaming"), ("sriop", "SRI OP", "@sriop-sr70"),
     ("mayur", "Mayur Gaming", "@MayurGaming"), ("neonxpawan", "Neon X Pawan", "@NEONXPAWANOP"),
     ("ladypredator", "Lady Predator", "@LadyPredatorGaming"), ("soulaman", "Soul Aman", "@SoulAman")]
