@@ -20,6 +20,11 @@ def main():
     cfg = json.load(open(sys.argv[1]))
     day = int(sys.argv[sys.argv.index("--day") + 1]) if "--day" in sys.argv else 1
     predict.save_settings(**cfg["settings"])
+    if not cfg["settings"].get("match_questions"):   # remove per-match questions made by an older setup
+        for q in predict.questions():
+            if q["kind"] == "match":
+                predict.update_question(q["id"], "delete")
+                print(f"Removed: {q['title']}")
     made = predict.create_event_set() if day == 1 else []
     made += predict.create_day_set(day)
     print(f"Created {len(made)} questions. Total now: {len(predict.questions())}")

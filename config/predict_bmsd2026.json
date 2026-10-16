@@ -6,6 +6,7 @@
     "days": {"1": "2026-10-16", "2": "2026-10-17", "3": "2026-10-18"},
     "close": "14:45",
     "matches": 6,
+    "match_questions": false,
     "maps": {"1": ["Rondo", "Erangel", "Erangel", "Erangel", "Miramar", "Miramar"]},
     "buckets": [350, 450, 500, 550, 600, 650, 700],
     "prize": "Top 5 on the overall leaderboard win a gift card of their choice.",
@@ -22,7 +23,7 @@
   },
   "rollout": [
     {"step": "tournament", "creates": ["Champion (team tiles, closes Day 3 2:45 PM IST)", "Top 3 (ranked, 3 taps)", "BMIC qualifiers (6 teams)"]},
-    {"step": "day", "day": 1, "creates": ["Match 1-6 chicken dinner (team tiles)", "Most chicken dinners on Day 1", "Day 1 peak viewers (auto-settles from the tracker)"]},
+    {"step": "day", "day": 1, "creates": ["Most chicken dinners on Day 1", "Day 1 peak viewers (auto-settles from the tracker)"]},
     {"step": "day", "day": 2, "when": "after Day 1 ends"},
     {"step": "day", "day": 3, "when": "after Day 2 ends"}
   ],

@@ -6,6 +6,8 @@ token and stores only its SHA-256 hash. Picks are enforced server side against e
 100 x (1 - share of players who picked the correct answer). Nothing about the player's network is stored.
 """
 import hashlib
+import hmac
+import os
 import json
 import re
 import secrets
@@ -28,6 +30,7 @@ DEFAULTS = {
     "close": "14:45",                                             # IST, default close time on a match day
     "matches": 6,
     "maps": {"1": ["Rondo", "Erangel", "Erangel", "Erangel", "Miramar", "Miramar"]},   # per day; other days reuse Day 1
+    "match_questions": False,                                     # per-match chicken dinner questions (off)
     "prize": "Top 5 on the overall leaderboard win a gift card of their choice.",
     "record": 730000,                                             # BMPS 2026 peak, for the yes/no question
 }
@@ -56,6 +59,10 @@ def _db():
                 PRIMARY KEY (player_id, qid));
             CREATE INDEX IF NOT EXISTS pw_picks_q ON pw_picks(qid);
             """)
+            try:
+                c.execute("ALTER TABLE pw_players ADD COLUMN net TEXT")
+            except sqlite3.OperationalError:
+                pass
             c.commit()
         _init_done = True
     return c
@@ -131,7 +138,21 @@ class GameError(Exception):
         self.code = code
 
 
-def join(handle: str, name: str, consent: bool) -> dict:
+MAX_PER_NET = int(os.getenv("PREDICT_MAX_PER_IP", "1"))   # accounts allowed per internet connection
+
+
+def _net(ip: str) -> str:
+    """Keyed hash of the visitor's address: lets us spot repeat sign-ups without keeping the address itself."""
+    if not ip:
+        return ""
+    key = store.kv_get("pw_netkey")
+    if not key:
+        key = secrets.token_hex(16)
+        store.kv_set("pw_netkey", key)
+    return hmac.new(key.encode(), ip.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def join(handle: str, name: str, consent: bool, ip: str = "") -> dict:
     h = norm_handle(handle)
     name = re.sub(r"\s+", " ", (name or "")).strip()[:32]
     if not h:
@@ -139,18 +160,24 @@ def join(handle: str, name: str, consent: bool) -> dict:
     if not consent:
         raise GameError("Please tick the box to agree your handle, name and closed picks are shown publicly.")
     token = secrets.token_urlsafe(32)
+    net = _net(ip)
     c = _db()
     with store._lock:
         r = c.execute("SELECT id, token_hash, hidden FROM pw_players WHERE handle=?", (h,)).fetchone()
         if r and r["token_hash"]:
             raise GameError("That handle is already playing on another device. If it's yours, DM "
                             "@letsgrowesports.igc on Instagram to release it.", 409)
+        if net and MAX_PER_NET > 0 and not r:
+            n = c.execute("SELECT COUNT(*) FROM pw_players WHERE net=?", (net,)).fetchone()[0]
+            if n >= MAX_PER_NET:
+                raise GameError("Someone has already joined from this internet connection. One account per person. "
+                                "If this is a mistake, DM @letsgrowesports.igc on Instagram.", 409)
         if r:   # released by the owner: claim it again from this device
             c.execute("UPDATE pw_players SET token_hash=?, name=? WHERE id=?", (_hash(token), name, r["id"]))
             pid = r["id"]
         else:
-            pid = c.execute("INSERT INTO pw_players (handle, name, token_hash, created) VALUES (?,?,?,?)",
-                            (h, name, _hash(token), time.time())).lastrowid
+            pid = c.execute("INSERT INTO pw_players (handle, name, token_hash, created, net) VALUES (?,?,?,?,?)",
+                            (h, name, _hash(token), time.time(), net)).lastrowid
         c.commit()
     _bust()
     return {"token": token, "player": {"id": pid, "handle": h, "name": name}}
@@ -295,7 +322,7 @@ def create_day_set(day: int, close_ts: float = None) -> list:
     close = _close(day, close_ts)
     ids = []
     maps = (s.get("maps") or {}).get(str(day)) or (s.get("maps") or {}).get("1") or []
-    for m in range(1, int(s["matches"]) + 1):
+    for m in range(1, int(s["matches"]) + 1 if s.get("match_questions") else 1):
         mp = maps[m - 1] if m - 1 < len(maps) else ""
         t = f"Match {m} · {mp}: Which team gets the chicken dinner?" if mp else f"Match {m}: Which team gets the chicken dinner?"
         with store._lock:
@@ -510,6 +537,41 @@ def pick(token: str, qid: int, option, now: float = None) -> dict:
         _db().commit()
     _bust()
     return {"ok": True, "qid": q["id"], "option": shown}
+
+
+def submit_all(token: str, picks: dict, now: float = None) -> dict:
+    """Save answers to every open question at once. Every open, unanswered question must be answered."""
+    p = player_by_token(token)
+    if not p:
+        raise GameError("Enter your Instagram ID first.", 401)
+    with store._lock:
+        done = {r["qid"] for r in _db().execute("SELECT qid FROM pw_picks WHERE player_id=?", (p["id"],))}
+    todo = [q for q in questions() if not q["void"] and not is_closed(q, now) and q["id"] not in done]
+    if not todo:
+        raise GameError("Nothing left to answer right now.", 409)
+    picks = {str(k): v for k, v in (picks or {}).items()}
+    missing = [q["title"] for q in todo if picks.get(str(q["id"])) in (None, "", [])]
+    if missing:
+        raise GameError("Answer every question before submitting.")
+    for q in todo:   # validate everything before saving anything
+        _check_option(q, picks[str(q["id"])])
+    saved = []
+    for q in todo:
+        saved.append(pick(token, q["id"], picks[str(q["id"])], now))
+    return {"ok": True, "saved": len(saved)}
+
+
+def _check_option(q: dict, option):
+    if q["kind"] == "multi":
+        k = int(q["meta"]["pick"])
+        vals = list(dict.fromkeys(str(v) for v in option)) if isinstance(option, list) else []
+        if len(vals) != k or any(v not in q["options"] for v in vals):
+            raise GameError(f"{q['title']}: pick exactly {k} teams.")
+    elif q["kind"] == "text":
+        if len(tnorm(str(option or ""))) < 2:
+            raise GameError(f"{q['title']}: type a name.")
+    elif option not in q["options"]:
+        raise GameError(f"{q['title']}: pick one of the options.")
 
 
 def _qstats(qs: dict) -> dict:

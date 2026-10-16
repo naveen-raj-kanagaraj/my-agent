@@ -41,8 +41,17 @@ class PredictTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.get_json())
         return r.get_json()["token"]
 
+    class _R:
+        def __init__(self, code):
+            self.status_code = code
+
     def pick(self, tok, qid, opt):
-        return self.web.post("/predict/api/pick", json={"qid": qid, "option": opt}, headers={"X-PW-Token": tok})
+        """Single pick through the game logic (the public API only takes full submissions)."""
+        try:
+            predict.pick(tok, qid, opt)
+            return self._R(200)
+        except predict.GameError as e:
+            return self._R(e.code)
 
     def test_join_normalises_and_stores_only_hash(self):
         r = self.join("https://www.instagram.com/Some.Player_1/?hl=en")
@@ -174,10 +183,8 @@ class PredictTests(unittest.TestCase):
         self.assertEqual(champ["close_ts"], predict.ist_ts("2026-10-18", "14:45"))
         self.assertEqual(predict.get_question(ids[1])["close_ts"], predict.ist_ts("2026-10-16", "14:45"))
         d = predict.create_day_set(1)
-        self.assertEqual(len(d), 8)                          # 6 match chicken dinners + most chickens + peak
+        self.assertEqual(len(d), 2)                          # most chicken dinners + peak (no per-match questions)
         self.assertEqual(predict.create_day_set(1), [])
-        self.assertEqual(predict.get_question(d[0])["title"], "Match 1 · Rondo: Which team gets the chicken dinner?")
-        self.assertEqual(predict.get_question(d[4])["tag"], "MATCH 5 · MIRAMAR")
         peak = predict.get_question(d[-1])
         self.assertEqual(peak["options"][0], "Under 350K")
         self.assertIn("350K-450K", peak["options"])
@@ -237,8 +244,33 @@ class PredictTests(unittest.TestCase):
         me = self.web.post("/predict/api/me", json={}, headers={"X-PW-Token": a}).get_json()
         self.assertNotIn("of", me)
 
+    def test_one_account_per_connection(self):
+        r1 = self.web.post("/predict/api/join", json={"handle": "first", "consent": True}, headers={"CF-Connecting-IP": "9.9.9.9"})
+        r2 = self.web.post("/predict/api/join", json={"handle": "second", "consent": True}, headers={"CF-Connecting-IP": "9.9.9.9"})
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r2.status_code, 409)
+        row = store.conn().execute("SELECT net FROM pw_players WHERE handle='first'").fetchone()
+        self.assertNotIn("9.9.9.9", row["net"])                 # only a keyed hash is kept
+
+    def test_submit_requires_every_question(self):
+        t = self.tok("sub")
+        q1 = predict.add_question("other", "Q1", ["A", "B"], time.time() + 3600)
+        q2 = predict.add_question("multi", "Q2", ["A", "B", "C", "D"], time.time() + 3600, meta={"pick": 2})
+        h = {"X-PW-Token": t}
+        r = self.web.post("/predict/api/submit", json={"picks": {str(q1): "A"}}, headers=h)
+        self.assertEqual(r.status_code, 400)
+        r = self.web.post("/predict/api/submit", json={"picks": {str(q1): "A", str(q2): ["A"]}}, headers=h)
+        self.assertEqual(r.status_code, 400)                    # multi needs exactly 2
+        self.assertEqual(store.conn().execute("SELECT COUNT(*) FROM pw_picks").fetchone()[0], 0)
+        r = self.web.post("/predict/api/submit", json={"picks": {str(q1): "A", str(q2): ["B", "C"]}}, headers=h)
+        self.assertEqual(r.status_code, 200)
+        r = self.web.post("/predict/api/submit", json={"picks": {str(q1): "B", str(q2): ["A", "C"]}}, headers=h)
+        self.assertEqual(r.status_code, 409)                    # nothing left; picks are final
+        self.assertEqual(self.web.post("/predict/api/pick", json={"qid": q1, "option": "B"}, headers=h).status_code, 404)
+
     def test_display_name_optional(self):
-        r = self.web.post("/predict/api/join", json={"handle": "noname", "name": "", "consent": True})
+        r = self.web.post("/predict/api/join", json={"handle": "noname", "name": "", "consent": True},
+                          headers={"CF-Connecting-IP": "8.8.4.4"})
         self.assertEqual(r.status_code, 200)
 
     def test_public_cache_headers(self):
