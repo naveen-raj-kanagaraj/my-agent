@@ -55,7 +55,7 @@ PRESETS = {
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
                          "@sriop-sr70", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
-        "next_start": "2026-10-16 14:30",       # IST; shown as a countdown while the official stream is offline
+        "next_start": "2026-10-16 13:00",       # IST; shown as a countdown while the official stream is offline
         "match": ["bmsd", "bgmi showdown", "battlegrounds mobile india showdown", "battlegrounds mobile showdown",
                   "bgmi show down", "bm showdown"],
         "queries": ["BMSD", "BMSD 2026", "BGMI Showdown", "Battlegrounds Mobile India Showdown", "BMSD watch party"],
