@@ -295,8 +295,8 @@ function visibleQs(){const ev=B.questions.filter(q=>!q.day),dq=B.questions.filte
 function renderQs(){const {ev,dq}=visibleQs(),ids=[...ev,...dq].map(q=>q.id).join(',');const box=$('qs');
  if(box.dataset.ids===ids){[...ev,...dq].forEach(q=>{const h=qCard(q);if(cardHtml[q.id]!==h){cardHtml[q.id]=h;const el=box.querySelector(`.q[data-id="${q.id}"]`);if(el)el.outerHTML=h}});if(openCb)toggleCb(openCb,true);return}
  box.dataset.ids=ids;cardHtml={};
- box.innerHTML=(ev.length?`<div class="qsec">Whole tournament</div>`+ev.map(q=>(cardHtml[q.id]=qCard(q))).join(''):'')+
-  `<div class="qsec">Day ${dayTab} · ${dayName(dayTab)}</div>`+(dq.map(q=>(cardHtml[q.id]=qCard(q))).join('')||`<div class="muted" style="font-size:14px">Day ${dayTab} questions open after Day ${dayTab-1}.</div>`);
+ box.innerHTML=(ev.length&&dq.length?`<div class="qsec">Whole tournament</div>`:'')+(ev.length?``+ev.map(q=>(cardHtml[q.id]=qCard(q))).join(''):'')+
+  (dq.length?`<div class="qsec">Day ${dayTab} · ${dayName(dayTab)}</div>`+dq.map(q=>(cardHtml[q.id]=qCard(q))).join(''):'');
  if(openCb)toggleCb(openCb,true)}
 function updCard(id){const q=B.questions.find(x=>x.id===id),el=$('qs').querySelector(`.q[data-id="${id}"]`);if(!q||!el)return renderQs();const h=qCard(q);cardHtml[id]=h;el.outerHTML=h}
 $('qs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
@@ -396,16 +396,12 @@ function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.c
  const names=['Aarav','Ishaan','Kabir','Vihaan','Rohan','Arjun','Neha','Priya','Sneha','Ananya','Rahul','Karan','Dev','Aditya','Tanvi','Meera','Yash','Om','Riya','Zoya','Sahil','Varun','Manav','Nikhil','Pooja','Kriti','Harsh','Siddh','Tara','Ira','Aryan','Ayaan','Diya','Jay','Laksh','Mihir','Nisha','Parth','Rehan','Veer'];
  DB={players:names.map((n,i)=>({id:i+1,handle:(n+'_'+['gg','op','x','bgmi','yt','fps'][i%6]).toLowerCase(),name:i%4?n+(i%3?'':' OP'):'',created:t0-9000+i*60,hidden:false})),qs:[],picks:{},me:null,seq:1};
  const add=(kind,title,opts,close,day,tag,style,extra)=>DB.qs.push(Object.assign({id:DB.seq++,kind,title,options:opts,close_ts:close,day,tag,style,locked:false,answer:null,void:false},extra||{}));
- add('team','Who will win the BMSD 2026 Grand Finals?',T,cl('3'),0,'CHAMPION','grid');
+ add('team','Who will win the BMSD 2026 Grand Finals?',T,cl('1'),0,'CHAMPION','grid');
  add('multi','Which teams will finish in the top 3?',T,cl('1'),0,'TOP 3','multi',{pick:3,ranked:true});
  add('multi','Which 6 teams will qualify for BMIC?',T,cl('1'),0,'BMIC','multi',{pick:6});
- add('text','Who will be the MVP of the Grand Finals?',[],cl('1'),0,'FINALS MVP','text');
- add('text','Who will be the best IGL of the Grand Finals?',[],cl('1'),0,'BEST IGL','text');
- add('text','Who will get the most finishes in the Grand Finals?',[],cl('1'),0,'THE ELIMINATOR','text');
- add('text','Who will be the Day 1 MVP?',[],cl('1'),1,'DAY 1 MVP','text');
- 
- add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKEN DINNERS','grid');
- add('peak','How many people will watch at the peak on Day 1?',SEED.buckets,cl('1'),1,'PEAK VIEWERS','buttons');
+ add('text','Final MVP',[],cl('1'),0,'FINAL MVP','text');add('text','MVP of the Tournament',[],cl('1'),0,'TOURNAMENT MVP','text');
+ add('text','Best IGL',[],cl('1'),0,'BEST IGL','text');add('text','The Eliminator',[],cl('1'),0,'THE ELIMINATOR','text');
+ add('peak',"What will the tournament's peak viewership be?",SEED.buckets,cl('1'),0,'PEAK VIEWERS','buttons');
  const pw=o=>{const ws=o.map((v,i)=>[v,1/Math.pow(i+1,.8)]),s=ws.reduce((a,b)=>a+b[1],0);let r=Math.random()*s;for(const [v,x] of ws){r-=x;if(r<=0)return v}return o[0]};
  const elim=['Jonathan','Jonathan','Goblin','Spower','jonathan ','Aditya','Neyoo','Clutchgod'];
  DB.players.forEach(p=>DB.qs.forEach(q=>{if(Math.random()>.8)return;let v;
