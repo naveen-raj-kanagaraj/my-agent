@@ -154,7 +154,7 @@ def _roster(out: dict) -> list:
     return rows
 
 
-PWB = """<a class="pwb" href="/predict"><span class="pwt">// NEW · FREE TO PLAY</span><b>PREDICT &amp; WIN</b><span class="pws">Call the BMSD 2026 champion, top 3 and more. Top 5 win a gift card.</span><i>PLAY NOW &rarr;</i></a>"""
+PWB = """<link rel="prefetch" href="/predict"><a class="pwb" href="/predict" onclick="return pwGo(event,this.href)"><span class="pwt">// NEW · FREE TO PLAY</span><b>PREDICT &amp; WIN</b><span class="pws">Call the BMSD 2026 champion, top 3 and more. Top 5 win a gift card.</span><i>PLAY NOW &rarr;</i></a>"""
 
 
 def _social() -> str:
@@ -235,7 +235,11 @@ a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}
 .ring{width:14px;height:14px}.ring circle{fill:none;stroke:var(--line);stroke-width:3}.ring .p{stroke:var(--lime);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%}
 .follow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;font:12px "Share Tech Mono",monospace;color:var(--muted)}.follow>span{margin-right:auto}
 .pwb{display:grid;grid-template-columns:1fr auto;grid-template-areas:"t i" "b i" "s i";gap:0 12px;align-items:center;margin-top:12px;padding:12px 14px;border:1px solid rgba(245,196,81,.55);background:linear-gradient(90deg,rgba(245,196,81,.18),rgba(245,196,81,.03));color:var(--ink)}
-.pwb:hover{text-decoration:none;border-color:#f5c451}.pwt{grid-area:t;font:11px "Share Tech Mono",monospace;color:#ff4d5e;letter-spacing:.08em}
+.pwb:hover{text-decoration:none;border-color:#f5c451}
+@view-transition{navigation:auto}
+.pwx{position:fixed;inset:0;z-index:999;pointer-events:none;background:#0b0b12;clip-path:circle(0 at var(--x,50%) var(--y,50%));transition:clip-path .45s cubic-bezier(.7,0,.3,1)}
+.pwx.on{clip-path:circle(150% at var(--x,50%) var(--y,50%))}
+.pwx b{position:absolute;inset:0;display:grid;place-items:center;font:700 22px "Chakra Petch",sans-serif;letter-spacing:.2em;color:#f5c451;opacity:0;transition:opacity .2s .25s}.pwx.on b{opacity:1}.pwt{grid-area:t;font:11px "Share Tech Mono",monospace;color:#ff4d5e;letter-spacing:.08em}
 .pwb b{grid-area:b;font:700 20px "Chakra Petch",sans-serif;color:#f5c451;letter-spacing:.02em}.pws{grid-area:s;font-size:13px;color:var(--muted)}
 .pwb i{grid-area:i;font:700 13px "Chakra Petch",sans-serif;font-style:normal;background:#f5c451;color:#0a0a14;padding:9px 12px;white-space:nowrap;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
 @media(max-width:600px){.pwb{padding:10px 12px;margin-top:8px}.pwb b{font-size:17px}.pws{font-size:12px}.pwb i{padding:8px 10px;font-size:12px}}
@@ -333,6 +337,9 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 <div class="wrap" style="padding-bottom:0">__PWB__
 <div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
 <div class="wrap" id="app"></div>
+<script>function pwGo(e,u){if(e.metaKey||e.ctrlKey||e.shiftKey||matchMedia('(prefers-reduced-motion: reduce)').matches)return true;
+ const o=document.createElement('div');o.className='pwx';o.innerHTML='<b>PREDICT &amp; WIN</b>';o.style.setProperty('--x',e.clientX+'px');o.style.setProperty('--y',e.clientY+'px');
+ document.body.appendChild(o);requestAnimationFrame(()=>requestAnimationFrame(()=>o.classList.add('on')));setTimeout(()=>{location.href=u},480);return false}</script>
 <div class="modal" id="modal"><div class="mbox"><div class="head"><div><h2 id="mt">Share</h2></div><button class="btn ghost sm" id="mclose">Close</button></div>
  <img id="mimg" alt="Share card"><div class="mrow"><button class="btn" id="mig">Instagram</button><button class="btn" id="mxb">X</button><button class="btn ghost" id="mdl">Download</button></div>
  <p class="muted" id="mhint" style="font-size:12px;margin:10px 0 0">On your phone, Instagram and X open the share menu with the image attached: pick Instagram (Story or Post) or X.</p></div></div>
