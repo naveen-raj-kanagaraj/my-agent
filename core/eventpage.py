@@ -384,7 +384,9 @@ function historyHTML(){const h=hist(),top=[...h].sort((a,b)=>b[2]-a[2]),best={},
  <div class="lbl" style="margin:10px 0 6px">// All-time ranking, peak concurrent viewers</div>
  <div class="rank">${top.map((x,i)=>`<div class="rrow"><span class="rk ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</span>${eimg(ekey(x),30)}<span class="rn">${HNAME[x[0]]} 20${x[1]}${i===0?' <span class="tagx lime">ALL-TIME HIGH</span>':''}${x[0]==='BMSD'&&x[1]==='26'?' <span class="tagx red">\u25CF ONGOING</span>':''}</span><b>${x[2]}K</b></div>`).join('')}</div>
  <div class="muted" style="font-size:11px;margin-top:8px">Earlier events: peak concurrent viewers as reported for each event. BMSD 2026 updates from this tracker.</div></div>`}
-function cdMode(){return !!(D.next_start&&!D.official_live&&D.next_start-nowS()>0)}
+function cdMode(){const ns=D.next_start,LB=D.last_broadcast;if(!ns||D.official_live)return false;
+ // keep the countdown ('starting soon') after the scheduled time until that day's broadcast actually starts (max 12h)
+ const started=LB&&LB.end>=ns-1800;return ns-nowS()>0||(!started&&nowS()-ns<12*3600)}
 function render(){
  const app=document.getElementById('app');
  if(cdMode()){
@@ -468,7 +470,7 @@ function wpRows(){const sb=document.getElementById('shareBoard');if(sb)sb.onclic
  let rank=0;const lim=D.official_live&&!wpAll?10:999,RR=R.slice(0,lim),mb=document.getElementById('wpmore');
  if(mb){mb.style.display=R.length>lim||wpAll&&D.official_live?'block':'none';mb.textContent=wpAll?'\u25B2 SHOW TOP 10':`\u25BC SHOW ALL ${R.length} STREAMERS`;mb.onclick=()=>{wpAll=!wpAll;wpRows()}}
  document.getElementById('wprows').innerHTML=RR.map(w=>{const has=w.status!=='upcoming';if(has)rank++;
-  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?`<span class="muted">PEAK</span> <b>${full(w.peak||0)}</b>`:'<span class="muted">YET TO START</span>';
+  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?`<span class="muted">PEAK</span> <b>${full(w.peak||0)}</b>`:(D.official_live?'<span style="color:var(--red)">NOT LIVE</span>':'<span class="muted">YET TO START</span>');
   const logo=w.logo?`<img class="lg" src="${esc(w.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="lg" style="display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${esc(w.name.slice(0,2).toUpperCase())}</span>`;
   const nm=w.url?`<a class="ch" href="${esc(w.url)}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(w.name)}</a>`:`<span class="ch">${esc(w.name)}</span>`;
   return `<tr><td class="rk ${has?'watch':''}" style="${has?'':'background:var(--line);color:var(--muted)'}">${has?rank:'-'}</td><td class="t">${logo}${nm}</td>
@@ -747,7 +749,8 @@ async function shareTo(app){if(!cur)return;const f=new File([cur.blob],cur.name,
 document.getElementById('mig').onclick=()=>shareTo('ig');document.getElementById('mxb').onclick=()=>shareTo('x');
 // ---------- status + polling ----------
 function countdown(){const el=document.getElementById('cd');if(!el)return null;
- const ns=D.next_start,left=ns?ns-nowS():0;if(D.official_live||!ns||left<=0){el.style.display='none';return null}
+ const ns=D.next_start,left=ns?ns-nowS():0;if(D.official_live||!ns||!cdMode()){el.style.display='none';return null}
+ if(left<=0){el.style.display='block';document.getElementById('cdv').textContent='STARTING SOON';document.getElementById('cdw').textContent='The page switches to live viewers as soon as the stream starts.';return 1}
  el.style.display='block';const d=Math.floor(left/86400),h=Math.floor(left%86400/3600),m=Math.floor(left%3600/60),sec=Math.floor(left%60),p=n=>String(n).padStart(2,'0');
  document.getElementById('cdv').textContent=(d?d+'D ':'')+`${p(h)}:${p(m)}:${p(sec)}`;
  document.getElementById('cdw').textContent=new Date(ns*1000).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})+' IST';

@@ -155,6 +155,35 @@ def day_summary(ev: dict, lb: dict, st: dict) -> str:
     return "\n".join(lines)
 
 
+NOT_LIVE_AFTER = int(os.getenv("EVENT_NOT_LIVE_MIN", "10"))   # minutes after the official stream starts
+
+
+def check_roster(ev: dict):
+    """Once per broadcast, NOT_LIVE_AFTER minutes after the official stream starts: tell the owner on Telegram which
+    permitted watch-party streamers are still not live, so their link can be fixed or they can be removed."""
+    if ev.get("key") != "bmsd":
+        return
+    st = events.stats(ev["key"])
+    lb = st.get("last_broadcast") or {}
+    if not st.get("official_live") or not lb or time.time() - lb["start"] < NOT_LIVE_AFTER * 60:
+        return
+    flag = f"ev_notlive:{ev['key']}:{lb['start']}"
+    if store.kv_get(flag):
+        return
+    from core import eventpage
+    roster = eventpage.data(ev["key"]).get("roster") or []
+    missing = [r for r in roster if r.get("status") == "upcoming"]
+    store.kv_set(flag, True)
+    if not missing:
+        _send(f"{ev['name']}: all {len(roster)} watch-party streamers are live.")
+        return
+    lines = [f"{ev['name']}: {len(missing)} of {len(roster)} watch-party streamers are NOT live "
+             f"{NOT_LIVE_AFTER} min after the official stream started:"]
+    lines += [f"- {r['name']}: {r.get('url') or ''}" for r in missing]
+    lines.append("Send me their live stream link to add it, or tell me to remove them from the watch-party list.")
+    _send("\n".join(lines))
+
+
 def check(ev: dict):
     """Called every minute: once a broadcast has been quiet for QUIET_MIN, save its log and send it to the owner once."""
     st = events.stats(ev["key"])
