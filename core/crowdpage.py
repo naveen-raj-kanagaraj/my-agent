@@ -82,7 +82,7 @@ h1{margin:2px 0 0;font-size:19px;text-transform:uppercase;letter-spacing:.02em;l
 .tile{position:relative;padding:10px 8px;border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;min-width:0}
 .tile b{font-size:12px;line-height:1.15;max-width:100%}
 @media(max-width:640px){.tile{padding:8px 3px}.tile b{font-size:10.5px}.tile span{font-size:15px}}.tile span{font:18px "Share Tech Mono",monospace}
-.tile.cut{outline:2px solid var(--lime);outline-offset:-2px}
+.tile.top6{outline:2px solid var(--lime);outline-offset:-2px}
 .keyrow{display:flex;align-items:center;gap:8px;margin-top:10px;font:11px "Share Tech Mono",monospace;color:var(--muted)}
 .keyrow i{flex:1;max-width:160px;height:6px;background:linear-gradient(90deg,rgba(182,242,58,.04),rgba(182,242,58,.9))}
 /* hero stat */
@@ -156,7 +156,7 @@ function rings(q){const rows=q.rows.slice(0,8);
  return card(q,'s8',`<div class="rings">${rows.map((r,i)=>{const L=2*Math.PI*40,src=TL[key(r.label)];return `<div class="ring ${ok(q,r.label)}"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" stroke="#262636" stroke-width="8" fill="none"/><circle cx="50" cy="50" r="40" stroke="${i<3?'#b6f23a':'#8d8ca3'}" stroke-width="8" fill="none" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="${L}" stroke-dashoffset="${L}" data-off="${L*(1-r.pct/100)}" class="rg" ${i<3?'style="filter:drop-shadow(0 0 4px rgba(182,242,58,.6))"':''}/>${src?`<image href="${src}" x="30" y="30" width="40" height="40"/>`:''}</svg><b>${esc(r.label)}</b><span>${pc(r.pct)}</span></div>`}).join('')}</div>`)}
 // 3. BMIC: heat tiles
 function heat(q){const k=6;
- return card(q,'s12',`<div class="tiles">${q.rows.map((r,i)=>`<div class="tile ${i<k?'cut':''} ${ok(q,r.label)}" style="background:rgba(182,242,58,${(.04+.5*r.pct/100).toFixed(3)})">${logo(r)}<b>${esc(r.label)}</b><span style="color:${r.pct>=50?'#eeeef5':'#8d8ca3'}">${pc(r.pct)}</span></div>`).join('')}</div><div class="keyrow">0%<i></i>100%<span style="margin-left:12px">outlined: the community's top 6</span></div>`)}
+ return card(q,'s12',`<div class="tiles">${q.rows.map((r,i)=>`<div class="tile ${i<k?'top6':''} ${ok(q,r.label)}" style="background:rgba(182,242,58,${(.04+.5*r.pct/100).toFixed(3)})">${logo(r)}<b>${esc(r.label)}</b><span style="color:${r.pct>=50?'#eeeef5':'#8d8ca3'}">${pc(r.pct)}</span></div>`).join('')}</div><div class="keyrow">0%<i></i>100%<span style="margin-left:12px">outlined: the community's top 6</span></div>`)}
 // 4. tournament MVP: hero stat + pills
 function hero(q){const L=q.rows[0],sub=L.pct>=50?'picked by more than half':L.pct>=33?'about one in '+Math.round(100/L.pct):'the top pick';
  return card(q,'s4 ph heroP',`${cut(L.label)}<div class="big"><div class="n" data-n="${L.pct}">0%</div><div class="who ${ok(q,L.label)}">${esc(L.label)}<small>${sub}</small></div></div><div class="pills">${q.rows.slice(1).map(r=>`<span class="${ok(q,r.label)}">${av(r)}${esc(r.label)}<em>${pc(r.pct)}</em></span>`).join('')}</div>`)}
