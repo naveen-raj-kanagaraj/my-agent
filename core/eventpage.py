@@ -614,13 +614,13 @@ function card(type,vid,avatar){if(type==='history')return histCard();
  x.strokeStyle='#b6f23a';x.lineWidth=5;x.beginPath();x.moveTo(40,80);x.lineTo(40,40);x.lineTo(80,40);x.stroke();
  const LB=D.last_broadcast||{},wp=wpByPeak();
  const nowTot=(D.live||[]).reduce((a,s)=>a+s.viewers,0),live=!!D.official_live||nowTot>0;
- const T=(t,X,Y,font,col,al)=>{x.font=font;x.fillStyle=col;x.textAlign=al||'left';x.fillText(t,X,Y)};
+ const T=(t,X,Y,font,col,al,mw)=>{x.font=font;if(mw){const w=x.measureText(t).width;if(w>mw){const m=font.match(/(\d+)px/);x.font=font.replace(/\d+px/,Math.max(10,Math.floor(+m[1]*mw/w))+'px')}}x.fillStyle=col;x.textAlign=al||'left';x.fillText(t,X,Y)};
  const M=s=>`${s}px "Share Tech Mono",monospace`,B=s=>`700 ${s}px "Chakra Petch",sans-serif`;
  x.textBaseline='top';
  T('letsgrowesports',80,78,M(30),'#b6f23a');
  T(`${TITLE} // ${LB.date||''}`.toUpperCase(),80,118,B(50),'#eeeef5');
  const box=(X,Y,w,h,lab,val,sub,col)=>{x.fillStyle='rgba(26,26,38,.9)';x.fillRect(X,Y,w,h);x.strokeStyle='#262636';x.lineWidth=2;x.strokeRect(X,Y,w,h);
-  T(lab,X+22,Y+20,M(24),'#ff4d5e');T(val,X+22,Y+54,B(56),col||'#eeeef5');if(sub)T(sub,X+22,Y+122,M(22),'#8d8ca3')};
+  T(lab,X+22,Y+20,M(24),'#ff4d5e','left',w-44);T(val,X+22,Y+54,B(56),col||'#eeeef5','left',w-44);if(sub)T(sub,X+22,Y+h-44,M(22),'#8d8ca3','left',w-44)};
  let L,y0;
  if(type==='total'||type==='split'){
   if(type==='split'){const sp0=LB.split||{};T('// OFFICIAL VS WATCH PARTIES',80,205,M(30),'#ff4d5e');
@@ -644,7 +644,7 @@ function card(type,vid,avatar){if(type==='history')return histCard();
   S.forEach((s,j)=>{const y=300+j*88,c=KC[s.kind]||'#7c5cff';
    x.fillStyle=j%2?'rgba(255,255,255,.03)':'rgba(255,255,255,.06)';x.fillRect(60,y-8,W-120,78);x.fillStyle=c;x.fillRect(60,y-8,8,78);
    T(String(j+1),96,y+14,B(36),'#eeeef5');avatarAt(x,avs[s.vid],170,y+31,28,c,s.channel);
-   T(s.channel.toUpperCase().slice(0,22),214,y+2,B(32),'#ffffff');
+   T(s.channel.toUpperCase(),214,y+2,B(32),'#ffffff','left',W-214-300);
    T((s.kind==='official'?'OFFICIAL':s.kind==='watch party'?'WATCH PARTY':'STREAM')+(s.kind==='official'&&/\[([^\]]+)\]/.test(s.title)?' // '+s.title.match(/\[([^\]]+)\]/)[1].toUpperCase():''),214,y+40,M(22),c);
    x.fillStyle=c;x.globalAlpha=.8;x.fillRect(600,y+52,Math.max(6,(W-700)*s.viewers/top),5);x.globalAlpha=1;
    T(full(s.viewers),W-80,y+12,B(40),'#ffffff','right')});
@@ -658,7 +658,7 @@ function card(type,vid,avatar){if(type==='history')return histCard();
    x.fillStyle=j%2?'rgba(255,255,255,.03)':'rgba(255,255,255,.06)';x.fillRect(60,y-8,W-120,78);
    x.fillStyle=j===0?'#f5c451':j<3?'#b6f23a':'#262636';x.fillRect(60,y-8,8,78);
    T(String(j+1),96,y+14,B(36),c);avatarAt(x,avs[r.vid]||avs[r.name],170,y+31,28,j===0?'#f5c451':'#262636',r.name);
-   T(r.name.toUpperCase().slice(0,20),214,y+6,B(34),'#ffffff');
+   T(r.name.toUpperCase(),214,y+6,B(34),'#ffffff','left',W-214-300);
    x.fillStyle=c;x.globalAlpha=.85;x.fillRect(214,y+50,Math.max(8,(W-520)*v/top),6);x.globalAlpha=1;
    T(full(v),W-80,y+12,B(40),c,'right')});
  }else{
@@ -676,17 +676,17 @@ function card(type,vid,avatar){if(type==='history')return histCard();
   T('PEAK CONCURRENT VIEWERS',x0,262+fsz+14,M(24),'#8d8ca3');
   x.shadowColor=champ?'rgba(245,196,81,.45)':'rgba(182,242,58,.35)';x.shadowBlur=30;T(full(me.peak),x0-4,262+fsz+48,B(104),acc);x.shadowBlur=0;
   const bw=(W-160-40)/3;
-  box(80,560,bw,140,'PEAK',fmt(me.peak),me.at?me.at+' IST':'',acc);
-  box(80+bw+20,560,bw,140,'AVERAGE',me.avg?fmt(me.avg):'-','while live','#4cc9f0');
-  box(80+2*(bw+20),560,bw,140,'RANK',`#${i+1}`,`of ${wp.length} watch parties`,'#eeeef5');
+  box(80,560,bw,160,'PEAK',fmt(me.peak),me.at?me.at+' IST':'',acc);
+  box(80+bw+20,560,bw,160,'AVERAGE',me.avg?fmt(me.avg):'-','while live','#4cc9f0');
+  box(80+2*(bw+20),560,bw,160,'RANK',`#${i+1}`,`of ${wp.length} watch parties`,'#eeeef5');
   const sv=D.wp_series||{};
   L=wp.slice(0,5).map((w,j)=>({label:w.channel,color:w.vid===me.vid?acc:'rgba(141,140,163,.55)',pts:sv[w.vid]||[],w:w.vid===me.vid?6:3}));
   const mi=L.findIndex(l=>l.label===me.channel);if(mi>=0)L.push(L.splice(mi,1)[0]);
-  let ly=772;x.fillStyle='rgba(255,255,255,.08)';x.fillRect(80,740,W-160,2);T('// TOP 5 WATCH PARTIES',80,ly,M(26),'#ff4d5e');T('PEAK',W-250,ly,M(22),'#8d8ca3','right');T('AVG',W-80,ly,M(22),'#8d8ca3','right');ly+=56;
+  let ly=782;x.fillStyle='rgba(255,255,255,.08)';x.fillRect(80,752,W-160,2);T('// TOP 5 WATCH PARTIES',80,ly,M(26),'#ff4d5e');T('PEAK',W-250,ly,M(22),'#8d8ca3','right');T('AVG',W-80,ly,M(22),'#8d8ca3','right');ly+=56;
   wp.slice(0,5).forEach((w,j)=>{const hi=w.vid===me.vid,c=j===0?GOLD:hi?'#b6f23a':'#eeeef5';
    if(hi){x.fillStyle='rgba(182,242,58,.08)';x.fillRect(60,ly-10,W-120,60)}
    T(String(j+1),84,ly+6,B(28),c);avatarAt(x,avs[w.vid],142,ly+19,22,j===0?GOLD:'#262636',w.channel);
-   T(w.channel.toUpperCase().slice(0,22),176,ly+4,B(30),c);T(full(w.peak),W-250,ly+4,B(30),c,'right');T(w.avg?full(w.avg):'-',W-80,ly+4,B(30),'#8d8ca3','right');ly+=64});
+   T(w.channel.toUpperCase(),176,ly+4,B(30),c,'left',W-250-176-170);T(full(w.peak),W-250,ly+4,B(30),c,'right');T(w.avg?full(w.avg):'-',W-80,ly+4,B(30),'#8d8ca3','right');ly+=64});
  }
  x.fillStyle='#b6f23a';x.fillRect(0,H-130,W,130);
  T('LIVE.LETSGROWESPORTS.COM',80,H-108,B(44),'#0a0a14');
@@ -700,7 +700,7 @@ function dayTotal(col){col=col||1;const LB=D.last_broadcast;let src=(D.series_al
 let cur=null;
 async function openShare(type,vid){
  const mi=document.getElementById('mimg');mi.removeAttribute('src');mi.alt='Making the image...';cur=null;document.getElementById('modal').classList.add('on');
- const big=u=>String(u||'').replace(/=s\d+-/,'=s240-');let av=null;avs={};
+ const big=u=>String(u||'').replace(/=s\d+-/,'=s800-');let av=null;avs={};
  if(type==='streams'){const S=(isOff()?(D.last_broadcast||{}).streams||[]:D.live||[]).slice(0,10);
   const ims=await Promise.all(S.map(s=>loadImg(big(s.logo))));S.forEach((s,k)=>{if(ims[k])avs[s.vid]=ims[k]})}
  if(type==='battle'||type==='streamer'||type==='board'){
