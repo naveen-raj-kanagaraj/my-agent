@@ -22,6 +22,14 @@ app = Flask(__name__)
 CACHE = {"/": 5, "/data": 2, "/series": 60, "/predict": 30, "/predict/api/board": 5, "/predict/og.png": 3600}   # seconds Cloudflare (or any CDN) may reuse a response
 
 
+
+@app.before_request
+def _predict_closed():
+    # Predict & Win is off the public site unless PREDICT_OPEN=1. Players' data stays in the database and the
+    # 10-minute exports (exports/predict, exports/private); only the pages and API are hidden.
+    if request.path.startswith("/predict") and os.getenv("PREDICT_OPEN", "0") != "1":
+        return Response("Not found", status=404, mimetype="text/plain")
+
 @app.after_request
 def _headers(resp):
     secs = CACHE.get(request.path)
