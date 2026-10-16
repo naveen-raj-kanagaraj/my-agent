@@ -295,10 +295,10 @@ def create_day_set(day: int, close_ts: float = None) -> list:
     for m in range(1, int(s["matches"]) + 1):
         t = f"Match {m}: Which team gets the chicken dinner?"
         if not _exists("match", t, day):
-            ids.append(add_question("match", t, s["teams"], close, day, f"MATCH {m}", "dropdown", {"match": m}, sort=m))
+            ids.append(add_question("match", t, s["teams"], close, day, f"MATCH {m}", "grid", {"match": m}, sort=m))
     t = f"Which team gets the most chicken dinners on Day {day}?"
     if not _exists("team", t, day):
-        ids.append(add_question("team", t, s["teams"], close, day, "MOST CHICKEN DINNERS", "dropdown", sort=10))
+        ids.append(add_question("team", t, s["teams"], close, day, "MOST CHICKEN DINNERS", "grid", sort=10))
     if not _exists("peak", f"How many people will watch at the peak on Day {day}?", day):
         ids.append(create_peak(day, close))
     return ids

@@ -81,7 +81,7 @@ h2{font:700 15px "Chakra Petch",sans-serif;text-transform:uppercase;letter-spaci
 .tabs button{all:unset;cursor:pointer;padding:9px 13px;font:700 13px "Chakra Petch",sans-serif;text-transform:uppercase;color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
 .tabs button.on{color:var(--ink);border-color:var(--lime);background:linear-gradient(0deg,rgba(182,242,58,.10),transparent)}
 .tabs button small{font:11px "Share Tech Mono",monospace;color:var(--muted);margin-left:5px}
-.qs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.qs{display:grid;grid-template-columns:1fr;gap:12px}
 .q{background:var(--card2);border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
 .q.res{border-color:rgba(182,242,58,.35)}.q.void{opacity:.55}
 .qt{display:flex;justify-content:space-between;gap:8px;font:11px "Share Tech Mono",monospace;color:var(--muted);text-transform:uppercase}
@@ -118,8 +118,15 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .mbox img{width:100%;display:block;border:1px solid var(--line);margin:10px 0;min-height:120px;background:var(--card)}
 .mrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mrow .btn{width:100%}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--lime);color:#0a0a14;padding:8px 14px;font:700 13px "Chakra Petch";z-index:80;display:none}
-.demo{position:fixed;left:0;right:0;bottom:0;z-index:70;background:#ff4d5e;color:#fff;font:12px "Share Tech Mono",monospace;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
-.demo select,.demo button{font:12px "Share Tech Mono",monospace;background:#fff;color:#0a0a14;border:0;padding:4px 6px;max-width:46vw}
+.demo{position:fixed;right:10px;bottom:10px;z-index:70;font:11px "Share Tech Mono",monospace;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.demo .dt{all:unset;cursor:pointer;background:var(--card2);color:var(--muted);border:1px solid var(--line);padding:5px 9px}
+.demo .dp{display:none;background:var(--bg2);border:1px solid var(--line);padding:8px;gap:6px;flex-wrap:wrap;max-width:300px}.demo.on .dp{display:flex}
+.demo select,.demo .dp button{font:11px "Share Tech Mono",monospace;background:var(--card2);color:var(--ink);border:1px solid var(--line);padding:4px 6px;max-width:100%}
+.btn.go{position:relative;overflow:hidden}.btn.go.run{background:#0a0a14;color:var(--lime);box-shadow:inset 0 0 0 2px var(--lime)}
+.btn.go.run:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(182,242,58,.35),transparent);animation:sweep .7s linear infinite}
+.btn.go .gt{position:relative;z-index:1;letter-spacing:.12em}.btn.go.tick .gt{animation:pop .38s ease-out}
+@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(100%)}}@keyframes pop{0%{transform:scale(1.8);opacity:0}60%{transform:scale(.95);opacity:1}100%{transform:scale(1)}}
+.tp{font:11px "Share Tech Mono",monospace;color:var(--muted);font-style:normal}.mo.on .tp{color:var(--lime)}
 .pk{display:flex;flex-direction:column;gap:6px}.pk .row{display:flex;justify-content:space-between;gap:8px;padding:8px;background:var(--card2);font-size:13px}
 .pk .row b{font-weight:700}.pk .ok{color:var(--lime)}.pk .no{color:var(--red)}
 .btn.wide{width:100%;padding:13px 16px;font-size:15px}
@@ -131,7 +138,7 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .mo.on{border-color:var(--lime);background:rgba(182,242,58,.16);color:var(--lime)}
 .mbar{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .tlb{flex:none;width:44px;height:24px;display:inline-flex;align-items:center;justify-content:center;margin-right:10px}.tlb img{max-width:44px;max-height:24px;object-fit:contain;display:block}
-.mgrid{grid-template-columns:repeat(4,1fr)}.mo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:10px 4px;font-size:13px;white-space:normal;line-height:1.15;min-height:64px}
+.mgrid{grid-template-columns:repeat(8,1fr)}.mo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:10px 4px;font-size:13px;white-space:normal;line-height:1.15;min-height:64px}
 .mo .tlb{margin:0;width:60px;height:30px}.mo .tlb img{max-width:60px;max-height:30px}.mo>span:last-child{white-space:normal;overflow:visible}
 .nmx{display:flex;align-items:center;min-width:0}.nmx>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cbl button{display:flex;align-items:center}.how{font-size:13px;color:var(--muted);margin-top:-4px}.ch{font-size:12px;margin-bottom:2px}
@@ -223,13 +230,17 @@ function renderJoin(){const c=$('joinCard');
   $('shareMe').onclick=()=>share('me');return}
  c.innerHTML=`<div class="lbl">// step 1</div><h2 style="margin-top:4px">Enter your Instagram ID</h2>
   <div class="muted" style="font-size:13px;margin-top:4px">If you finish in the top 5, we'll DM you on Instagram. No password needed.</div>
-  <form id="jf" autocomplete="off"><label class="field"><span>INSTAGRAM ID</span><div class="at"><i>@</i><input class="inp" id="jh" maxlength="80" placeholder="yourhandle" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></div></label>
+  <div id="jf"><label class="field"><span>INSTAGRAM ID</span><div class="at"><i>@</i><input class="inp" id="jh" maxlength="80" placeholder="yourhandle" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></div></label>
   <label class="field"><span>NAME (OPTIONAL)</span><input class="inp" id="jn" maxlength="32" placeholder="Shown on the leaderboard"></label>
-  <label class="chk"><input type="checkbox" id="jc"> <span>Show my Instagram ID and picks on the leaderboard.</span></label>
-  <button class="btn wide" type="submit" id="jb">Start playing</button><div class="err" id="je"></div></form>`;
- $('jf').onsubmit=async e=>{e.preventDefault();$('je').textContent='';$('jb').disabled=true;
-  try{const j=await api('join',{handle:$('jh').value,name:$('jn').value,consent:$('jc').checked});saveTok(j.token);await loadMe();await loadBoard();toast('You\'re in. Now make your picks.');$('qcard').scrollIntoView({behavior:'smooth'})}
-  catch(err){$('je').textContent=err.message}finally{const b=$('jb');if(b)b.disabled=false}}}
+  <div class="muted" style="font-size:12px;margin:10px 0">Your Instagram ID and picks will show on the leaderboard.</div>
+  <button class="btn wide go" type="button" id="jb"><span class="gt">Start playing</span></button><div class="err" id="je"></div></div>`;
+ const start=async()=>{const b=$('jb');if(b.disabled)return;$('je').textContent='';if(!$('jh').value.trim()){$('je').textContent='Enter your Instagram ID first.';$('jh').focus();return}
+  b.disabled=true;b.classList.add('run');const gt=b.querySelector('.gt');gt.textContent='LOADING';
+  try{const j=await api('join',{handle:$('jh').value,name:$('jn').value,consent:true});
+   for(const t of ['3','2','1','GO!']){gt.textContent=t;b.classList.remove('tick');void b.offsetWidth;b.classList.add('tick');await new Promise(r=>setTimeout(r,t==='GO!'?520:380))}
+   saveTok(j.token);await loadMe();await loadBoard();$('qcard').scrollIntoView({behavior:'smooth'})}
+  catch(err){$('je').textContent=err.message;b.disabled=false;b.classList.remove('run','tick');gt.textContent='Start playing'}};
+ $('jb').onclick=start;['jh','jn'].forEach(id=>$(id).onkeydown=e=>{if(e.key==='Enter')start()})}
 async function loadMe(){if(!TOKEN){ME=null;renderJoin();return}
  try{ME=await api('me',{})}catch(e){if(e.code===401){saveTok(null);ME=null}}renderJoin()}
 
@@ -250,17 +261,17 @@ function crowdBars(q,limit){const my=myOf(q),mine=Array.isArray(my)?my:[my];cons
  (Array.isArray(q.answer)?q.answer:q.answer?[q.answer]:[]).forEach(a=>{if(!top.some(e=>e[0]===a))top.push([a,cnt(q,a)])});
  const rest=q.kind==='multi'?0:ent.slice(limit).reduce((a,e)=>a+e[1],0);
  return `<div class="crowd"><div class="muted ch">What everyone picked</div>${top.map(([o,n])=>`<div class="cr ${mine.includes(o)?'mine':''} ${isAns(q,o)?'ok':''}"><div class="fill" style="width:${n}%"></div><span class="nmx">${tl(o)}<span>${esc(o)}</span></span><span class="pc">${n}%</span></div>`).join('')}${rest?`<div class="cr"><div class="fill" style="width:${rest}%"></div><span class="nmx"><span>Others</span></span><span class="pc">${rest}%</span></div>`:''}${!ent.length?'<div class="muted" style="font-size:13px">No picks were made.</div>':''}</div>`}
-function tiles(q,sel,attr){return `<div class="mgrid">${q.options.map(o=>`<button class="mo ${sel.includes(o)?'on':''}" ${attr}="${q.id}" data-o="${esc(o)}">${tl(o)}<span>${esc(o)}</span></button>`).join('')}</div>`}
+function tiles(q,sel,attr,showPct){return `<div class="mgrid">${q.options.map(o=>`<button class="mo ${sel.includes(o)?'on':''}" ${attr}="${q.id}" data-o="${esc(o)}">${tl(o)}<span>${esc(o)}</span>${showPct?`<em class="tp">${pct(q,o)}%</em>`:''}</button>`).join('')}</div>`}
 function qBody(q,shut){const my=myOf(q);
  if(q.kind==='multi'){if(shut)return crowdBars(q,Math.max(q.pick,5));const sel=draft[q.id]||(my?[...my]:[]);
-  return tiles(q,sel,'data-mq')+`<div class="mbar"><span class="mono">${sel.length} of ${q.pick} picked</span><button class="btn sm" data-msave="${q.id}" ${sel.length===q.pick?'':'disabled'}>${my?'Update':'Save'}</button></div>`}
- if(q.style==='grid'){if(shut)return crowdBars(q,5);return tiles(q,my?[my]:[],'data-gq')}
+  return tiles(q,sel,'data-mq',!!my&&!draft[q.id])+`<div class="mbar"><span class="mono">${sel.length} of ${q.pick} picked</span><button class="btn sm" data-msave="${q.id}" ${sel.length===q.pick?'':'disabled'}>${my?'Update':'Save'}</button></div>`}
+ if(q.style==='grid'){if(shut)return crowdBars(q,5);return tiles(q,my?[my]:[],'data-gq',!!my)}
  if(q.kind==='text'){if(shut)return crowdBars(q,5);
   return `<div class="tx"><input class="inp" data-tq="${q.id}" maxlength="40" placeholder="Type a player name" value="${esc(draft[q.id]??my??'')}"><button class="btn sm" data-tsave="${q.id}">${my?'Update':'Save'}</button></div>`}
  if(q.style==='dropdown'&&!shut)return `<div class="cb" data-q="${q.id}"><button class="cbb ${my?'mine':''}" data-cb="${q.id}">${my?`<span class="nmx">${tl(my)}<span>${esc(my)}</span></span>`:`<span class="ph">${q.kind==='mvp'?'Choose a player':'Choose a team'}</span>`}</button></div>`;
  if(q.style==='dropdown')return crowdBars(q,5);
- return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut?'disabled':''}><div class="fill" style="width:${shut?pct(q,o):0}%"></div><span>${esc(o)}</span><span class="pc">${shut&&q.picked?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
-const HOW={multi:q=>`Tap ${q.pick} teams, then press Save.`,grid:()=>'Tap a team. It saves right away.',dropdown:()=>'Choose from the list. It saves right away.',buttons:()=>'Tap one. It saves right away.'};
+ return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut?'disabled':''}><div class="fill" style="width:${shut||my?pct(q,o):0}%"></div><span>${esc(o)}</span><span class="pc">${(shut||my)&&q.picked?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
+const HOW={multi:q=>`Tap ${q.pick} teams, then press Save.`,grid:()=>'Tap a team. It saves right away. You can change it until picks lock.',dropdown:()=>'Choose from the list. It saves right away.',buttons:()=>'Tap one. It saves right away.'};
 function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=Array.isArray(my)?my.length:my;
  let foot='';const got=ME&&ME.pts?ME.pts[q.id]:undefined;const ans=Array.isArray(q.answer)?q.answer.join(', '):q.answer;
  if(q.answer&&has)foot=got>0?`<span class="good">Correct · +${got} points</span>`:`<span class="bad">Missed · Answer: ${esc(ans)}</span>`;
@@ -298,7 +309,7 @@ function toggleCb(qid,force){document.querySelectorAll('.cbp').forEach(p=>p.remo
 document.addEventListener('click',()=>{if(openCb){openCb=null;document.querySelectorAll('.cbp').forEach(p=>p.remove())}});
 async function doPick(qid,o){if(!ME){toast('Enter your Instagram ID first');$('joinCard').scrollIntoView({behavior:'smooth'});return}
  if(busy[qid])return;busy[qid]=1;const prev=ME.picks[qid];ME.picks[qid]=Array.isArray(o)?[...o]:o;delete draft[qid];updCard(qid);
- try{await api('pick',{qid,option:o});toast('Saved');renderJoin()}catch(e){if(prev!==undefined)ME.picks[qid]=prev;else delete ME.picks[qid];toast(e.message);updCard(qid)}finally{delete busy[qid]}}
+ try{await api('pick',{qid,option:o});toast('Saved');renderJoin();loadBoard()}catch(e){if(prev!==undefined)ME.picks[qid]=prev;else delete ME.picks[qid];toast(e.message);updCard(qid)}finally{delete busy[qid]}}
 
 // ---------- leaderboard ----------
 function lbTabs(){const ds=[...new Set(B.questions.filter(q=>q.day).map(q=>String(q.day)))].sort();const t=[['all','Overall'],...ds.map(d=>[d,'Day '+d])];$('ltabs').style.display=t.length>2?'':'none';
@@ -347,7 +358,7 @@ let shared=null;
 async function share(type){await FONTS;const c=type==='me'?meCard():lbCard();$('smt').textContent=type==='me'?'Share my rank':'Share leaderboard';$('simg').removeAttribute('src');$('smodal').classList.add('on');
  const r=(ME&&ME.ranks.all)||{};
  const text=type==='me'?`@${ME.player.handle} is #${r.rank||'-'} on Predict & Win · ${r.pts||0} pts. BMSD 2026 Grand Finals: call the winners, top 5 win a gift card.`:`BMSD 2026 Predict & Win leaderboard${lbTab==='all'?'':' (Day '+lbTab+')'}: ${(B.boards[lbTab]||[]).slice(0,3).map(x=>`${x.rank}. ${disp(x)} ${x.pts}`).join(' | ')}. Free to play, top 5 win a gift card.`;
- c.toBlob(b=>{shared={blob:b,text,name:type==='me'?'predict-my-rank.png':'predict-leaderboard.png'};$('simg').src=URL.createObjectURL(b)},'image/png')}
+ $('simg').src=c.toDataURL('image/png');c.toBlob(b=>{shared={blob:b,text,name:type==='me'?'predict-my-rank.png':'predict-leaderboard.png'}},'image/png')}
 $('sNative').onclick=async()=>{if(!shared)return;const f=new File([shared.blob],shared.name,{type:'image/png'});
  try{if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],text:shared.text+' '+URLP});else if(navigator.share)await navigator.share({text:shared.text,url:URLP});else{dl();toast('Image downloaded')}}catch(e){}};
 $('sCopy').onclick=async()=>{try{await navigator.clipboard.writeText(URLP);toast('Link copied')}catch(e){toast(URLP)}};
@@ -377,8 +388,8 @@ function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.c
  add('team','Who will win the BMSD 2026 Grand Finals?',T,cl('3'),0,'CHAMPION','grid');
  add('multi','Which teams will finish in the top 3?',T,cl('1'),0,'TOP 3','multi',{pick:3});
  add('multi','Which 6 teams will qualify for BMIC?',T,cl('1'),0,'BMIC','multi',{pick:6});
- for(let m=1;m<=SEED.matches;m++)add('match',`Match ${m}: Which team gets the chicken dinner?`,T,m<=2?t0-1800:cl('1'),1,`MATCH ${m}`,'dropdown');
- add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKEN DINNERS','dropdown');
+ for(let m=1;m<=SEED.matches;m++)add('match',`Match ${m}: Which team gets the chicken dinner?`,T,m<=2?t0-1800:cl('1'),1,`MATCH ${m}`,'grid');
+ add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKEN DINNERS','grid');
  add('peak','How many people will watch at the peak on Day 1?',SEED.buckets,cl('1'),1,'PEAK VIEWERS','buttons');
  const pw=o=>{const ws=o.map((v,i)=>[v,1/Math.pow(i+1,.8)]),s=ws.reduce((a,b)=>a+b[1],0);let r=Math.random()*s;for(const [v,x] of ws){r-=x;if(r<=0)return v}return o[0]};
  const elim=['Jonathan','Jonathan','Goblin','Spower','jonathan ','Aditya','Neyoo','Clutchgod'];
@@ -422,7 +433,7 @@ async function demoApi(path,body){await new Promise(r=>setTimeout(r,100));const 
   return{handle:p.handle,name:p.name,rank:r.rank,pts:r.pts,correct:r.correct,picks:DB.qs.filter(q=>dClosed(q)&&DB.picks[p.id+':'+q.id]!==undefined).map(q=>{const k=DB.picks[p.id+':'+q.id],x=dPts(q,dStats(q),k);return{qid:q.id,title:q.title,tag:q.tag,day:q.day,pick:Array.isArray(k)?k.join(', '):k,answer:dAns(q).join(', '),void:q.void,correct:q.answer&&!q.void?x>0:null,pts:x}})}}
  err('Unknown',404)}
 if(DEMO){const bar=document.createElement('div');bar.className='demo';
- bar.innerHTML='PREVIEW · SAMPLE DATA · OWNER: <select id="dq"></select><select id="da"></select><button id="dlock">Lock</button><button id="dset">Settle</button><button id="dme">Leave</button>';document.body.appendChild(bar);
+ bar.innerHTML='<div class="dp">Owner test: <select id="dq"></select><select id="da"></select><button id="dlock">Lock</button><button id="dset">Settle</button><button id="dme">Reset me</button></div><button class="dt" id="dtg">Preview tools</button>';document.body.appendChild(bar);$('dtg').onclick=()=>bar.classList.toggle('on');
  const fill=()=>{$('dq').innerHTML=DB.qs.map(q=>`<option value="${q.id}">${esc(q.tag)}${q.answer?' ✓':dClosed(q)?' (locked)':''}</option>`).join('');fillA()};
  const fillA=()=>{const q=DB.qs.find(q=>q.id===+$('dq').value)||DB.qs[0];
   $('da').innerHTML=q.kind==='multi'?'<option value="auto">crowd favourites</option>':q.kind==='text'?'<option>Jonathan</option><option>Goblin</option>':q.options.map(o=>`<option>${esc(o)}</option>`).join('')};
@@ -430,7 +441,7 @@ if(DEMO){const bar=document.createElement('div');bar.className='demo';
  bar.addEventListener('click',async e=>{const id=e.target.id,q=DB.qs.find(q=>q.id===+$('dq').value);if(!q)return;
   if(id==='dlock'){q.locked=true;toast('Locked: crowd picks are now public')}
   if(id==='dset'){q.locked=true;if(q.kind==='multi'){const s=dStats(q);q.answer=Object.entries(s.inc).sort((a,b)=>b[1]-a[1]).slice(0,q.pick).map(e=>e[0])}else q.answer=q.kind==='text'?[$('da').value]:$('da').value;toast('Settled: '+dAns(q).join(', '))}
-  if(id==='dme'){DB.me=null;saveTok(null);ME=null;renderJoin();toast('Left the game (preview)')}
+  if(id==='dme'){DB.me=null;saveTok(null);ME=null;renderJoin();renderQs();toast('Reset. Join again to test.')}
   if(['dlock','dset'].includes(id)){const v=q.id;fill();$('dq').value=v;fillA();await loadBoard();if(DB.me){TOKEN='demo';await loadMe();renderLb()}}});
  }
 </script></body></html>""".replace("__CSS__", CSS)
