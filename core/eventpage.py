@@ -511,7 +511,7 @@ function lines(){
  if(range==='live')tot=sr;else{let src=D.series_all||[];if(LB&&off)src=src.filter(r=>r[0]>=LB.start-60&&r[0]<=LB.end+60);
   else if(sr.length){src=src.filter(r=>r[0]>=sr[0][0]);const last=src.length?src[src.length-1][0]:0;src=src.concat(sr.filter(r=>r[0]>last))}tot=src}
  if(view==='total')return[{label:'Total',color:css('--lime'),pts:tot.map(r=>[r[0],r[1]]),w:2.4,fill:true}];
- if(view==='split')return[{label:'Official',color:css('--orange'),pts:tot.map(r=>[r[0],r[2]]),w:2.2},{label:'Watch parties',color:css('--cyan'),pts:tot.map(r=>[r[0],r[3]]),w:2.2}];
+ if(view==='split')return[{label:'Official',color:css('--orange'),pts:tot.map(r=>[r[0],r[2]]),w:2.4},{label:'Watch parties',color:css('--cyan'),pts:tot.map(r=>[r[0],r[3]]),w:2.4}];
  return(D.wp||[]).slice(0,5).map((w,i)=>({label:w.channel,color:PAL[i%8],pts:(D.wp_series||{})[w.vid]||[],w:2.4,vid:w.vid,logo:w.logo,ini:w.channel.slice(0,2).toUpperCase()})).filter(l=>!hidden[l.vid]);
 }
 const WIN=180,LAG=4;let ys={};const IMG={};
@@ -543,7 +543,7 @@ function plot(ctx,W,H,L,o){
   if(l.fill){ctx.beginPath();p.forEach((r,i)=>{i?ctx.lineTo(X(r[0]),Y(r[1])):ctx.moveTo(X(r[0]),Y(r[1]))});ctx.lineTo(X(p[p.length-1][0]),padT+ch);ctx.lineTo(X(p[0][0]),padT+ch);ctx.closePath();
    const g=ctx.createLinearGradient(0,padT,0,padT+ch);g.addColorStop(0,'rgba(182,242,58,.18)');g.addColorStop(1,'rgba(124,92,255,0)');ctx.fillStyle=g;ctx.fill()}
   ctx.beginPath();p.forEach((r,i)=>{i?ctx.lineTo(X(r[0]),Y(r[1])):ctx.moveTo(X(r[0]),Y(r[1]))});
-  ctx.strokeStyle=l.color;ctx.lineWidth=l.w;ctx.lineJoin='round';ctx.shadowColor=l.color;ctx.shadowBlur=live||o.head?12:4;ctx.stroke();ctx.shadowBlur=0});
+  ctx.strokeStyle=l.color;ctx.lineWidth=l.w;ctx.lineJoin='round';ctx.shadowColor=l.color;ctx.shadowBlur=12*(o.fs||1);ctx.stroke();ctx.shadowBlur=0});
  ctx.restore();
  if(o.mark&&L[0]&&vis[0].length){const pk=vis[0].reduce((b,r)=>r[1]>b[1]?r:b),px=X(pk[0]),py=Y(pk[1]);
   ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(px,py,5*fs,0,7);ctx.fill();ctx.font=F(13,1);ctx.textAlign=px>cw*.7?'right':'left';ctx.textBaseline='bottom';
@@ -794,7 +794,7 @@ function demoData(){const now=Date.now()/1000;if(!DM)demoInit('live');while(DM.l
  const LBs=all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.peak,avg:Math.round((DM.hist[s.vid]||[]).reduce((a,r)=>a+r[1],0)/Math.max(1,(DM.hist[s.vid]||[]).length)),at:tf(DM.t0+3600).replace(' IST',''),url:'#',logo:s.logo||''})).sort((a,b)=>b.viewers-a.viewers);
  return{name:'BMSD 2026',ticks:DM.tot.length,now,every:2,method:'demo data',updated:DM.last,official_live:liveM,next_start:liveM||endM?null:(Date.UTC(2026,9,16,9,0)/1000>now?Date.UTC(2026,9,16,9,0)/1000:now+5*3600),live,wp,wp_series:ws,roster,
   peak:pk[1],peak_when:tf(pk[0]),avg:Math.round(DM.tot.reduce((a,r)=>a+r[1],0)/DM.tot.length),peak_official:Math.max(...DM.tot.map(r=>r[2])),peak_watch:Math.max(...DM.tot.map(r=>r[3])),
-  days:[{day:'Fri 16 Oct',peak:pk[1],at:tf(pk[0]).replace(' IST',''),avg:Math.round(pk[1]*.6)}],series_all:DM.tot.filter((_,i)=>i%5===0),series_recent:DM.tot.slice(),
+  days:[{day:'Fri 16 Oct',peak:pk[1],at:tf(pk[0]).replace(' IST',''),avg:Math.round(pk[1]*.6)}],series_all:DM.tot.slice(),series_recent:DM.tot.slice(),
   last_broadcast:{start:DM.t0,end:DM.last,peak:pk[1],peak_at:pk[0],peak_when:tf(pk[0]),split:{official:pk[2],watch:pk[3],community:0},streams:LBs,when:'Today, demo',day:'Today',date:'FRI 16 OCT',avg:Math.round(DM.tot.reduce((q,r)=>q+r[1],0)/Math.max(1,DM.tot.length)),peak_official:Math.max(0,...DM.tot.map(r=>r[2])),peak_watch:Math.max(0,...DM.tot.map(r=>r[3]))}}}
 function demoBar(){if(!DEMO)return;const b=document.createElement('div');b.className='demo';b.innerHTML='DEMO <button data-m="countdown">COUNTDOWN</button><button data-m="live">LIVE</button><button data-m="ended">ENDED</button>';document.body.appendChild(b);
  const mk=()=>b.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.m===DM.mode));mk();
