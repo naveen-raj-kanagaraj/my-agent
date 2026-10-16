@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Predict & Win | BMSD 2026 | letsgrowesports</title>
-<meta name="description" content="Free BGMI prediction game for the BMSD 2026 Grand Finals. Call match winners, MVP and peak viewers. Top 5 win a gift card.">
+<meta name="description" content="Pick the champion, top 3, BMIC qualifiers, MVPs, best IGL and the peak viewership for the BMSD 2026 Grand Finals. Free to play. Top 5 win a gift card.">
 <meta property="og:type" content="website"><meta property="og:site_name" content="letsgrowesports">
-<meta property="og:title" content="BMSD 2026 · Predict & Win"><meta property="og:description" content="Call match winners, MVP and peak viewers for the BMSD 2026 Grand Finals. Free to play. Top 5 win a gift card.">
-<meta property="og:url" content="https://live.letsgrowesports.com/predict"><meta property="og:image" content="https://live.letsgrowesports.com/predict/og.png">
+<meta property="og:title" content="BMSD 2026 · Predict & Win"><meta property="og:description" content="Pick the champion, top 3, BMIC qualifiers, MVPs, best IGL and the peak viewership for the BMSD 2026 Grand Finals. Free to play. Top 5 win a gift card.">
+<meta property="og:url" content="https://live.letsgrowesports.com/predict"><meta property="og:image" content="https://live.letsgrowesports.com/predict/og.png?v=2">
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
-<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="BMSD 2026 · Predict & Win"><meta name="twitter:image" content="https://live.letsgrowesports.com/predict/og.png">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:description" content="Pick the champion, top 3, BMIC qualifiers, MVPs, best IGL and the peak viewership for the BMSD 2026 Grand Finals. Free to play. Top 5 win a gift card."><meta name="twitter:title" content="BMSD 2026 · Predict & Win"><meta name="twitter:image" content="https://live.letsgrowesports.com/predict/og.png?v=2">
 <meta name="theme-color" content="#0b0b12">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -116,7 +116,7 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .nmx{display:flex;align-items:center;min-width:0}.nmx>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cbl button{display:flex;align-items:center}.how{font-size:13px;color:var(--muted);margin-top:-4px}.ch{font-size:12px;margin-bottom:2px}
 .rules ul{margin:8px 0 0;padding-left:18px}.rules li{margin:5px 0;font-size:14px;color:var(--ink)}
-.tx{display:flex;gap:8px}.qbadge{height:44px;display:block}
+.tx{display:flex;gap:8px}.cq{padding:12px 0;border-top:1px solid var(--line)}.cq:first-child{border-top:0;padding-top:0}.cqt{font:700 15px 'Chakra Petch',sans-serif;margin:4px 0 8px}.cr.mine{outline:1px solid var(--lime)}.qbadge{height:44px;display:block}
 .sbar{position:fixed;left:50%;transform:translateX(-50%);width:min(948px,calc(100% - 20px));bottom:10px;z-index:65;display:none;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:rgba(18,18,25,.96);border:1px solid var(--lime);box-shadow:0 8px 30px rgba(0,0,0,.6)}
 .sbar .mono{font-size:13px;color:var(--muted)}.sbar .btn[disabled]{background:var(--card2);color:var(--muted);opacity:1}.tx .inp{flex:1;min-width:0}
 @view-transition{navigation:auto}
@@ -148,7 +148,9 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
  <div class="card" id="qcard"><div class="lbl">// step 2</div><h2 style="margin:4px 0 12px">Make your picks</h2>
   <div class="tabs" id="dtabs"></div><div class="qs" id="qs"></div>
   <div class="sbar" id="sbar"><span id="sbt" class="mono"></span><button class="btn" id="sbb" disabled>Submit my picks</button></div></div>
- <div class="card" id="lbCard"><div class="head"><div><div class="lbl">// leaderboard</div><h2>Top 10</h2></div><button class="btn sm" id="shareLb">Share</button></div>
+ <div class="card" id="crowdCard" style="display:none"><div class="lbl">// what everyone picked</div><h2 style="margin:4px 0 4px">Crowd picks</h2>
+  <div class="muted" style="font-size:13px;margin-bottom:10px">Updates live. The leaderboard and winners are revealed after the finals on Sun 18 Oct.</div><div id="crowd"></div></div>
+ <div class="card" id="lbCard" style="display:none"><div class="head"><div><div class="lbl">// leaderboard</div><h2>Top 10</h2></div><button class="btn sm" id="shareLb">Share</button></div>
   <div class="tabs" id="ltabs"></div>
   <table><thead><tr><th>#</th><th>Player</th><th class="num">Points</th></tr></thead><tbody id="lb"></tbody></table>
   <div class="muted" style="font-size:12px;margin-top:8px">Gold = gift card zone. Tap a name to see their picks.</div></div>
@@ -197,9 +199,8 @@ function nameHtml(p){return p.name&&p.name!==p.handle?`<b>${esc(p.name)}</b> <sp
 function renderJoin(){const c=$('joinCard');
  if(ME){const r=(ME.ranks||{}).all||{},p=ME.player;
   c.innerHTML=`<div class="me"><div class="av">${esc((p.name||p.handle).slice(0,1).toUpperCase())}</div><div class="who"><div class="lbl">// playing as</div><div class="pn">${nameHtml(p)}</div></div>
-   <div class="mono rkbox"><div style="font-size:22px;color:var(--lime)">${r.pts?'#'+r.rank:'-'}</div><div class="muted" style="font-size:12px">${r.pts||0} PTS · ${Object.keys(ME.picks||{}).length} PICKS</div></div>
-   <button class="btn sm" id="shareMe">Share my rank</button></div>`;
-  $('shareMe').onclick=()=>share('me');return}
+   ${B&&B.leaderboard?`<div class="mono rkbox"><div style="font-size:22px;color:var(--lime)">${r.pts?'#'+r.rank:'-'}</div><div class="muted" style="font-size:12px">${r.pts||0} PTS</div></div><button class="btn sm" id="shareMe">Share my rank</button>`:`<div class="mono rkbox" style="font-size:13px;color:${Object.keys(ME.picks||{}).length?'var(--lime)':'var(--muted)'}">${Object.keys(ME.picks||{}).length?'✓ PICKS SUBMITTED':'NOT SUBMITTED YET'}</div>`}</div>`;
+  const sm=$('shareMe');if(sm)sm.onclick=()=>share('me');renderCrowd();return}
  c.innerHTML=`<div class="lbl">// step 1</div><h2 style="margin-top:4px">Enter your Instagram ID</h2>
   <div class="muted" style="font-size:13px;margin-top:4px">If you finish in the top 5, we'll DM you on Instagram. No password needed.<br><b style="color:var(--ink)">Answer every question, then press Submit. You can't change picks after submitting.</b></div>
   <div id="jf"><label class="field"><span>INSTAGRAM ID</span><div class="at"><i>@</i><input class="inp" id="jh" maxlength="80" placeholder="yourhandle" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></div></label>
@@ -286,9 +287,18 @@ async function submitAll(){if(!ME){toast('Enter your Instagram ID first (step 1)
  const oq=openQs();if(oq.some(q=>!isDone(q,draft[q.id]))){const f=oq.find(q=>!isDone(q,draft[q.id]));toast('Answer every question first');const el=$('qs').querySelector(`.q[data-id="${f.id}"]`);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});return}
  if(!confirmSubmit())return;const b=$('sbb');b.disabled=true;b.textContent='Submitting...';
  const picks={};oq.forEach(q=>picks[q.id]=draft[q.id]);
- try{await api('submit',{picks});oq.forEach(q=>{ME.picks[q.id]=picks[q.id];delete draft[q.id]});saveDraft();toast('Submitted. Good luck!');renderJoin();await loadBoard();renderQs()}
+ try{await api('submit',{picks});oq.forEach(q=>{ME.picks[q.id]=picks[q.id];delete draft[q.id]});saveDraft();toast('Submitted. Good luck!');await loadMe();await loadBoard();renderQs();renderCrowd();$('crowdCard').scrollIntoView({behavior:'smooth'})}
  catch(e){toast(e.message);await loadMe();await loadBoard()}finally{sbar()}}
 function confirmSubmit(){if(DEMO)return true;try{return window.confirm('Submit your picks? You can\'t change them after.')}catch(e){return true}}
+// ---------- crowd picks (only for players who submitted) ----------
+let crowdSig='';
+function renderCrowd(){const card=$('crowdCard');if(!card||!B)return;const has=ME&&Object.keys(ME.picks||{}).length;card.style.display=has?'':'none';if(!has)return;
+ const sig=JSON.stringify(ME.crowd||{})+JSON.stringify(ME.picks);if(sig===crowdSig)return;crowdSig=sig;
+ $('crowd').innerHTML=B.questions.filter(q=>ME.picks[q.id]!==undefined).map(q=>{const pc=(ME.crowd||{})[q.id]||{},my=ME.picks[q.id],mine=Array.isArray(my)?my:[my];
+  const ent=Object.entries(pc).sort((a,b)=>b[1]-a[1]).slice(0,q.kind==='multi'?Math.max(q.pick,6):5);
+  const tag=q.tag==='BMIC'&&TLOGO.BMIC26?`<img class="qbadge" style="height:30px" src="${TLOGO.BMIC26}" alt="BMIC">`:esc(q.tag);
+  return `<div class="cq"><div class="qt"><span class="tag">${tag}</span></div><div class="cqt">${esc(q.title)}</div>${ent.length?`<div class="crowd">${ent.map(([o,n])=>`<div class="cr ${mine.includes(o)||mine.map(tn0).includes(tn0(o))?'mine':''}"><div class="fill" style="width:${n}%"></div><span class="nmx">${tl(o)}<span>${esc(o)}</span></span><span class="pc">${n}%</span></div>`).join('')}</div>`:'<div class="muted" style="font-size:13px">Results show once 20 players have submitted.</div>'}</div>`}).join('')}
+const tn0=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 // ---------- leaderboard ----------
 function lbTabs(){const ds=[...new Set(B.questions.filter(q=>q.day).map(q=>String(q.day)))].sort();const t=[['all','Overall'],...ds.map(d=>[d,'Day '+d])];$('ltabs').style.display=t.length>2?'':'none';
  $('ltabs').innerHTML=t.map(([k,l])=>`<button data-k="${k}" class="${k===lbTab?'on':''}">${l}</button>`).join('');
@@ -352,12 +362,12 @@ function header(){
  const nx=B.questions.filter(q=>!q.closed&&!q.void&&q.close_ts>nowS()).sort((a,b)=>a.close_ts-b.close_ts)[0];
  $('nlt').textContent=nx?`${istT(nx.close_ts)} IST · ${left(nx.close_ts-nowS())}`:'ALL LOCKED';
 }
-let lbSig='';async function loadBoard(){try{B=await api('board')}catch(e){return}header();dayTabs();renderQs();sbar();const sg=JSON.stringify(B.boards)+lbTab;if(sg!==lbSig){lbSig=sg;lbTabs();renderLb()}}
+let lbSig='';async function loadBoard(){try{B=await api('board')}catch(e){return}header();dayTabs();renderQs();sbar();$('lbCard').style.display=B.leaderboard?'':'none';const sg=JSON.stringify(B.boards)+lbTab;if(sg!==lbSig){lbSig=sg;lbTabs();renderLb()}}
 function tick(){if(!B)return;B.questions.forEach(q=>{if(!q.closed&&nowS()>=q.close_ts){q.closed=true;if(openCb===q.id)openCb=null;updCard(q.id)}});
  document.querySelectorAll('[data-cl]').forEach(el=>{const q=B.questions.find(x=>x.id===+el.dataset.cl);if(q)el.textContent=closeTxt(q)[0]});header()}
 setTimeout(()=>{const p=$('pwin');if(p)p.remove()},1100);
 (async()=>{if(DEMO)demoInit();await loadBoard();await loadMe();renderLb();setInterval(tick,15000);
- setInterval(()=>{if(!document.hidden&&!openCb)loadBoard()},DEMO?4000:20000);setInterval(()=>{if(!document.hidden&&TOKEN)loadMe().then(renderLb)},60000)})();
+ setInterval(()=>{if(!document.hidden&&!openCb)loadBoard()},DEMO?4000:20000);setInterval(()=>{if(!document.hidden&&TOKEN)loadMe().then(renderLb)},DEMO?5000:20000)})();
 
 // ---------- preview engine (DEMO only: everything below runs in the browser, nothing is saved) ----------
 function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.close+':00+05:30')/1000,T=SEED.teams;
@@ -392,10 +402,10 @@ function dRank(b){const S={};DB.qs.forEach(q=>S[q.id]=dStats(q));
  const rows=DB.players.filter(p=>!p.hidden).map(p=>{let pts=b==='all'||b===1?(DB.bonus[p.id]||0):0,c=pts?1:0;DB.qs.forEach(q=>{if(b!=='all'&&q.day!==b)return;const x=dPts(q,S[q.id],DB.picks[p.id+':'+q.id]);if(x){pts+=x;c++}});return{id:p.id,handle:p.handle,name:p.name,pts,correct:c,created:p.created}})
   .sort((a,b)=>b.pts-a.pts||b.correct-a.correct||a.created-b.created);rows.forEach((r,i)=>r.rank=i+1);return rows}
 async function demoApi(path,body){await new Promise(r=>setTimeout(r,100));const err=(m,c)=>{throw Object.assign(new Error(m),{code:c||400})};
- if(path==='board'){return{now:nowS(),prize:SEED.prize,days:SEED.days,
+ if(path==='board'){return{now:nowS(),leaderboard:false,prize:SEED.prize,days:SEED.days,
   questions:DB.qs.map(q=>{const s=dStats(q),cl=dClosed(q);let counts=s.inc;if(q.kind==='text'){counts={};if(cl)Object.entries(s.inc).sort((a,b)=>b[1]-a[1]).slice(0,5).forEach(([k,v])=>counts[s.names[k]]=v)}
-   const pct={};if(s.n>=20)for(const k in counts)pct[k]=Math.round(100*counts[k]/s.n);
-   return{id:q.id,kind:q.kind,tag:q.tag,title:q.title,day:q.day,style:q.style,options:q.options,close_ts:q.close_ts,closed:cl,void:q.void,answer:q.answer,pick:q.pick,ranked:!!q.ranked,pct,picked:s.n>=20,worth:dBest(q,s)}}),
+   const pct={};if(cl&&s.n>=20)for(const k in counts)pct[k]=Math.round(100*counts[k]/s.n);
+   return{id:q.id,kind:q.kind,tag:q.tag,title:q.title,day:q.day,style:q.style,options:q.options,close_ts:q.close_ts,closed:cl,void:q.void,answer:q.answer,pick:q.pick,ranked:!!q.ranked,pct,picked:cl&&s.n>=20,worth:dBest(q,s)}}),
   boards:Object.fromEntries(['all','1','2','3'].map(b=>[b,dRank(b==='all'?'all':+b).filter(r=>r.pts>0).slice(0,10).map(({rank,handle,name,pts,correct})=>({rank,handle,name,pts,correct}))]))}}
  if(path==='join'){let h=(body.handle||'').trim();const m=h.match(/instagram\.com\/([^/?#\s]+)/i);if(m)h=m[1];h=h.replace(/^@/,'').toLowerCase();
   if(!/^[a-z0-9._]{1,30}$/.test(h))err('Enter a valid Instagram ID (letters, numbers, . and _ only).');
@@ -404,7 +414,8 @@ async function demoApi(path,body){await new Promise(r=>setTimeout(r,100));const 
   const p={id:DB.players.length+1,handle:h,name:(body.name||'').trim().slice(0,32),created:nowS(),hidden:false};DB.players.push(p);DB.me=p.id;return{token:'demo',player:p}}
  if(path==='me'){if(!DB.me)err('Not joined',401);const p=DB.players[DB.me-1],picks={},pts={};DB.qs.forEach(q=>{const v=DB.picks[p.id+':'+q.id];if(v!==undefined){picks[q.id]=v;if(q.answer)pts[q.id]=dPts(q,dStats(q),v)}});
   const ranks={};['all','1','2','3'].forEach(b=>{const r=dRank(b==='all'?'all':+b).find(r=>r.id===p.id);ranks[b]={rank:r.rank,pts:r.pts,correct:r.correct}});
-  return{player:{handle:p.handle,name:p.name},picks,pts,ranks}}
+  const crowd={};DB.qs.forEach(q=>{if(picks[q.id]===undefined)return;const st=dStats(q),c={};if(st.n>=20){const src=q.kind==='text'?Object.fromEntries(Object.entries(st.inc).map(([k,v])=>[st.names[k],v])):st.inc;for(const k in src)c[k]=Math.round(100*src[k]/st.n)}crowd[q.id]=c});
+  return{player:{handle:p.handle,name:p.name},picks,pts,ranks:{},crowd}}
  if(path==='pick'){if(!DB.me)err('Join first.',401);const q=DB.qs.find(q=>q.id===body.qid);if(!q)err('No such question',404);if(q.void)err('This question was cancelled.',409);if(dClosed(q))err('Picks for this question are closed.',409);if(DB.picks[DB.me+':'+q.id]!==undefined)err("You've already made this pick. Picks can't be changed.",409);
   if(q.kind==='multi'&&(!Array.isArray(body.option)||new Set(body.option).size!==q.pick))err(`Pick exactly ${q.pick} teams.`);
   DB.picks[DB.me+':'+q.id]=body.option;return{ok:true}}

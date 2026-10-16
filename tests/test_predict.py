@@ -29,6 +29,7 @@ class PredictTests(unittest.TestCase):
     def setUp(self):
         predict._db()
         reset()
+        predict.save_settings(show_leaderboard=True)
         self.web = eventweb.app.test_client()
 
     def join(self, handle, name="Player", ip="1.1.1.1"):
@@ -242,6 +243,11 @@ class PredictTests(unittest.TestCase):
         try:
             predict._bust()
             q = self.web.get("/predict/api/board?x=1").get_json()["questions"][0]
+            self.assertEqual(q["pct"], {})                   # open question: only players who answered see it
+            me = self.web.post("/predict/api/me", json={}, headers={"X-PW-Token": a}).get_json()
+            self.assertEqual(me["crowd"][str(qid)], {"A": 67, "B": 33})
+            predict.update_question(qid, "lock")
+            q = self.web.get("/predict/api/board?x=2").get_json()["questions"][0]
             self.assertEqual(q["pct"], {"A": 67, "B": 33})
         finally:
             predict.MIN_CROWD = 20
@@ -271,6 +277,12 @@ class PredictTests(unittest.TestCase):
         r = self.web.post("/predict/api/submit", json={"picks": {str(q1): "B", str(q2): ["A", "C"]}}, headers=h)
         self.assertEqual(r.status_code, 409)                    # nothing left; picks are final
         self.assertEqual(self.web.post("/predict/api/pick", json={"qid": q1, "option": "B"}, headers=h).status_code, 404)
+
+    def test_leaderboard_hidden_until_owner_turns_it_on(self):
+        predict.save_settings(show_leaderboard=False)
+        j = self.web.get("/predict/api/board?lb=1").get_json()
+        self.assertFalse(j["leaderboard"])
+        self.assertEqual(j["boards"], {})
 
     def test_display_name_optional(self):
         r = self.web.post("/predict/api/join", json={"handle": "noname", "name": "", "consent": True},

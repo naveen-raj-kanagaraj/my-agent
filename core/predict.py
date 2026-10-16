@@ -32,6 +32,7 @@ DEFAULTS = {
     "maps": {"1": ["Rondo", "Erangel", "Erangel", "Erangel", "Miramar", "Miramar"]},   # per day; other days reuse Day 1
     "match_questions": False,                                     # per-match chicken dinner questions (off)
     "prize": "Top 5 on the overall leaderboard win a gift card of their choice.",
+    "show_leaderboard": False,                                    # owner turns this on after the finals
     "record": 730000,                                             # BMPS 2026 peak, for the yes/no question
 }
 
@@ -729,15 +730,17 @@ def board(now: float = None) -> dict:
         out_q.append({"id": q["id"], "kind": q["kind"], "tag": q["tag"], "title": q["title"], "day": q["day"],
                       "style": q["style"], "options": q["options"], "close_ts": q["close_ts"], "closed": closed,
                       "void": bool(q["void"]), "answer": ans_list(q) if q["kind"] in ("multi", "text") else q["answer"],
-                      "pick": q["meta"].get("pick"), "ranked": bool(q["meta"].get("ranked")), "pct": _pct(_public_counts(q, s, closed), s.get("n", 0)),
-                      "picked": s.get("n", 0) >= MIN_CROWD, "worth": best})
+                      "pick": q["meta"].get("pick"), "ranked": bool(q["meta"].get("ranked")), "pct": _pct(_public_counts(q, s, closed), s.get("n", 0)) if closed else {},
+                      "picked": closed and s.get("n", 0) >= MIN_CROWD, "worth": best})
     out_q.sort(key=lambda q: (q["day"] != 0, q["day"], next(x["sort"] for x in qmap.values() if x["id"] == q["id"]), q["id"]))
     boards = {}
-    for b in ("all", 1, 2, 3):
+    show_lb = bool(settings().get("show_leaderboard"))
+    for b in ("all", 1, 2, 3) if show_lb else ():
         boards[str(b)] = [{k: r[k] for k in ("rank", "handle", "name", "pts", "correct")}
                           for r in _ranked(players, sc, b) if r["pts"] > 0][:10]
     s = settings()
-    out = {"now": now, "questions": out_q, "boards": boards, "prize": s["prize"], "days": s["days"]}
+    out = {"now": now, "questions": out_q, "boards": boards, "leaderboard": show_lb, "prize": s["prize"],
+           "days": s["days"]}
     _cache["board"] = (now, out)
     return out
 
@@ -759,7 +762,9 @@ def me(token: str) -> dict:
     mypts = {str(r["qid"]): points_for(qs[r["qid"]], st.get(r["qid"]), r["option"]) for r in rows
              if r["qid"] in qs and qs[r["qid"]]["answer"]}
     return {"player": {"handle": p["handle"], "name": p["name"], "hidden": bool(p["hidden"])},
-            "picks": picks, "pts": mypts, "ranks": ranks}
+            "picks": picks, "pts": mypts, "ranks": ranks if settings().get("show_leaderboard") else {},
+            "crowd": {str(qid): _pct(_public_counts(qs[qid], st.get(qid), True), (st.get(qid) or {}).get("n", 0))
+                      for qid in (r["qid"] for r in rows) if qid in qs}}
 
 
 def profile(handle: str, now: float = None) -> dict:
