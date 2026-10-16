@@ -56,7 +56,7 @@ PREFIXES = sorted(["iqoosoul", "iqoorntx", "iqoo", "soul", "tag", "outrage", "or
                    "8bit", "nebula", "rntx", "genesis", "gens", "gen", "blitz", "eg", "wf", "myth", "metaninza",
                    "team"], key=len, reverse=True)
 _LOOK = {s: name for name, ss in PLAYERS.items() for s in ss}
-_CACHE = {"ts": 0, "data": None}
+_CACHE = {}
 
 
 def canon(raw: str) -> str:
@@ -78,10 +78,12 @@ def canon(raw: str) -> str:
     return (str(raw).strip()[:20] or "?").title()
 
 
-def split(top: int = 6) -> dict:
+def split(top: int = 6, all_teams: bool = False) -> dict:
     """{'questions': [{tag, title, kind, rows: [{label, pct}], note}]}; cached for 60s."""
-    if _CACHE["data"] and time.time() - _CACHE["ts"] < 60:
-        return _CACHE["data"]
+    ck = (top, all_teams)
+    hit = _CACHE.get(ck)
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
     qs = {q["id"]: q for q in predict.questions()}
     st = predict._qstats(qs)
     out = []
@@ -108,7 +110,8 @@ def split(top: int = 6) -> dict:
             note = "share of all picks"
         else:
             ranked = sorted(inc.items(), key=lambda x: -x[1])
-            lim = {"multi": 8 if int((q.get("meta") or {}).get("pick", 3)) > 3 else 6}.get(q["kind"], top)
+            lim = 99 if (all_teams and q["kind"] == "multi") else \
+                {"multi": 8 if int((q.get("meta") or {}).get("pick", 3)) > 3 else 6}.get(q["kind"], top)
             rows = [{"label": k, "pct": round(100 * v / n, 1), "team": True} for k, v in ranked[:lim]]
             if q["kind"] != "multi":
                 rest = sum(v for _, v in ranked[lim:])
@@ -120,5 +123,5 @@ def split(top: int = 6) -> dict:
         out.append({"tag": q["tag"], "title": q["title"], "kind": q["kind"], "rows": rows, "note": note,
                     "answer": predict.ans_list(q) if q.get("answer") else []})
     data = {"questions": out, "ts": int(time.time())}
-    _CACHE.update(ts=time.time(), data=data)
+    _CACHE[ck] = (time.time(), data)
     return data

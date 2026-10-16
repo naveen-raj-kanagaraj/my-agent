@@ -28,6 +28,18 @@ def _predict_closed():
     # Predict & Win is off the public site unless PREDICT_OPEN=1. Players' data stays in the database and the
     # 10-minute exports (exports/predict, exports/private); only the pages and API are hidden.
     if request.path.startswith("/predict") and os.getenv("PREDICT_OPEN", "0") != "1":
+        if os.getenv("PREDICT_SPLIT", "1") == "1" and request.method == "GET":
+            if request.path in ("/predict", "/predict/"):      # the game is closed: show what the community predicted
+                from core import crowdpage
+                try:
+                    r = _memo("/predict-results", 60, crowdpage.build_html, "text/html")
+                except Exception as e:
+                    print(f"Predict results page failed: {str(e)[:150]}")
+                    return Response("Not found", status=404, mimetype="text/plain")
+                r.headers["Cache-Control"] = "public, max-age=30, s-maxage=30"
+                return r
+            if request.path == "/predict/og.png":
+                return None
         return Response("Not found", status=404, mimetype="text/plain")
 
 @app.after_request
