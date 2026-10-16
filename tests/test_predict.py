@@ -212,7 +212,7 @@ class PredictTests(unittest.TestCase):
         self.pick(a, qid, "Jonathan ")
         self.pick(b, qid, "jonathan")
         self.pick(c, qid, "Goblin")
-        self.assertEqual(predict.board()["questions"][0]["pct"], {})        # hidden until locked
+        self.assertEqual(predict.board()["questions"][0]["pct"], {})        # hidden until locked (and < 20 players)
         predict.update_question(qid, "lock")
         predict.resolve(qid, "Jonathan, Jonny")
         pts = {r["handle"]: r["pts"] for r in predict.board()["boards"]["all"]}
@@ -226,7 +226,14 @@ class PredictTests(unittest.TestCase):
         self.assertNotIn("players", j)
         q = j["questions"][0]
         self.assertNotIn("counts", q); self.assertNotIn("total", q)
-        self.assertEqual(q["pct"], {"A": 67, "B": 33})
+        self.assertEqual(q["pct"], {})                       # hidden below 20 players
+        predict.MIN_CROWD = 3
+        try:
+            predict._bust()
+            q = self.web.get("/predict/api/board?x=1").get_json()["questions"][0]
+            self.assertEqual(q["pct"], {"A": 67, "B": 33})
+        finally:
+            predict.MIN_CROWD = 20
         me = self.web.post("/predict/api/me", json={}, headers={"X-PW-Token": a}).get_json()
         self.assertNotIn("of", me)
 

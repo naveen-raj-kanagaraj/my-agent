@@ -20,7 +20,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 EVENT_KEY = "bmsd"
 
 DEFAULTS = {
-    "teams": ["Meta Ninza", "8Bit Esports", "RNTX Esports", "Epigrotive", "TAG", "Nebula", "K9 Esports", "Blue Army",
+    "teams": ["Meta Ninza", "8Bit Esports", "RNTX Esports", "Blitz x Epigrotive", "TAG", "Nebula", "K9 Esports", "V1 x Blue Army",
               "Outrage", "GodLike", "Gladiators", "Soul", "Myth Esports", "Welt Esports", "Genesis", "Wyld Fangs"],
     "mvp": [],
     "buckets": [350, 450, 500, 550, 600, 650, 700],                         # thousands; labels are built from these
@@ -600,9 +600,12 @@ def _public_counts(q: dict, s: dict, closed: bool) -> dict:
     return dict(s["inc"])
 
 
+MIN_CROWD = 20   # crowd percentages stay hidden until this many players have picked a question
+
+
 def _pct(counts: dict, n: int) -> dict:
     """Crowd split as whole percentages only: the public never sees how many people play."""
-    return {k: round(100 * v / n) for k, v in counts.items()} if n else {}
+    return {k: round(100 * v / n) for k, v in counts.items()} if n >= MIN_CROWD else {}
 
 
 def board(now: float = None) -> dict:
@@ -635,7 +638,7 @@ def board(now: float = None) -> dict:
                       "style": q["style"], "options": q["options"], "close_ts": q["close_ts"], "closed": closed,
                       "void": bool(q["void"]), "answer": ans_list(q) if q["kind"] in ("multi", "text") else q["answer"],
                       "pick": q["meta"].get("pick"), "ranked": bool(q["meta"].get("ranked")), "pct": _pct(_public_counts(q, s, closed), s.get("n", 0)),
-                      "picked": bool(s.get("n")), "worth": best})
+                      "picked": s.get("n", 0) >= MIN_CROWD, "worth": best})
     out_q.sort(key=lambda q: (q["day"] != 0, q["day"], next(x["sort"] for x in qmap.values() if x["id"] == q["id"]), q["id"]))
     boards = {}
     for b in ("all", 1, 2, 3):

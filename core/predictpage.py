@@ -262,7 +262,7 @@ const shutQ=q=>q.closed||q.void||nowS()>=q.close_ts;
 function crowdBars(q,limit){const my=myOf(q),mine=Array.isArray(my)?my:[my];const ent=Object.entries(q.pct||{}).sort((a,b)=>b[1]-a[1]);let top=ent.slice(0,limit);
  (Array.isArray(q.answer)?q.answer:q.answer?[q.answer]:[]).forEach(a=>{if(!top.some(e=>e[0]===a))top.push([a,cnt(q,a)])});
  const rest=q.kind==='multi'?0:ent.slice(limit).reduce((a,e)=>a+e[1],0);
- return `<div class="crowd"><div class="muted ch">What everyone picked</div>${top.map(([o,n])=>`<div class="cr ${mine.includes(o)?'mine':''} ${isAns(q,o)?'ok':''}"><div class="fill" style="width:${n}%"></div><span class="nmx">${tl(o)}<span>${esc(o)}</span></span><span class="pc">${n}%</span></div>`).join('')}${rest?`<div class="cr"><div class="fill" style="width:${rest}%"></div><span class="nmx"><span>Others</span></span><span class="pc">${rest}%</span></div>`:''}${!ent.length?'<div class="muted" style="font-size:13px">No picks were made.</div>':''}</div>`}
+ return `<div class="crowd"><div class="muted ch">What everyone picked</div>${top.map(([o,n])=>`<div class="cr ${mine.includes(o)?'mine':''} ${isAns(q,o)?'ok':''}"><div class="fill" style="width:${n}%"></div><span class="nmx">${tl(o)}<span>${esc(o)}</span></span><span class="pc">${n}%</span></div>`).join('')}${rest?`<div class="cr"><div class="fill" style="width:${rest}%"></div><span class="nmx"><span>Others</span></span><span class="pc">${rest}%</span></div>`:''}${!ent.length?'<div class="muted" style="font-size:13px">Crowd % shows once 20 players have picked.</div>':''}</div>`}
 function tiles(q,sel,attr,showPct,locked,ranked){return `<div class="mgrid">${q.options.map(o=>{const i=sel.indexOf(o);return `<button class="mo ${i>=0?'on':''} ${isAns(q,o)?'ok':''}" ${attr}="${q.id}" data-o="${esc(o)}" ${locked?'disabled':''}>${ranked&&i>=0?`<b class="rk">#${i+1}</b>`:''}${tl(o)}<span>${esc(o)}</span>${showPct?`<em class="tp">${pct(q,o)}%</em>`:''}</button>`}).join('')}</div>`}
 function qBody(q,shut){const my=myOf(q),done=shut||!!my;
  if(q.kind==='multi'){const sel=my?[...my]:(draft[q.id]||[]);const t=tiles(q,sel,'data-mq',done&&q.picked,done,q.ranked);
@@ -278,7 +278,7 @@ function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=Array.i
  let foot='';const got=ME&&ME.pts?ME.pts[q.id]:undefined;const ans=Array.isArray(q.answer)?q.answer.join(', '):q.answer;
  if(q.answer&&has)foot=got>0?`<span class="good">Correct · +${got} points</span>`:`<span class="bad">Missed · Answer: ${esc(ans)}</span>`;
  else if(q.answer)foot=`<span>Answer: ${esc(ans)}</span>`;
- else if(has)foot=`<span class="saved">✓ Saved · ${q.picked?'% = share of players who picked each team':'final'}</span>`;
+ else if(has)foot=`<span class="saved">✓ Saved</span><span>${q.picked?'% = share of players who picked each team':'Crowd % shows once 20 players have picked'}</span>`;
  else if(!shut)foot=`<span>${ME?'Not picked yet':'Enter your Instagram ID above to play'}</span>`;
  const how=!shut&&!has?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.style]||HOW.buttons)(q)} <b>You can't change it after.</b></div>`:'';
  return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}" data-id="${q.id}"><div class="qt"><span class="tag">${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
@@ -417,8 +417,8 @@ function dRank(b){const S={};DB.qs.forEach(q=>S[q.id]=dStats(q));
 async function demoApi(path,body){await new Promise(r=>setTimeout(r,100));const err=(m,c)=>{throw Object.assign(new Error(m),{code:c||400})};
  if(path==='board'){return{now:nowS(),prize:SEED.prize,days:SEED.days,
   questions:DB.qs.map(q=>{const s=dStats(q),cl=dClosed(q);let counts=s.inc;if(q.kind==='text'){counts={};if(cl)Object.entries(s.inc).sort((a,b)=>b[1]-a[1]).slice(0,5).forEach(([k,v])=>counts[s.names[k]]=v)}
-   const pct={};if(s.n)for(const k in counts)pct[k]=Math.round(100*counts[k]/s.n);
-   return{id:q.id,kind:q.kind,tag:q.tag,title:q.title,day:q.day,style:q.style,options:q.options,close_ts:q.close_ts,closed:cl,void:q.void,answer:q.answer,pick:q.pick,ranked:!!q.ranked,pct,picked:s.n>0,worth:dBest(q,s)}}),
+   const pct={};if(s.n>=20)for(const k in counts)pct[k]=Math.round(100*counts[k]/s.n);
+   return{id:q.id,kind:q.kind,tag:q.tag,title:q.title,day:q.day,style:q.style,options:q.options,close_ts:q.close_ts,closed:cl,void:q.void,answer:q.answer,pick:q.pick,ranked:!!q.ranked,pct,picked:s.n>=20,worth:dBest(q,s)}}),
   boards:Object.fromEntries(['all','1','2','3'].map(b=>[b,dRank(b==='all'?'all':+b).filter(r=>r.pts>0).slice(0,10).map(({rank,handle,name,pts,correct})=>({rank,handle,name,pts,correct}))]))}}
  if(path==='join'){let h=(body.handle||'').trim();const m=h.match(/instagram\.com\/([^/?#\s]+)/i);if(m)h=m[1];h=h.replace(/^@/,'').toLowerCase();
   if(!/^[a-z0-9._]{1,30}$/.test(h))err('Enter a valid Instagram ID (letters, numbers, . and _ only).');
