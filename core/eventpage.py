@@ -154,6 +154,7 @@ def _roster(out: dict) -> list:
     return rows
 
 
+PWR = """<link rel="prefetch" href="/predict"><a class="pwb" href="/predict" onclick="return pwGo(event,this.href)"><span class="pwt">// PREDICT &amp; WIN · VOTING CLOSED</span><b>WHAT THE COMMUNITY PREDICTED</b><span class="pws">Champion, top 3, BMIC, MVPs, best IGL and peak viewers, as the community called it.</span><i>SEE IT &rarr;</i></a>"""
 PWB = """<link rel="prefetch" href="/predict"><a class="pwb" href="/predict" onclick="return pwGo(event,this.href)"><span class="pwt">// NEW · FREE TO PLAY</span><b>PREDICT &amp; WIN</b><span class="pws">Call the BMSD 2026 champion, top 3 and more. Top 5 win a gift card.</span><i>PLAY NOW &rarr;</i></a>"""
 
 
@@ -201,8 +202,7 @@ def build_html(key: str = None, live: bool = False, style: str = None) -> str:
                 .replace("__ROSTERN__", json.dumps([n for _, n, _ in events.ROSTER]))
                 .replace("__REFRESH__", str(REFRESH_SEC))
                 .replace("__SOCIAL__", _social())
-                .replace("__PWB__", PWB if os.getenv("PREDICT_OPEN", "0") == "1" else "")
-                .replace("__CROWD__", _crowd_block() if live else "")
+                .replace("__PWB__", PWB if os.getenv("PREDICT_OPEN", "0") == "1" else (PWR if os.getenv("PREDICT_SPLIT", "1") == "1" else ""))
                 .replace("__BRAND__", html.escape(BRAND)).replace("__BRANDURL__", html.escape(BRAND_URL, quote=True)))
 
 CROWD = r"""<style>
@@ -397,7 +397,6 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 <div class="wrap" style="padding-bottom:0">__PWB__
 <div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
 <div class="wrap" id="app"></div>
-__CROWD__
 <script>function pwGo(e,u){if(e.metaKey||e.ctrlKey||e.shiftKey||matchMedia('(prefers-reduced-motion: reduce)').matches)return true;
  const o=document.createElement('div');o.className='pwx';o.innerHTML='<b>PREDICT &amp; WIN</b>';o.style.setProperty('--x',e.clientX+'px');o.style.setProperty('--y',e.clientY+'px');
  document.body.appendChild(o);requestAnimationFrame(()=>requestAnimationFrame(()=>o.classList.add('on')));setTimeout(()=>{location.href=u},480);return false}</script>
