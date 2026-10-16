@@ -149,6 +149,9 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .sm{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}.sm.muted{justify-content:space-between}.chev{color:var(--lime);font-size:20px;line-height:1}
 .chipx{display:inline-flex;align-items:center;gap:0;padding:4px 8px;background:var(--bg2);border:1px solid var(--line);font:600 13px "Chakra Petch"}.chipx b{color:var(--lime);margin-right:6px}.chipx .tlb{width:30px;height:18px;margin-right:6px}.chipx .tlb img{max-width:30px;max-height:18px}
 .qs{gap:8px}
+.prog{margin:0 0 12px}.prog .pt{display:flex;justify-content:space-between;font:12px "Share Tech Mono",monospace;color:var(--muted);margin-bottom:5px}.prog .pt b{color:var(--lime);font-weight:400}
+.prog .pb{height:8px;background:var(--bg2);border:1px solid var(--line)}.prog .pb i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--purple),var(--lime));transition:width .5s}
+.prog.full .pt b:after{content:"  ALL DONE";color:var(--gold)}
 .tx{display:flex;gap:8px}.tx .inp{flex:1;min-width:0}
 @media(max-width:600px){.mgrid{grid-template-columns:repeat(4,1fr);gap:5px}.mo{font-size:11px;padding:8px 2px;min-height:60px;gap:5px}.mo .tlb{width:50px;height:26px}.mo .tlb img{max-width:50px;max-height:26px}.wrap{padding:0 10px 90px}.bar .in{padding:8px 10px}.title h1{font-size:16px}.hero h2{font-size:24px}
  .card{padding:12px}.qs{grid-template-columns:1fr}.tabs button{padding:8px 10px;font-size:12px}td{padding:8px 5px}.hide-m{display:none}
@@ -182,7 +185,8 @@ PAGE = r"""<!doctype html>
   <div class="stats"><span class="pill red" id="nl">PICKS LOCK <b id="nlt">-</b></span></div>
  </div>
  <div class="card" id="joinCard"></div>
- <div class="card" id="qcard"><div class="lbl">// step 2</div><h2 style="margin:4px 0 12px">Make your picks</h2>
+ <div class="card" id="qcard"><div class="lbl">// step 2</div><h2 style="margin:4px 0 8px">Make your picks</h2>
+  <div class="prog" id="prog"><div class="pt"><span>PICKS MADE</span><b id="progN">0 / 0</b></div><div class="pb"><i id="progB"></i></div></div>
   <div class="tabs" id="dtabs"></div><div class="qs" id="qs"></div></div>
  <div class="card" id="lbCard"><div class="head"><div><div class="lbl">// leaderboard</div><h2>Top 10</h2></div><button class="btn sm" id="shareLb">Share</button></div>
   <div class="tabs" id="ltabs"></div>
@@ -296,13 +300,15 @@ function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=Array.i
  const how=!shut&&!has?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.style]||HOW.buttons)(q)} <b>You can't change it after.</b></div>`:'';
  return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'} ${ex?'open':'shut'} ${has?'done':''}" data-id="${q.id}"><button class="qh" data-x="${q.id}"><div class="qt"><span class="tag">${has?'✓ ':''}${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${ex?'':summary(q,my,shut)}</button>${ex?`<div class="qb">${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`:''}</div>`}
 function visibleQs(){const ev=B.questions.filter(q=>!q.day),dq=B.questions.filter(q=>q.day===dayTab);return{ev:dayTab===1?ev:ev.filter(q=>!shutQ(q)||q.answer),dq}}
-function renderQs(){const {ev,dq}=visibleQs(),ids=[...ev,...dq].map(q=>q.id).join(',');const box=$('qs');if(openQ===null&&ME&&!renderQs.did){renderQs.did=1;openQ=nextOpen(null)}
+function progress(){const {ev,dq}=visibleQs(),L=[...ev,...dq].filter(q=>!q.void),n=L.filter(q=>{const m=myOf(q);return Array.isArray(m)?m.length:m}).length;
+ $('progN').textContent=`${n} / ${L.length}`;$('progB').style.width=(L.length?100*n/L.length:0)+'%';$('prog').classList.toggle('full',n===L.length&&n>0)}
+function renderQs(){progress();const {ev,dq}=visibleQs(),ids=[...ev,...dq].map(q=>q.id).join(',');const box=$('qs');if(openQ===null&&ME&&!renderQs.did){renderQs.did=1;openQ=nextOpen(null)}
  if(box.dataset.ids===ids){[...ev,...dq].forEach(q=>{const h=qCard(q);if(cardHtml[q.id]!==h){cardHtml[q.id]=h;const el=box.querySelector(`.q[data-id="${q.id}"]`);if(el)el.outerHTML=h}});if(openCb)toggleCb(openCb,true);return}
  box.dataset.ids=ids;cardHtml={};
  box.innerHTML=(ev.length?`<div class="qsec">Whole tournament</div>`+ev.map(q=>(cardHtml[q.id]=qCard(q))).join(''):'')+
   `<div class="qsec">Day ${dayTab} · ${dayName(dayTab)}</div>`+(dq.map(q=>(cardHtml[q.id]=qCard(q))).join('')||`<div class="muted" style="font-size:14px">Day ${dayTab} questions open after Day ${dayTab-1}.</div>`);
  if(openCb)toggleCb(openCb,true)}
-function updCard(id){const q=B.questions.find(x=>x.id===id),el=$('qs').querySelector(`.q[data-id="${id}"]`);if(!q||!el)return renderQs();const h=qCard(q);cardHtml[id]=h;el.outerHTML=h}
+function updCard(id){progress();const q=B.questions.find(x=>x.id===id),el=$('qs').querySelector(`.q[data-id="${id}"]`);if(!q||!el)return renderQs();const h=qCard(q);cardHtml[id]=h;el.outerHTML=h}
 function setOpen(id,scroll){const prev=openQ;openQ=id;if(prev!=null)updCard(prev);if(id!=null){updCard(id);if(scroll){const el=$('qs').querySelector(`.q[data-id="${id}"]`);if(el)setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),60)}}}
 $('qs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
  if(d.x){const id=+d.x;setOpen(openQ===id?null:id,false);return}
