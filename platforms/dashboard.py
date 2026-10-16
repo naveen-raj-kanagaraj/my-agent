@@ -111,6 +111,73 @@ def event_page(key=None):
     return eventpage.build_html(key)
 
 
+def _owner() -> bool:
+    """Predict & Win admin: this computer only, plus the dashboard token when one is set."""
+    return request.remote_addr in ("127.0.0.1", "::1") and _authorised()
+
+
+@app.route("/predict")
+def predict_admin():
+    if not _owner():
+        abort(403)
+    from core import predictpage
+    return app.response_class(predictpage.ADMIN, mimetype="text/html")
+
+
+@app.route("/predict/preview")
+def predict_preview():
+    if not _owner():
+        abort(403)
+    from core import predictpage
+    return app.response_class(predictpage.build_demo_html(), mimetype="text/html")
+
+
+@app.route("/api/predict/<path:sub>", methods=["GET", "POST"])
+def predict_api(sub):
+    if not _owner():
+        abort(403)
+    from core import predict
+    j = request.get_json(silent=True) or {}
+    try:
+        if sub == "state":
+            qs = predict.questions()
+            counts = predict._counts()
+            for q in qs:
+                q["counts"] = counts.get(q["id"], {})
+                q["total"] = sum(q["counts"].values())
+            return jsonify({"settings": predict.settings(), "questions": qs, "players": predict.players_admin()})
+        if sub == "settings":
+            return jsonify(predict.save_settings(**{k: j.get(k) for k in predict.DEFAULTS if k in j}))
+        if sub == "matchday":
+            return jsonify({"created": predict.create_match_day(int(j.get("day") or 1), j.get("close_ts"))})
+        if sub == "add":
+            t, ts = j.get("type"), j.get("close_ts")
+            if t == "peak":
+                qid = predict.create_peak(int(j.get("day") or 1), ts)
+            elif t == "mvp":
+                qid = predict.create_mvp(int(j.get("day") or 0), ts)
+            elif t == "record":
+                qid = predict.create_record(ts)
+            else:
+                if not ts:
+                    raise predict.GameError("Set a close time.")
+                qid = predict.add_question("other", str(j.get("title", "")), j.get("options") or [], float(ts),
+                                           int(j.get("day") or 0), str(j.get("tag") or "BONUS"), j.get("style"))
+            return jsonify({"id": qid})
+        parts = sub.split("/")
+        if parts[0] == "q" and len(parts) == 3 and parts[2] == "tracker":
+            return jsonify(predict.resolve_from_tracker(int(parts[1])))
+        if parts[0] == "q" and len(parts) == 2:
+            return jsonify(predict.update_question(int(parts[1]), str(j.get("action")), j.get("value")))
+        if parts[0] == "player" and len(parts) == 2:
+            return jsonify(predict.player_action(int(parts[1]), str(j.get("action"))))
+        return jsonify({"error": "Not found"}), 404
+    except predict.GameError as e:
+        return jsonify({"error": str(e)}), e.code
+    except (TypeError, ValueError) as e:
+        return jsonify({"error": f"Bad request: {e}"}), 400
+
+
 @app.route("/visitors")
 def visitors_page():
     if not _authorised():

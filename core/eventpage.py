@@ -321,7 +321,7 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
  <span class="pill" title="Time since the newest reading">UPDATED <span id="ago">-</span></span>
  <span class="pill" id="nx"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle class="p" id="rp" cx="10" cy="10" r="7" stroke-dasharray="44" stroke-dashoffset="0"/></svg>NEXT <span id="nxt">-</span></span>
 </div></div>
-<div class="wrap" style="padding-bottom:0"><div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
+<div class="wrap" style="padding-bottom:0"><div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span><a class="btn sm" href="/predict" style="background:#f5c451">Predict &amp; Win</a>__SOCIAL__</div></div>
 <div class="wrap" id="app"></div>
 <div class="modal" id="modal"><div class="mbox"><div class="head"><div><h2 id="mt">Share</h2></div><button class="btn ghost sm" id="mclose">Close</button></div>
  <img id="mimg" alt="Share card"><div class="mrow"><button class="btn" id="mig">Instagram</button><button class="btn" id="mxb">X</button><button class="btn ghost" id="mdl">Download</button></div>
