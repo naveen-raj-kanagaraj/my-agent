@@ -94,7 +94,8 @@ def data(key: str = None) -> dict:
                 "when": f"{dayw}, {tf(lb['start']).strftime('%I:%M %p')} to {tf(lb['end']).strftime('%I:%M %p')} IST",
                 "start": lb["start"], "end": lb["end"],
                 "peak": lb["peak"], "peak_when": tf(lb["peak_at"]).strftime("%I:%M %p IST"),
-                "split": lb["split"],
+                "split": lb["split"], "avg": round(lb.get("avg", 0)),
+                "peak_official": lb.get("peak_official", 0), "peak_watch": lb.get("peak_watch", 0),
                 "streams": [{"vid": x["vid"], "channel": x["channel"], "title": x["title"], "kind": x["kind"],
                              "logo": events.avatar(x.get("channel_id", "")), "avg": x.get("avg", 0),
                              "viewers": x["peak"], "at": tf(x["peak_at"]).strftime("%I:%M %p"), "url": events.yt_link(x["vid"])}
@@ -166,23 +167,7 @@ def build_demo_html(style: str = "v1", logos: dict = None) -> str:
     if (logos or {}).get("@KRAFTON"):
         dl["KRAFTON INDIA ESPORTS"] = "data:image/jpeg;base64," + logos["@KRAFTON"]
     html_ = build_html("bmsd", live=False, style=style).replace("const DEMO=false, DLOGO={}", "const DEMO=true, DLOGO=" + json.dumps(dl))
-    return re.sub(r"TITLE='[^']*'", "TITLE='BMSD 2026'", html_, count=1)
-
-
-ELOGO_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "eventlogos")
-
-
-def _elogos(embed: bool = False) -> dict:
-    """Event logos for the history section: served files on the live site, embedded for snapshots and demos."""
-    import base64
-    out = {}
-    for f in sorted(os.listdir(ELOGO_DIR)) if os.path.isdir(ELOGO_DIR) else []:
-        k = f.rsplit(".", 1)[0]
-        if embed:
-            out[k] = "data:image/webp;base64," + base64.b64encode(open(os.path.join(ELOGO_DIR, f), "rb").read()).decode()
-        else:
-            out[k] = f"elogo/{f}"
-    return out
+    return re.sub(r"TITLE='[^']*'", "TITLE='BMSD 2026'", html_, count=1).replace("No event", "BMSD 2026")
 
 
 ELOGO_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "eventlogos")
@@ -408,13 +393,13 @@ function render(){
  if(!off)live.forEach(s=>by[s.kind]=(by[s.kind]||0)+s.viewers);
  if(!document.getElementById('big')){
   app.innerHTML=`<div class="card cd" id="cd" style="display:none;margin-top:12px"><div class="lbl">// Next broadcast goes live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>
-  <div class="hero"><div class="card big"><div class="lbl" id="bk"></div><div class="v" id="big" data-v="0">0</div>
+  <div class="hero"><div class="card big"><div class="head" style="margin:0"><div class="lbl" id="bk"></div><button class="btn sm" id="shareHero">Share</button></div><div class="v" id="big" data-v="0">0</div>
     <div><span id="dl" class="delta flat"></span> <span class="muted" id="nlive"></span></div>
     <div class="split" id="split"></div><div class="legend" id="leg"></div></div>
    <div class="kpis">
-    <div class="card kpi"><div class="lbl">Peak concurrent</div><div class="v" id="kp"></div><div class="s" id="kpw"></div></div>
-    <div class="card kpi"><div class="lbl">Average concurrent</div><div class="v" id="ka"></div><div class="s">while the official broadcast was live</div></div>
-    <div class="card kpi"><div class="lbl">Official peak</div><div class="v" id="ko"></div><div class="s">official broadcasts combined</div></div>
+    <div class="card kpi"><div class="lbl" id="kpl">Peak concurrent</div><div class="v" id="kp"></div><div class="s" id="kpw"></div></div>
+    <div class="card kpi"><div class="lbl">Average concurrent</div><div class="v" id="ka"></div><div class="s" id="kas">this broadcast</div></div>
+    <div class="card kpi"><div class="lbl">Official peak</div><div class="v" id="ko"></div><div class="s">official streams combined</div></div>
     <div class="card kpi"><div class="lbl">Watch parties peak</div><div class="v" id="kw"></div><div class="s">all watch parties combined</div></div></div></div>
   <div class="card"><div class="tabs" id="tabs"><button data-v="total">Total viewers</button><button data-v="wp">Watch party battle</button><button data-v="split">Official vs watch parties</button></div>
    <div class="head"><div><div class="lbl" id="chh"></div><div class="cv" id="cv"></div></div>
@@ -422,13 +407,13 @@ function render(){
     <button class="btn sm" id="shareChart">Share</button></div>
    <div class="chart" id="chartBox"><canvas id="c"></canvas></div><div class="race" id="race" hidden></div><div class="chips" id="chips"></div></div>
   <div class="grid2">
-   <div class="card" id="wpCard"><div class="head"><div><h2 id="wph">Watch party leaderboard</h2><div class="muted" style="font-size:12px">Streamers: share your rank card.</div></div><button class="btn sm" id="shareBoard">Share</button></div>
-    <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Live</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
-   <div class="card"><div class="head"><div><h2 id="lh">Live streams</h2></div>
+      <div class="card" id="stCard"><div class="head"><div><h2 id="lh">Live streams</h2></div><button class="btn sm" id="shareStreams">Share</button>
     <div class="seg" id="kf">${[['all','ALL'],['official','OFFICIAL'],['watch party','WATCH PARTIES']].map(([k,l])=>`<button data-k="${k}">${l}</button>`).join('')}</div>
     <input class="q" id="q" placeholder="Search channel or title"></div>
     <div class="scroll"><table><thead><tr><th>#</th><th>Channel / stream</th><th class="num" id="cth">Concurrent</th><th class="num hide-m" id="sth">Share</th></tr></thead><tbody id="rows"></tbody></table></div>
     <button class="more" id="more"></button></div>
+   <div class="card" id="wpCard"><div class="head"><div><h2 id="wph">Watch party leaderboard</h2><div class="muted" style="font-size:12px">Streamers: share your rank card.</div></div><button class="btn sm" id="shareBoard">Share</button></div>
+    <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Live</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
    <div class="card"><div class="head"><div><h2>By day</h2></div></div><div class="scroll"><table><thead><tr><th>Day (IST)</th><th class="num">Peak</th><th>At</th><th class="num">Average</th></tr></thead><tbody id="days"></tbody></table></div></div>
   </div><div class="foot" id="foot"></div>`;
   document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{view=b.dataset.v;hover=null;drawChart();mark()});
@@ -436,13 +421,17 @@ function render(){
   document.querySelectorAll('#kf button').forEach(b=>b.onclick=()=>{kind=b.dataset.k;rows();mark()});
   document.getElementById('q').oninput=e=>{q=e.target.value.toLowerCase();rows()};
   document.getElementById('more').onclick=()=>{showAll=!showAll;rows()};
+  document.getElementById('shareStreams').onclick=()=>openShare('streams');document.getElementById('shareHero').onclick=()=>openShare('total');
   document.getElementById('shareChart').onclick=()=>openShare(view==='wp'?'battle':view==='split'?'split':'total');
   const cv=document.getElementById('c');
   const mv=e=>{const r=cv.getBoundingClientRect(),p=e.touches?e.touches[0]:e;hover=p.clientX-r.left;if(range!=='live')drawChart()};
   cv.addEventListener('mousemove',mv);cv.addEventListener('touchstart',mv,{passive:true});cv.addEventListener('touchmove',mv,{passive:true});
   cv.addEventListener('mouseleave',()=>{hover=null;if(range!=='live')drawChart()});
  }
- document.getElementById('bk').textContent=off?`// Official offline. ${LB.day==='Yesterday'?"Yesterday's":LB.day==='Today'?"Today's":'Last'} broadcast peak (${LB.when})`:'// Watching now, all live streams';
+ const dw=LB.day==='Yesterday'?"Yesterday's":LB.day==='Today'?"Today's":'Last';
+ document.getElementById('bk').textContent=off?`// Stream ended. ${dw} peak (${LB.when})`:'// Watching now, all live streams';
+ document.getElementById('lh').textContent=off?`Streams, ${dw.toLowerCase()} broadcast`:'Live streams';
+ document.getElementById('kpl').textContent=off?`${dw} peak`:'Peak today';document.getElementById('kas').textContent=off?`${dw.toLowerCase()} broadcast`:'this broadcast so far';
  document.getElementById('cth').textContent=off?'Peak':'Concurrent';document.getElementById('sth').textContent=off?'At (IST)':'Share';
  document.getElementById('wpth').textContent=off?'Final':'Live';
  tween(document.getElementById('big'),tot);
@@ -454,8 +443,8 @@ function render(){
  const cols={official:css('--orange'),'watch party':css('--cyan'),community:css('--purple')};
  document.getElementById('split').innerHTML=Object.keys(by).map(k=>`<div style="width:${tot?100*by[k]/tot:0}%;background:${cols[k]}"></div>`).join('');
  document.getElementById('leg').innerHTML=Object.keys(by).filter(k=>k!=='community'||by[k]>0).map(k=>`<span><span class="sw" style="background:${cols[k]}"></span>${k==='watch party'?'WATCH PARTIES':k.toUpperCase()} <b>${fmt(by[k])}</b>${tot?` (${(100*by[k]/tot).toFixed(0)}%)`:''}</span>`).join('');
- document.getElementById('kp').textContent=fmt(D.peak);document.getElementById('kpw').textContent=D.peak_when;
- document.getElementById('ka').textContent=fmt(D.avg);document.getElementById('ko').textContent=fmt(D.peak_official);document.getElementById('kw').textContent=fmt(D.peak_watch);
+ const bc=LB.peak!=null;document.getElementById('kp').textContent=fmt(bc?LB.peak:D.peak);document.getElementById('kpw').textContent=bc?LB.peak_when:D.peak_when;
+ document.getElementById('ka').textContent=fmt(bc&&LB.avg!=null?LB.avg:D.avg);document.getElementById('ko').textContent=fmt(bc&&LB.peak_official!=null?LB.peak_official:D.peak_official);document.getElementById('kw').textContent=fmt(bc&&LB.peak_watch!=null?LB.peak_watch:D.peak_watch);
  document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
  document.getElementById('foot').innerHTML=`Concurrent viewers = people watching at the same moment, summed across every live YouTube stream (official, watch parties, community). Recorded only while the official broadcast is live. Counted from: ${esc(D.method)}.
   <div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div>
@@ -469,7 +458,7 @@ function wpRows(){const sb=document.getElementById('shareBoard');if(sb)sb.onclic
  let rank=0;const lim=D.official_live&&!wpAll?10:999,RR=R.slice(0,lim),mb=document.getElementById('wpmore');
  if(mb){mb.style.display=R.length>lim||wpAll&&D.official_live?'block':'none';mb.textContent=wpAll?'\u25B2 SHOW TOP 10':`\u25BC SHOW ALL ${R.length} STREAMERS`;mb.onclick=()=>{wpAll=!wpAll;wpRows()}}
  document.getElementById('wprows').innerHTML=RR.map(w=>{const has=w.status!=='upcoming';if(has)rank++;
-  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?'<span class="muted">ENDED</span>':'<span class="muted">YET TO START</span>';
+  const st=w.status==='live'?`<span class="lv"><i></i>LIVE</span> <b>${full(w.viewers)}</b>`:w.status==='ended'?`<span class="muted">PEAK</span> <b>${full(w.peak||0)}</b>`:'<span class="muted">YET TO START</span>';
   const logo=w.logo?`<img class="lg" src="${esc(w.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:`<span class="lg" style="display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">${esc(w.name.slice(0,2).toUpperCase())}</span>`;
   const nm=w.url?`<a class="ch" href="${esc(w.url)}" target="_blank" rel="noopener" style="color:var(--ink)">${esc(w.name)}</a>`:`<span class="ch">${esc(w.name)}</span>`;
   return `<tr><td class="rk ${has?'watch':''}" style="${has?'':'background:var(--line);color:var(--muted)'}">${has?rank:'-'}</td><td class="t">${logo}${nm}</td>
@@ -635,12 +624,12 @@ function card(type,vid,avatar){if(type==='history')return histCard();
  let L,y0;
  if(type==='total'||type==='split'){
   if(type==='split'){const sp0=LB.split||{};T('// OFFICIAL VS WATCH PARTIES',80,205,M(30),'#ff4d5e');
-   T('OFFICIAL',80,250,M(26),'#ff8a3d');T(fmt(D.peak_official),76,282,B(110),'#ff8a3d');T('WATCH PARTIES',560,250,M(26),'#4cc9f0');T(fmt(D.peak_watch),556,282,B(110),'#4cc9f0');
+   T('OFFICIAL',80,250,M(26),'#ff8a3d');T(fmt(LB.peak_official??D.peak_official),76,282,B(110),'#ff8a3d');T('WATCH PARTIES',560,250,M(26),'#4cc9f0');T(fmt(LB.peak_watch??D.peak_watch),556,282,B(110),'#4cc9f0');
    T('peak of each, all streams combined',80,410,M(24),'#8d8ca3')}else{
   T('// PEAK CONCURRENT VIEWERS',80,205,M(30),'#ff4d5e');
   x.shadowColor='rgba(182,242,58,.35)';x.shadowBlur=30;T(full(LB.peak||D.peak),72,245,B(170),'#ffffff');x.shadowBlur=0}
   const sp=LB.split||{},bw=(W-160-40)/3;
-  box(80,490,bw,170,'WATCHING NOW',live?fmt(nowTot):'OFFLINE',live?'at time of sharing':'broadcast ended',live?'#b6f23a':'#8d8ca3');
+  if(live)box(80,490,bw,170,'WATCHING NOW',fmt(nowTot),'at time of sharing','#b6f23a');else box(80,490,bw,170,'AVERAGE',fmt(LB.avg??D.avg),'while live','#b6f23a');
   box(80+bw+20,490,bw,170,'OFFICIAL AT PEAK',fmt(sp.official),'official streams','#ff8a3d');
   box(80+2*(bw+20),490,bw,170,'WATCH PARTIES',fmt(sp.watch),'at peak','#4cc9f0');
   L=[{label:'Total',color:'#b6f23a',pts:dayTotal(),w:5,fill:true}];y0=700;
@@ -648,6 +637,17 @@ function card(type,vid,avatar){if(type==='history')return histCard();
   x.save();x.translate(60,y0);plot(x,W-120,290,L,{live:false,multi:type==='split',nologo:true,key:'cardT'+type,padR:130,padT:40,fs:2,markPeak:type!=='split'});x.restore();
   let ly=1015;T('// WATCH PARTY LEADERS (PEAK)',80,ly,M(26),'#ff4d5e');ly+=42;
   wp.slice(0,3).forEach((w,j)=>{T(`${j+1}. ${w.channel.toUpperCase().slice(0,26)}`,80,ly,B(34),j?'#eeeef5':'#b6f23a');T(full(w.peak),W-80,ly,B(34),j?'#eeeef5':'#b6f23a','right');ly+=46});
+ }else if(type==='streams'){
+  const off=isOff(),S=(off?LB.streams||[]:D.live||[]).slice(0,10),tot=off?LB.peak:nowTot,top=Math.max(1,...S.map(s=>s.viewers)),KC={official:'#ff8a3d','watch party':'#4cc9f0'};
+  T(off?'// STREAMS, PEAK PER STREAM':'// LIVE STREAMS, RIGHT NOW',80,205,M(30),'#ff4d5e');
+  T(off?`combined peak ${full(tot||0)} at ${LB.peak_when||''}`:`${full(tot)} watching across ${(D.live||[]).length} live streams`,80,248,M(24),'#8d8ca3');
+  S.forEach((s,j)=>{const y=300+j*88,c=KC[s.kind]||'#7c5cff';
+   x.fillStyle=j%2?'rgba(255,255,255,.03)':'rgba(255,255,255,.06)';x.fillRect(60,y-8,W-120,78);x.fillStyle=c;x.fillRect(60,y-8,8,78);
+   T(String(j+1),96,y+14,B(36),'#eeeef5');avatarAt(x,avs[s.vid],170,y+31,28,c,s.channel);
+   T(s.channel.toUpperCase().slice(0,22),214,y+2,B(32),'#ffffff');
+   T((s.kind==='official'?'OFFICIAL':s.kind==='watch party'?'WATCH PARTY':'STREAM')+(s.kind==='official'&&/\[([^\]]+)\]/.test(s.title)?' // '+s.title.match(/\[([^\]]+)\]/)[1].toUpperCase():''),214,y+40,M(22),c);
+   x.fillStyle=c;x.globalAlpha=.8;x.fillRect(600,y+52,Math.max(6,(W-700)*s.viewers/top),5);x.globalAlpha=1;
+   T(full(s.viewers),W-80,y+12,B(40),'#ffffff','right')});
  }else if(type==='board'){
   const R0=(D.roster||[]),lv=R0.some(r=>r.status==='live');let R=(lv?R0.filter(r=>r.status==='live'):R0.filter(r=>r.peak).sort((a,b)=>b.peak-a.peak)).slice(0,10);
   T(lv?'// WATCH PARTY LEADERBOARD, LIVE':'// WATCH PARTY LEADERBOARD',80,205,M(30),'#ff4d5e');
@@ -701,6 +701,8 @@ let cur=null;
 async function openShare(type,vid){
  const mi=document.getElementById('mimg');mi.removeAttribute('src');mi.alt='Making the image...';cur=null;document.getElementById('modal').classList.add('on');
  const big=u=>String(u||'').replace(/=s\d+-/,'=s240-');let av=null;avs={};
+ if(type==='streams'){const S=(isOff()?(D.last_broadcast||{}).streams||[]:D.live||[]).slice(0,10);
+  const ims=await Promise.all(S.map(s=>loadImg(big(s.logo))));S.forEach((s,k)=>{if(ims[k])avs[s.vid]=ims[k]})}
  if(type==='battle'||type==='streamer'||type==='board'){
   const w=wpByPeak(),list=type==='board'?(D.roster||[]).map(r=>({vid:r.vid,name:r.name,logo:r.logo})):w.slice(0,5).map(x=>({vid:x.vid,logo:x.logo||logoOf(x.channel)}));
   const me=type==='streamer'?(w.find(x=>x.vid===vid)||(D.wp||[]).find(x=>x.vid===vid)):w[0];
@@ -712,6 +714,7 @@ async function openShare(type,vid){
  const dpk=wp.slice().sort((a,b)=>b.peak-a.peak),today=(D.days||[]).slice(-1)[0]||{},nowT=(D.live||[]).reduce((a,s)=>a+s.viewers,0);
  const LB=D.last_broadcast||{},wpp=wpByPeak();let text;
  if(type==='history'){const t=[...hist()].sort((a,b)=>b[2]-a[2])[0];text=`BGMI viewership till date: all-time high ${t[2]}K (${HNAME[t[0]]} 20${t[1]}). BMSD 2026 so far: ${hist()[15][2]}K.`}else
+ if(type==='streams'){const S=isOff()?LB.streams||[]:D.live||[],tt=isOff()?LB.peak:nowT;text=isOff()?`${TITLE}: ${full(tt||0)} combined peak across ${S.length} streams. Top: ${S.slice(0,3).map(s=>`${s.channel} ${fmt(s.viewers)}`).join(' | ')}.`:`${TITLE} live now: ${full(tt)} watching across ${S.length} streams. Top: ${S.slice(0,3).map(s=>`${s.channel} ${fmt(s.viewers)}`).join(' | ')}.`}else
  if(type==='board'){const R=(D.roster||[]).filter(r=>r.status==='live');text=R.length?`${TITLE} watch parties live now: ${R.slice(0,3).map((r,j)=>`${j+1}. ${r.name} ${fmt(r.viewers)}`).join(' | ')}.`:`${TITLE} official watch parties: ${(D.roster||[]).length} streamers.`}
  else if(type==='streamer'){const j=wpp.findIndex(w=>w.vid===vid),w=wpp[j]||{};text=`${w.channel} was the #${j+1} watch party of ${TITLE} on ${LB.date||'the day'}, peaking at ${full(w.peak)} concurrent viewers${w.avg?` (average ${full(w.avg)})`:''}.`}
  else if(type==='split')text=`${TITLE} ${LB.date||''}: official streams peaked at ${full(D.peak_official)}, watch parties at ${full(D.peak_watch)} concurrent viewers on YouTube.`;
@@ -763,17 +766,17 @@ function demoInit(m){const now=Date.now()/1000;DM={mode:m,t0:now-2.5*3600,hist:{
 function demoVal(s,t){const p=(t-DM.t0)/3600;return Math.max(0,Math.round(s.base*(.62+.38*Math.sin(p*2.4+s.ph))*(1+.06*Math.sin(t/7+s.ph))*(.97+.06*Math.random())))}
 function demoStep(t){let o=0,w=0;DM.off.concat(DM.st).forEach(s=>{if(!s.base)return;const v=demoVal(s,t);(DM.hist[s.vid]=DM.hist[s.vid]||[]).push([Math.round(t),v]);s.cur=v;s.peak=Math.max(s.peak||0,v);if(s.vid[0]==='o')o+=v;else w+=v});DM.tot.push([Math.round(t),o+w,o,w,0]);DM.last=t}
 function demoData(){const now=Date.now()/1000;if(!DM)demoInit('live');while(DM.last+2<=now)demoStep(DM.last+2);
- const liveM=DM.mode==='live',all=DM.off.concat(DM.st).filter(s=>s.base),tf=t=>new Date(t*1000).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'})+' IST';
+ const liveM=DM.mode==='live',endM=DM.mode==='ended',all=DM.off.concat(DM.st).filter(s=>s.base),tf=t=>new Date(t*1000).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit'})+' IST';
  const pk=DM.tot.reduce((a,r)=>r[1]>a[1]?r:a),live=liveM?all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.cur,url:'#',logo:s.logo||''})).sort((a,b)=>b.viewers-a.viewers):[];
  const wp=DM.st.filter(s=>s.base).map(s=>({vid:s.vid,channel:s.channel,viewers:liveM?s.cur:0,url:'#',logo:s.logo||'',peak:s.peak})).sort((a,b)=>b.viewers-a.viewers||b.peak-a.peak).slice(0,8);
  const ws={};wp.forEach(w=>ws[w.vid]=DM.hist[w.vid]);
- const roster=DM.st.map(s=>({name:s.channel,logo:s.logo||'',url:'#',vid:s.base?s.vid:'',status:!liveM||!s.base?'upcoming':'live',viewers:liveM&&s.base?s.cur:0,peak:liveM?s.peak||0:0})).sort((a,b)=>({live:0,ended:1,upcoming:2}[a.status]-{live:0,ended:1,upcoming:2}[b.status])||b.viewers-a.viewers||a.name.localeCompare(b.name));
+ const roster=DM.st.map(s=>({name:s.channel,logo:s.logo||'',url:'#',vid:s.base?s.vid:'',status:!s.base?'upcoming':liveM?'live':endM?'ended':'upcoming',viewers:liveM&&s.base?s.cur:0,peak:liveM||endM?s.peak||0:0})).sort((a,b)=>({live:0,ended:1,upcoming:2}[a.status]-{live:0,ended:1,upcoming:2}[b.status])||b.viewers-a.viewers||b.peak-a.peak||a.name.localeCompare(b.name));
  const LBs=all.map(s=>({vid:s.vid,channel:s.channel,title:s.title,kind:s.vid[0]==='o'?'official':'watch party',viewers:s.peak,avg:Math.round((DM.hist[s.vid]||[]).reduce((a,r)=>a+r[1],0)/Math.max(1,(DM.hist[s.vid]||[]).length)),at:tf(DM.t0+3600).replace(' IST',''),url:'#',logo:s.logo||''})).sort((a,b)=>b.viewers-a.viewers);
- return{name:'BMSD 2026',ticks:DM.tot.length,now,every:2,method:'demo data',updated:DM.last,official_live:liveM,next_start:liveM?null:(Date.UTC(2026,9,16,9,0)/1000>now?Date.UTC(2026,9,16,9,0)/1000:now+5*3600),live,wp,wp_series:ws,roster,
+ return{name:'BMSD 2026',ticks:DM.tot.length,now,every:2,method:'demo data',updated:DM.last,official_live:liveM,next_start:liveM||endM?null:(Date.UTC(2026,9,16,9,0)/1000>now?Date.UTC(2026,9,16,9,0)/1000:now+5*3600),live,wp,wp_series:ws,roster,
   peak:pk[1],peak_when:tf(pk[0]),avg:Math.round(DM.tot.reduce((a,r)=>a+r[1],0)/DM.tot.length),peak_official:Math.max(...DM.tot.map(r=>r[2])),peak_watch:Math.max(...DM.tot.map(r=>r[3])),
   days:[{day:'Fri 16 Oct',peak:pk[1],at:tf(pk[0]).replace(' IST',''),avg:Math.round(pk[1]*.6)}],series_all:DM.tot.filter((_,i)=>i%5===0),series_recent:DM.tot.slice(),
-  last_broadcast:{start:DM.t0,end:DM.last,peak:pk[1],peak_at:pk[0],peak_when:tf(pk[0]),split:{official:pk[2],watch:pk[3],community:0},streams:LBs,when:'Today, demo',day:'Today',date:'FRI 16 OCT'}}}
-function demoBar(){if(!DEMO)return;const b=document.createElement('div');b.className='demo';b.innerHTML='DEMO, FAKE DATA <button data-m="live">LIVE</button><button data-m="countdown">COUNTDOWN</button>';document.body.appendChild(b);
+  last_broadcast:{start:DM.t0,end:DM.last,peak:pk[1],peak_at:pk[0],peak_when:tf(pk[0]),split:{official:pk[2],watch:pk[3],community:0},streams:LBs,when:'Today, demo',day:'Today',date:'FRI 16 OCT',avg:Math.round(DM.tot.reduce((q,r)=>q+r[1],0)/Math.max(1,DM.tot.length)),peak_official:Math.max(0,...DM.tot.map(r=>r[2])),peak_watch:Math.max(0,...DM.tot.map(r=>r[3]))}}}
+function demoBar(){if(!DEMO)return;const b=document.createElement('div');b.className='demo';b.innerHTML='DEMO <button data-m="countdown">COUNTDOWN</button><button data-m="live">LIVE</button><button data-m="ended">ENDED</button>';document.body.appendChild(b);
  const mk=()=>b.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.m===DM.mode));mk();
  b.querySelectorAll('button').forEach(x=>x.onclick=()=>{DM.mode=x.dataset.m;D=demoData();mode=null;document.getElementById('app').innerHTML='';render();mk()})}
 async function tick(){
