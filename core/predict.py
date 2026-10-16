@@ -584,6 +584,11 @@ def _public_counts(q: dict, s: dict, closed: bool) -> dict:
     return dict(s["inc"])
 
 
+def _pct(counts: dict, n: int) -> dict:
+    """Crowd split as whole percentages only: the public never sees how many people play."""
+    return {k: round(100 * v / n) for k, v in counts.items()} if n else {}
+
+
 def board(now: float = None) -> dict:
     """Public state: questions with crowd counts, top 10 per leaderboard. Cached for 3 seconds."""
     now = now or time.time()
@@ -613,16 +618,15 @@ def board(now: float = None) -> dict:
         out_q.append({"id": q["id"], "kind": q["kind"], "tag": q["tag"], "title": q["title"], "day": q["day"],
                       "style": q["style"], "options": q["options"], "close_ts": q["close_ts"], "closed": closed,
                       "void": bool(q["void"]), "answer": ans_list(q) if q["kind"] in ("multi", "text") else q["answer"],
-                      "pick": q["meta"].get("pick"), "counts": _public_counts(q, s, closed), "total": s.get("n", 0),
-                      "worth": best})
+                      "pick": q["meta"].get("pick"), "pct": _pct(_public_counts(q, s, closed), s.get("n", 0)),
+                      "picked": bool(s.get("n")), "worth": best})
     out_q.sort(key=lambda q: (q["day"] != 0, q["day"], next(x["sort"] for x in qmap.values() if x["id"] == q["id"]), q["id"]))
     boards = {}
     for b in ("all", 1, 2, 3):
         boards[str(b)] = [{k: r[k] for k in ("rank", "handle", "name", "pts", "correct")}
                           for r in _ranked(players, sc, b) if r["pts"] > 0][:10]
     s = settings()
-    out = {"now": now, "questions": out_q, "boards": boards, "players": len(players), "prize": s["prize"],
-           "days": s["days"]}
+    out = {"now": now, "questions": out_q, "boards": boards, "prize": s["prize"], "days": s["days"]}
     _cache["board"] = (now, out)
     return out
 
@@ -644,7 +648,7 @@ def me(token: str) -> dict:
     mypts = {str(r["qid"]): points_for(qs[r["qid"]], st.get(r["qid"]), r["option"]) for r in rows
              if r["qid"] in qs and qs[r["qid"]]["answer"]}
     return {"player": {"handle": p["handle"], "name": p["name"], "hidden": bool(p["hidden"])},
-            "picks": picks, "pts": mypts, "ranks": ranks, "of": len(players)}
+            "picks": picks, "pts": mypts, "ranks": ranks}
 
 
 def profile(handle: str, now: float = None) -> dict:
@@ -695,6 +699,9 @@ def player_action(pid: int, action: str) -> dict:
             _db().execute("UPDATE pw_players SET hidden=1 WHERE id=?", (int(pid),))
         elif action == "unhide":
             _db().execute("UPDATE pw_players SET hidden=0 WHERE id=?", (int(pid),))
+        elif action == "delete":      # test entries: remove the player and their picks
+            _db().execute("DELETE FROM pw_picks WHERE player_id=?", (int(pid),))
+            _db().execute("DELETE FROM pw_players WHERE id=?", (int(pid),))
         elif action == "release":
             _db().execute("UPDATE pw_players SET token_hash=NULL WHERE id=?", (int(pid),))
         else:

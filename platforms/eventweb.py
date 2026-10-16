@@ -26,7 +26,7 @@ def _headers(resp):
         secs = 15
     if request.method != "GET" or resp.status_code >= 400:
         secs = None                       # POSTs, personal and error responses are never cached
-    if request.path.startswith("/elogo/"):
+    if request.path.startswith(("/elogo/", "/tlogo/")):
         return resp
     resp.headers["Cache-Control"] = f"public, max-age={secs}, s-maxage={secs}" if secs else "no-store"
     if secs:   # Cloudflare's Browser Cache TTL can override max-age; this one it passes through for its own cache
@@ -166,6 +166,19 @@ def predict_pick():
         return _err(e)
     except (TypeError, ValueError):
         return _err(predict.GameError("Bad request."))
+
+
+@app.route("/tlogo/<name>")
+def tlogo(name):
+    import re as _re
+    if not _re.fullmatch(r"[A-Z0-9]+\.webp", name):
+        return Response(status=404)
+    path = os.path.join(predictpage.TLOGO_DIR, name)
+    if not os.path.isfile(path):
+        return Response(status=404)
+    r = Response(open(path, "rb").read(), mimetype="image/webp")
+    r.headers["Cache-Control"] = "public, max-age=86400"
+    return r
 
 
 @app.route("/robots.txt")

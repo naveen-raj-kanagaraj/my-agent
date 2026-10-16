@@ -200,11 +200,23 @@ class PredictTests(unittest.TestCase):
         self.pick(a, qid, "Jonathan ")
         self.pick(b, qid, "jonathan")
         self.pick(c, qid, "Goblin")
-        self.assertEqual(predict.board()["questions"][0]["counts"], {})        # hidden until locked
+        self.assertEqual(predict.board()["questions"][0]["pct"], {})        # hidden until locked
         predict.update_question(qid, "lock")
         predict.resolve(qid, "Jonathan, Jonny")
         pts = {r["handle"]: r["pts"] for r in predict.board()["boards"]["all"]}
         self.assertEqual(pts, {"ta": 133, "tb": 133})
+
+    def test_public_board_hides_player_numbers(self):
+        a, b, c = self.tok("na"), self.tok("nb"), self.tok("nc")
+        qid = predict.add_question("other", "Q", ["A", "B"], time.time() + 3600)
+        self.pick(a, qid, "A"); self.pick(b, qid, "A"); self.pick(c, qid, "B")
+        j = self.web.get("/predict/api/board").get_json()
+        self.assertNotIn("players", j)
+        q = j["questions"][0]
+        self.assertNotIn("counts", q); self.assertNotIn("total", q)
+        self.assertEqual(q["pct"], {"A": 67, "B": 33})
+        me = self.web.post("/predict/api/me", json={}, headers={"X-PW-Token": a}).get_json()
+        self.assertNotIn("of", me)
 
     def test_display_name_optional(self):
         r = self.web.post("/predict/api/join", json={"handle": "noname", "name": "", "consent": True})

@@ -154,6 +154,9 @@ def _roster(out: dict) -> list:
     return rows
 
 
+PWB = """<a class="pwb" href="/predict"><span class="pwt">// NEW · FREE TO PLAY</span><b>PREDICT &amp; WIN</b><span class="pws">Call the BMSD 2026 champion, top 3 and more. Top 5 win a gift card.</span><i>PLAY NOW &rarr;</i></a>"""
+
+
 def _social() -> str:
     return "".join(f'<a class="soc" href="{html.escape(u, quote=True)}" target="_blank" rel="noopener">'
                    f'<b>{html.escape(n.upper())}</b><span>{html.escape(h)}</span></a>' for n, u, h in SOCIAL)
@@ -198,6 +201,7 @@ def build_html(key: str = None, live: bool = False, style: str = None) -> str:
                 .replace("__ROSTERN__", json.dumps([n for _, n, _ in events.ROSTER]))
                 .replace("__REFRESH__", str(REFRESH_SEC))
                 .replace("__SOCIAL__", _social())
+                .replace("__PWB__", PWB if os.getenv("PREDICT_OPEN", "0") == "1" else "")
                 .replace("__BRAND__", html.escape(BRAND)).replace("__BRANDURL__", html.escape(BRAND_URL, quote=True)))
 
 
@@ -326,7 +330,7 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
  <span class="pill" title="Time since the newest reading">UPDATED <span id="ago">-</span></span>
  <span class="pill" id="nx"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle class="p" id="rp" cx="10" cy="10" r="7" stroke-dasharray="44" stroke-dashoffset="0"/></svg>NEXT <span id="nxt">-</span></span>
 </div></div>
-<div class="wrap" style="padding-bottom:0"><a class="pwb" href="/predict"><span class="pwt">// NEW · FREE TO PLAY</span><b>PREDICT &amp; WIN</b><span class="pws">Call the BMSD 2026 champion, top 3 and more. Top 5 win a gift card.</span><i>PLAY NOW &rarr;</i></a>
+<div class="wrap" style="padding-bottom:0">__PWB__
 <div class="follow"><span>// FOLLOW FOR LIVE ESPORTS NUMBERS</span>__SOCIAL__</div></div>
 <div class="wrap" id="app"></div>
 <div class="modal" id="modal"><div class="mbox"><div class="head"><div><h2 id="mt">Share</h2></div><button class="btn ghost sm" id="mclose">Close</button></div>
