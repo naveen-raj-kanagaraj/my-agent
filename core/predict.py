@@ -301,13 +301,17 @@ def _exists(kind, title, day=None) -> bool:
 
 
 def create_event_set(close_ts: float = None) -> list:
-    """Whole-event questions: champion (open until the last day), top 3, BMIC qualifiers."""
+    """Whole-event questions: champion (open until the last day), top 3, BMIC qualifiers, finals MVP, best IGL,
+    the eliminator (typed answers)."""
     s = settings()
     first = _close(1, close_ts)
     last = ist_ts(s["days"]["3"], s["close"])
     spec = [("team", "Who will win the BMSD 2026 Grand Finals?", s["teams"], last, "CHAMPION", "grid", {}, 1),
             ("multi", "Which teams will finish in the top 3?", s["teams"], first, "TOP 3", "multi", {"pick": 3, "ranked": True}, 2),
-            ("multi", "Which 6 teams will qualify for BMIC?", s["teams"], first, "BMIC", "multi", {"pick": 6}, 3)]
+            ("multi", "Which 6 teams will qualify for BMIC?", s["teams"], first, "BMIC", "multi", {"pick": 6}, 3),
+            ("text", "Who will be the MVP of the Grand Finals?", [], first, "FINALS MVP", "text", {}, 4),
+            ("text", "Who will be the best IGL of the Grand Finals?", [], first, "BEST IGL", "text", {}, 5),
+            ("text", "Who will get the most finishes in the Grand Finals?", [], first, "THE ELIMINATOR", "text", {}, 6)]
     ids = []
     for kind, title, opts, close, tag, style, meta, sort in spec:
         if not _exists(kind, title):
@@ -331,6 +335,9 @@ def create_day_set(day: int, close_ts: float = None) -> list:
         if not have:
             ids.append(add_question("match", t, s["teams"], close, day, f"MATCH {m}" + (f" · {mp.upper()}" if mp else ""),
                                     "grid", {"match": m, "map": mp}, sort=m))
+    t = f"Who will be the Day {day} MVP?"
+    if not _exists("text", t, day):
+        ids.append(add_question("text", t, [], close, day, f"DAY {day} MVP", "text", sort=5))
     t = f"Which team gets the most chicken dinners on Day {day}?"
     if not _exists("team", t, day):
         ids.append(add_question("team", t, s["teams"], close, day, "MOST CHICKEN DINNERS", "grid", sort=10))

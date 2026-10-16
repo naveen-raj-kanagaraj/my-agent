@@ -143,7 +143,7 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .nmx{display:flex;align-items:center;min-width:0}.nmx>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cbl button{display:flex;align-items:center}.how{font-size:13px;color:var(--muted);margin-top:-4px}.ch{font-size:12px;margin-bottom:2px}
 .rules ul{margin:8px 0 0;padding-left:18px}.rules li{margin:5px 0;font-size:14px;color:var(--ink)}
-.tx{display:flex;gap:8px}
+.tx{display:flex;gap:8px}.qbadge{height:44px;display:block}
 .sbar{position:fixed;left:50%;transform:translateX(-50%);width:min(948px,calc(100% - 20px));bottom:10px;z-index:65;display:none;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:rgba(18,18,25,.96);border:1px solid var(--lime);box-shadow:0 8px 30px rgba(0,0,0,.6)}
 .sbar .mono{font-size:13px;color:var(--muted)}.sbar .btn[disabled]{background:var(--card2);color:var(--muted);opacity:1}.tx .inp{flex:1;min-width:0}
 @media(max-width:600px){.mgrid{grid-template-columns:repeat(4,1fr);gap:5px}.mo{font-size:11px;padding:8px 2px;min-height:60px;gap:5px}.mo .tlb{width:50px;height:26px}.mo .tlb img{max-width:50px;max-height:26px}.wrap{padding:0 10px 90px}.bar .in{padding:8px 10px}.title h1{font-size:16px}.hero h2{font-size:24px}
@@ -277,15 +277,15 @@ function qBody(q,shut){const my=myOf(q),done=shut||my!==undefined,dv=draft[q.id]
  if(q.style==='dropdown')return crowdBars(q,5);
  const cur=my!==undefined?my:dv;
  return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===cur?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${done?'disabled':''}><div class="fill" style="width:${done&&q.picked?pct(q,o):0}%"></div><span>${esc(o)}</span><span class="pc">${done&&q.picked?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
-const HOW={multi:q=>q.ranked?`Tap ${q.pick} teams in order: first tap is #1, then #2, then #3. Tap a team again to remove it.`:`Tap ${q.pick} teams. Tap a team again to remove it.`,grid:()=>'Tap a team.',buttons:()=>'Tap one.'};
+const HOW={text:()=>'Type a player name.',multi:q=>q.ranked?`Tap ${q.pick} teams in order: first tap is #1, then #2, then #3. Tap a team again to remove it.`:`Tap ${q.pick} teams. Tap a team again to remove it.`,grid:()=>'Tap a team.',buttons:()=>'Tap one.'};
 function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=my!==undefined;
  let foot='';const got=ME&&ME.pts?ME.pts[q.id]:undefined;const ans=Array.isArray(q.answer)?q.answer.join(', '):q.answer;
  if(q.answer&&has)foot=got>0?`<span class="good">Correct · +${got} points</span>`:`<span class="bad">Missed · Answer: ${esc(ans)}</span>`;
  else if(q.answer)foot=`<span>Answer: ${esc(ans)}</span>`;
  else if(has)foot=`<span class="saved">✓ Submitted</span><span>${q.picked?'% = share of players who picked each team':'Crowd % shows once 20 players have picked'}</span>`;
  else if(!shut)foot=isDone(q,draft[q.id])?'<span class="saved">✓ Answered</span>':'<span class="bad">Not answered yet</span>';
- const how=!shut&&!has?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.style]||HOW.buttons)(q)}</div>`:'';
- return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}" data-id="${q.id}"><div class="qt"><span class="tag">${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
+ const how=!shut&&!has?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.kind==='text'?'text':q.style]||HOW.buttons)(q)}</div>`:'';
+ return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}" data-id="${q.id}"><div class="qt"><span class="tag">${q.tag==='BMIC'&&TLOGO.BMIC26?`<img class="qbadge" src="${TLOGO.BMIC26}" alt="BMIC">`:esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
 function sbar(){const el=$('sbar');if(!el||!B)return;const oq=openQs(),n=oq.filter(q=>isDone(q,draft[q.id])).length;
  if(!oq.length){el.style.display='none';return}el.style.display='flex';
  $('sbt').textContent=`${n} of ${oq.length} answered`;const b=$('sbb');b.disabled=n<oq.length;b.textContent=n<oq.length?`Answer all ${oq.length} to submit`:'Submit my picks'}
@@ -399,6 +399,10 @@ function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.c
  add('team','Who will win the BMSD 2026 Grand Finals?',T,cl('3'),0,'CHAMPION','grid');
  add('multi','Which teams will finish in the top 3?',T,cl('1'),0,'TOP 3','multi',{pick:3,ranked:true});
  add('multi','Which 6 teams will qualify for BMIC?',T,cl('1'),0,'BMIC','multi',{pick:6});
+ add('text','Who will be the MVP of the Grand Finals?',[],cl('1'),0,'FINALS MVP','text');
+ add('text','Who will be the best IGL of the Grand Finals?',[],cl('1'),0,'BEST IGL','text');
+ add('text','Who will get the most finishes in the Grand Finals?',[],cl('1'),0,'THE ELIMINATOR','text');
+ add('text','Who will be the Day 1 MVP?',[],cl('1'),1,'DAY 1 MVP','text');
  
  add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKEN DINNERS','grid');
  add('peak','How many people will watch at the peak on Day 1?',SEED.buckets,cl('1'),1,'PEAK VIEWERS','buttons');
