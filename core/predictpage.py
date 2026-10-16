@@ -52,13 +52,13 @@ h2{font:700 15px "Chakra Petch",sans-serif;text-transform:uppercase;letter-spaci
 .hero h2{font-size:30px;line-height:1.05;margin:8px 0 6px}.hero h2 b{color:var(--lime)}
 .hero p{margin:0;color:var(--muted);max-width:620px}
 .prize{display:flex;align-items:center;gap:12px;margin-top:14px;padding:12px 14px;border:1px solid rgba(245,196,81,.45);background:linear-gradient(90deg,rgba(245,196,81,.14),rgba(245,196,81,.02))}
-.prize .ic{flex:none;width:38px;height:38px;display:grid;place-items:center;background:var(--gold);color:#0a0a14;font:700 18px "Chakra Petch";clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+.prize{flex-direction:column;align-items:flex-start;gap:2px}.prize .ic{flex:none;width:38px;height:38px;display:grid;place-items:center;background:var(--gold);color:#0a0a14;font:700 18px "Chakra Petch";clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
 .prize b{color:var(--gold);display:block;font-size:15px;text-transform:uppercase}.prize span{font-size:13px;color:var(--muted)}
 .stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--line);background:var(--card2);font:12px "Share Tech Mono",monospace;white-space:nowrap}
 .pill b{color:var(--lime);font-weight:400}.pill.red b{color:var(--red)}
 .field{display:block;margin:10px 0 0}.field span{display:block;font:12px "Share Tech Mono",monospace;color:var(--muted);margin-bottom:4px}
-.inp{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--ink);padding:10px 12px;font:15px "Chakra Petch",sans-serif;outline:none;border-radius:0}
+.inp{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--ink);padding:10px 12px;font:16px "Chakra Petch",sans-serif;outline:none;border-radius:0}
 .inp:focus{border-color:var(--lime)}.at{display:flex;align-items:stretch}.at i{font-style:normal;display:grid;place-items:center;padding:0 10px;border:1px solid var(--line);border-right:0;background:var(--card2);color:var(--muted)}
 .chk{display:flex;gap:8px;align-items:flex-start;margin:12px 0;font-size:13px;color:var(--muted)}.chk input{margin-top:3px;accent-color:#b6f23a;width:16px;height:16px;flex:none}
 .err{color:var(--red);font-size:13px;margin-top:8px;min-height:1em}
@@ -109,6 +109,15 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .demo select,.demo button{font:12px "Share Tech Mono",monospace;background:#fff;color:#0a0a14;border:0;padding:4px 6px;max-width:46vw}
 .pk{display:flex;flex-direction:column;gap:6px}.pk .row{display:flex;justify-content:space-between;gap:8px;padding:8px;background:var(--card2);font-size:13px}
 .pk .row b{font-weight:700}.pk .ok{color:var(--lime)}.pk .no{color:var(--red)}
+.btn.wide{width:100%;padding:13px 16px;font-size:15px}
+.pn b{font-size:18px}.pn .hd{color:var(--muted);margin-left:4px}.rkbox{text-align:right}.hd2{font:700 15px "Chakra Petch";color:var(--ink)}
+.pl{display:flex;align-items:baseline;gap:6px;min-width:0}.pl .nm{display:inline;flex:0 1 auto}.pl .hd{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.qsec{grid-column:1/-1;font:12px "Share Tech Mono",monospace;color:var(--red);letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
+.q.ev{border-color:rgba(124,92,255,.45)}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.mo{all:unset;cursor:pointer;padding:10px 10px;border:1px solid var(--line);background:var(--bg2);font:700 13px "Chakra Petch";text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+.mo.on{border-color:var(--lime);background:rgba(182,242,58,.16);color:var(--lime)}
+.mbar{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.tx{display:flex;gap:8px}.tx .inp{flex:1;min-width:0}
 @media(max-width:600px){.wrap{padding:0 10px 90px}.bar .in{padding:8px 10px}.title h1{font-size:16px}.hero h2{font-size:24px}
  .card{padding:12px}.qs{grid-template-columns:1fr}.tabs button{padding:8px 10px;font-size:12px}td{padding:8px 5px}.hide-m{display:none}
  .prize{padding:10px}.prize b{font-size:14px}}
@@ -135,19 +144,19 @@ PAGE = r"""<!doctype html>
  <div class="card hero">
   <div class="lbl">// free to play · points only</div>
   <h2>Call the numbers. <b>Climb the board.</b></h2>
-  <p>Predict match winners, the MVP and peak viewers for the BMSD 2026 Grand Finals. Picks lock when each question closes, then everyone's calls go public. Underdog calls score more.</p>
-  <div class="prize"><div class="ic">#5</div><div><b id="prizeT">Top 5 win a gift card of their choice</b><span id="prizeS">Overall leaderboard when the Grand Finals end on Sun 18 Oct. Free to enter.</span></div></div>
+  <p>Predict the champion, top 3, BMIC qualifiers, top eliminator and more for the BMSD 2026 Grand Finals. Picks lock when each question closes, then everyone's calls go public. Underdog calls score more.</p>
+  <div class="prize"><b id="prizeT">Top 5 win a gift card of their choice</b><span id="prizeS">Overall leaderboard when the Grand Finals end on Sun 18 Oct. Free to enter.</span></div>
   <div class="stats"><span class="pill">PLAYERS <b id="np">-</b></span><span class="pill red" id="nl">NEXT LOCK <b id="nlt">-</b></span><span class="pill">QUESTIONS <b id="nq">-</b></span></div>
  </div>
  <div class="card" id="joinCard"></div>
- <div class="card"><div class="head"><div><div class="lbl">// questions</div><h2>Make your calls</h2></div></div>
+ <div class="card" id="qcard"><div class="head"><div><div class="lbl">// step 2 · predict</div><h2>Make your calls</h2></div></div>
   <div class="tabs" id="dtabs"></div><div class="qs" id="qs"></div></div>
  <div class="card" id="lbCard"><div class="head"><div><div class="lbl">// leaderboard</div><h2>Top 10</h2></div><button class="btn sm" id="shareLb">Share leaderboard</button></div>
   <div class="tabs" id="ltabs"></div>
   <table><thead><tr><th>#</th><th>Player</th><th class="num">Pts</th><th class="num hide-m">Correct</th></tr></thead><tbody id="lb"></tbody></table>
   <div class="muted mono" style="font-size:12px;margin-top:8px">Gold bar = prize zone (top 5 overall). Tap a name to see their closed picks.</div></div>
  <div class="card rules"><div class="lbl">// how it works</div>
-  <p><b>Scoring:</b> a correct pick earns 100 points plus an underdog bonus of up to 100 (the fewer people who got it right, the bigger the bonus). Wrong picks score 0. You can change a pick until the question closes. Ties are ranked by points, then number of correct picks, then who joined first.</p>
+  <p><b>Scoring:</b> a correct pick earns 100 points plus an underdog bonus of up to 100 (the fewer people who got it right, the bigger the bonus). On pick-several questions (top 3, BMIC 6) each correct team earns its share of that. Wrong picks score 0. You can change a pick until the question closes. Ties are ranked by points, then number of correct picks, then who joined first.</p>
   <p><b>Prizes:</b> <span id="prizeR"></span> Winners are announced on Instagram <a href="https://www.instagram.com/letsgrowesports.igc/" target="_blank" rel="noopener">@letsgrowesports.igc</a> and contacted by DM from that account only. We will never ask for money, passwords, OTPs or bank details. To claim, the winner must message us from the Instagram handle they played with.</p>
   <p><b>Fair play:</b> one Instagram handle per person. Fake, duplicate or abusive entries are removed and can't win. Your handle, display name and picks on closed questions are public; picks on open questions stay private (only crowd percentages show). Nothing else is stored.</p>
   <p>Free to play, points only. No money or bets, no purchase needed. Unofficial fan game, not affiliated with KRAFTON, BGMI or Instagram.</p>
@@ -181,48 +190,73 @@ function closeTxt(q){if(q.void)return['Cancelled','shut'];if(q.answer)return['Se
 const dayName=d=>{const s=(B&&B.days||{})[d];return s?new Date(s+'T12:00:00+05:30').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',timeZone:'Asia/Kolkata'}):''};
 
 // ---------- join / me ----------
+const disp=p=>p.name&&p.name!==p.handle?p.name:'@'+p.handle;
+function nameHtml(p){return p.name&&p.name!==p.handle?`<b>${esc(p.name)}</b> <span class="hd">@${esc(p.handle)}</span>`:`<b>@${esc(p.handle)}</b>`}
 function renderJoin(){const c=$('joinCard');
- if(ME){const r=(ME.ranks||{}).all||{};
-  c.innerHTML=`<div class="me"><div class="av">${esc(ME.player.name.slice(0,1).toUpperCase())}</div><div class="who"><div class="lbl">// playing as</div><b>${esc(ME.player.name)}</b><a class="hd" href="https://www.instagram.com/${esc(ME.player.handle)}/" target="_blank" rel="noopener nofollow">@${esc(ME.player.handle)}</a></div>
-   <div class="mono" style="text-align:right"><div style="font-size:22px;color:var(--lime)">${r.rank?'#'+r.rank:'-'}</div><div class="muted" style="font-size:12px">${r.pts||0} PTS · ${Object.keys(ME.picks||{}).length} PICKS</div></div>
+ if(ME){const r=(ME.ranks||{}).all||{},p=ME.player;
+  c.innerHTML=`<div class="me"><div class="av">${esc((p.name||p.handle).slice(0,1).toUpperCase())}</div><div class="who"><div class="lbl">// playing as</div><div class="pn">${nameHtml(p)}</div></div>
+   <div class="mono rkbox"><div style="font-size:22px;color:var(--lime)">${r.pts?'#'+r.rank:'-'}</div><div class="muted" style="font-size:12px">${r.pts||0} PTS · ${Object.keys(ME.picks||{}).length} PICKS</div></div>
    <button class="btn sm" id="shareMe">Share my rank</button></div>`;
   $('shareMe').onclick=()=>share('me');return}
- c.innerHTML=`<div class="head"><div><div class="lbl">// join predict & win</div><h2>Play with your Instagram handle</h2><div class="muted" style="font-size:13px">No password. This device remembers you.</div></div></div>
-  <form id="jf" autocomplete="off"><label class="field"><span>INSTAGRAM HANDLE</span><div class="at"><i>@</i><input class="inp" id="jh" maxlength="80" placeholder="yourhandle" autocapitalize="none" spellcheck="false" required></div></label>
-  <label class="field"><span>DISPLAY NAME</span><input class="inp" id="jn" maxlength="32" placeholder="What the board shows" required></label>
-  <label class="chk"><input type="checkbox" id="jc"> <span>I'm OK with my handle, name and closed picks being shown publicly.</span></label>
-  <button class="btn" type="submit" id="jb">Join and start picking</button><div class="err" id="je"></div></form>`;
+ c.innerHTML=`<div class="lbl">// step 1 · join</div><h2 style="margin-top:4px">Enter your Instagram ID</h2>
+  <div class="muted" style="font-size:13px;margin-top:4px">If you finish in the top 5 we'll DM you from <b style="color:var(--ink)">@letsgrowesports.igc</b>. You can share your rank on your socials too. No password; this phone remembers you.</div>
+  <form id="jf" autocomplete="off"><label class="field"><span>INSTAGRAM ID</span><div class="at"><i>@</i><input class="inp" id="jh" maxlength="80" placeholder="yourhandle" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></div></label>
+  <label class="field"><span>DISPLAY NAME (OPTIONAL)</span><input class="inp" id="jn" maxlength="32" placeholder="Shown on the leaderboard next to your ID"></label>
+  <label class="chk"><input type="checkbox" id="jc"> <span>I'm OK with my Instagram ID, name and closed picks being shown publicly.</span></label>
+  <button class="btn wide" type="submit" id="jb">Join and start predicting</button><div class="err" id="je"></div></form>`;
  $('jf').onsubmit=async e=>{e.preventDefault();$('je').textContent='';$('jb').disabled=true;
-  try{const j=await api('join',{handle:$('jh').value,name:$('jn').value,consent:$('jc').checked});saveTok(j.token);await loadMe();await loadBoard();toast('You\'re in. Make your picks.')}
+  try{const j=await api('join',{handle:$('jh').value,name:$('jn').value,consent:$('jc').checked});saveTok(j.token);await loadMe();await loadBoard();toast('You\'re in. Make your picks.');$('qcard').scrollIntoView({behavior:'smooth'})}
   catch(err){$('je').textContent=err.message}finally{const b=$('jb');if(b)b.disabled=false}}}
 async function loadMe(){if(!TOKEN){ME=null;renderJoin();return}
  try{ME=await api('me',{})}catch(e){if(e.code===401){saveTok(null);ME=null}}renderJoin()}
 
 // ---------- questions ----------
-function dayTabs(){const qs=B.questions,ds=[...new Set(qs.map(q=>q.day))].sort((a,b)=>(a||9)-(b||9));
- if(dayTab===null||!ds.includes(dayTab)){const open=qs.filter(q=>!q.closed&&!q.void).sort((a,b)=>a.close_ts-b.close_ts)[0];dayTab=open?open.day:(ds[0]??1)}
- $('dtabs').innerHTML=ds.map(d=>`<button data-d="${d}" class="${d===dayTab?'on':''}">${d?'Day '+d:'Event'}<small>${d?dayName(d):'all days'}</small></button>`).join('');
+let draft={};
+function dayTabs(){const ds=['1','2','3'].map(Number);
+ if(dayTab===null){const open=B.questions.filter(q=>q.day&&!q.closed&&!q.void).sort((a,b)=>a.close_ts-b.close_ts)[0];dayTab=open?open.day:1}
+ $('dtabs').innerHTML=ds.map(d=>`<button data-d="${d}" class="${d===dayTab?'on':''}">Day ${d}<small>${dayName(d)}</small></button>`).join('');
  $('dtabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{dayTab=+b.dataset.d;openCb=null;renderQs();dayTabs()})}
-function pct(q,o){return q.total?Math.round(100*(q.counts[o]||0)/q.total):0}
-function renderQs(){const qs=B.questions.filter(q=>q.day===dayTab);const mine=ME?ME.picks:{};
- $('qs').innerHTML=qs.map(q=>{const [ct,cc]=closeTxt(q),my=mine[q.id],shut=q.closed||q.void||nowS()>=q.close_ts;let body='';
-  if(q.style==='dropdown'&&!shut){body=`<div class="cb" data-q="${q.id}"><button class="cbb ${my?'mine':''}" data-cb="${q.id}">${my?esc(my):`<span class="ph">${q.kind==='mvp'?'Pick a player':'Pick a team'}</span>`}</button></div>`}
-  else if(q.style==='dropdown'){const ent=Object.entries(q.counts).sort((a,b)=>b[1]-a[1]);let top=ent.slice(0,5);const rest=ent.slice(5).reduce((a,e)=>a+e[1],0);
-   if(q.answer&&!top.some(e=>e[0]===q.answer))top.push([q.answer,q.counts[q.answer]||0]);
-   body=`<div class="crowd">${top.map(([o,n])=>`<div class="cr ${o===my?'mine':''} ${o===q.answer?'ok':''}"><div class="fill" style="width:${q.total?100*n/q.total:0}%"></div><span>${esc(o)}</span><span class="pc">${pct(q,o)}%</span></div>`).join('')}${rest?`<div class="cr"><div class="fill" style="width:${100*rest/q.total}%"></div><span>Others</span><span class="pc">${Math.round(100*rest/q.total)}%</span></div>`:''}${!ent.length?'<div class="muted" style="font-size:13px">No picks were made.</div>':''}</div>`}
-  else{body=`<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${o===q.answer?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut?'disabled':''}><div class="fill" style="width:${pct(q,o)}%"></div><span>${esc(o)}</span><span class="pc">${q.total?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
-  let foot=`<span>${q.total} pick${q.total===1?'':'s'}</span>`;
-  if(q.answer&&my)foot+=my===q.answer?`<span class="good">YOU CALLED IT +${q.worth} PTS</span>`:`<span class="bad">MISSED · ANSWER: ${esc(q.answer)}</span>`;
-  else if(q.answer)foot+=`<span>ANSWER: ${esc(q.answer)} · WORTH ${q.worth}</span>`;
-  else if(my)foot+=`<span class="saved">YOUR PICK: ${esc(my)}${shut?' · LOCKED':''}</span>`;
-  else if(!shut)foot+=`<span>${ME?'NOT PICKED YET':'JOIN TO PICK'}</span>`;
-  return `<div class="q ${q.answer?'res':''} ${q.void?'void':''}"><div class="qt"><span class="tag">${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${body}<div class="qf">${foot}</div></div>`}).join('')||'<div class="muted">No questions for this day yet.</div>';
+const cnt=(q,o)=>(q.counts||{})[o]||0;
+function pct(q,o){return q.total?Math.round(100*cnt(q,o)/q.total):0}
+const isAns=(q,o)=>Array.isArray(q.answer)?q.answer.includes(o):q.answer===o;
+const myOf=q=>ME?ME.picks[q.id]:undefined;
+function crowdBars(q,limit){const my=myOf(q),mine=Array.isArray(my)?my:[my];const ent=Object.entries(q.counts||{}).sort((a,b)=>b[1]-a[1]);let top=ent.slice(0,limit);
+ (Array.isArray(q.answer)?q.answer:q.answer?[q.answer]:[]).forEach(a=>{if(q.kind!=='text'&&!top.some(e=>e[0]===a))top.push([a,cnt(q,a)])});
+ const rest=q.kind==='multi'?0:ent.slice(limit).reduce((a,e)=>a+e[1],0);
+ return `<div class="crowd">${top.map(([o,n])=>`<div class="cr ${mine.includes(o)?'mine':''} ${isAns(q,o)?'ok':''}"><div class="fill" style="width:${q.total?100*n/q.total:0}%"></div><span>${esc(o)}</span><span class="pc">${q.total?Math.round(100*n/q.total):0}%</span></div>`).join('')}${rest?`<div class="cr"><div class="fill" style="width:${100*rest/q.total}%"></div><span>Others</span><span class="pc">${Math.round(100*rest/q.total)}%</span></div>`:''}${!ent.length?`<div class="muted" style="font-size:13px">${q.kind==='text'&&!q.closed?'Names are revealed when picks lock.':'No picks were made.'}</div>`:''}</div>`}
+function qBody(q,shut){const my=myOf(q);
+ if(q.kind==='multi'){if(shut)return crowdBars(q,Math.max(q.pick,5));const sel=draft[q.id]||(my?[...my]:[]);
+  return `<div class="mgrid">${q.options.map(o=>`<button class="mo ${sel.includes(o)?'on':''}" data-mq="${q.id}" data-o="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+   <div class="mbar"><span class="mono">${sel.length}/${q.pick} SELECTED</span><button class="btn sm" data-msave="${q.id}" ${sel.length===q.pick?'':'disabled'}>${my?'Update picks':'Save picks'}</button></div>`}
+ if(q.kind==='text'){if(shut)return crowdBars(q,5);
+  return `<div class="tx"><input class="inp" data-tq="${q.id}" maxlength="40" placeholder="Type a player name" value="${esc(draft[q.id]??my??'')}" autocapitalize="words"><button class="btn sm" data-tsave="${q.id}">${my?'Update':'Save'}</button></div>`}
+ if(q.style==='dropdown'&&!shut)return `<div class="cb" data-q="${q.id}"><button class="cbb ${my?'mine':''}" data-cb="${q.id}">${my?esc(my):`<span class="ph">${q.kind==='mvp'?'Pick a player':'Pick a team'}</span>`}</button></div>`;
+ if(q.style==='dropdown')return crowdBars(q,5);
+ return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut?'disabled':''}><div class="fill" style="width:${pct(q,o)}%"></div><span>${esc(o)}</span><span class="pc">${q.total?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
+function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=q.closed||q.void||nowS()>=q.close_ts,has=Array.isArray(my)?my.length:my;
+ let foot=`<span>${q.total} player${q.total===1?'':'s'}</span>`;const got=ME&&ME.pts?ME.pts[q.id]:undefined;const ans=Array.isArray(q.answer)?q.answer.join(', '):q.answer;
+ if(q.answer&&has)foot+=got>0?`<span class="good">+${got} PTS</span>`:`<span class="bad">MISSED · ${esc(ans)}</span>`;
+ else if(q.answer)foot+=`<span>ANSWER: ${esc(ans)}</span>`;
+ else if(has)foot+=`<span class="saved">SAVED${shut?' · LOCKED':''}: ${esc(Array.isArray(my)?my.join(', '):my)}</span>`;
+ else if(!shut)foot+=`<span>${ME?'NOT PICKED YET':'JOIN TO PICK'}</span>`;
+ const sub=q.kind==='multi'?`<div class="muted" style="font-size:12px">Pick ${q.pick}. Each correct team scores.</div>`:'';
+ return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}"><div class="qt"><span class="tag">${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${sub}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
+function renderQs(){const ev=B.questions.filter(q=>!q.day),dq=B.questions.filter(q=>q.day===dayTab);
+ const evOpen=ev.filter(q=>!(q.closed||q.void||nowS()>=q.close_ts)||dayTab===1);
+ const shown=dayTab===1?ev:ev.filter(q=>q.kind==='team'||!q.closed);
+ $('qs').innerHTML=(shown.length?`<div class="qsec">// whole tournament</div>`+shown.map(qCard).join(''):'')+
+  `<div class="qsec">// day ${dayTab} only</div>`+(dq.map(qCard).join('')||`<div class="muted" style="font-size:14px">Day ${dayTab} questions open after Day ${dayTab-1} ends. Check back then.</div>`);
  $('qs').querySelectorAll('.opt:not([disabled])').forEach(b=>b.onclick=()=>doPick(+b.dataset.q,b.dataset.o));
  $('qs').querySelectorAll('[data-cb]').forEach(b=>b.onclick=e=>{e.stopPropagation();toggleCb(+b.dataset.cb)});
+ $('qs').querySelectorAll('[data-mq]').forEach(b=>b.onclick=()=>{const id=+b.dataset.mq,q=B.questions.find(x=>x.id===id),my=myOf(q);const sel=draft[id]||(my?[...my]:[]);const o=b.dataset.o,i=sel.indexOf(o);
+  if(i>=0)sel.splice(i,1);else if(sel.length<q.pick)sel.push(o);else{toast(`You can pick ${q.pick}. Tap one to remove it first.`);return}draft[id]=sel;renderQs()});
+ $('qs').querySelectorAll('[data-msave]').forEach(b=>b.onclick=()=>{const id=+b.dataset.msave;doPick(id,draft[id]||myOf(B.questions.find(x=>x.id===id)))});
+ $('qs').querySelectorAll('[data-tq]').forEach(i=>i.oninput=()=>{draft[+i.dataset.tq]=i.value});
+ $('qs').querySelectorAll('[data-tsave]').forEach(b=>b.onclick=()=>{const id=+b.dataset.tsave,v=document.querySelector(`[data-tq="${id}"]`).value.trim();if(v.length<2){toast('Type a player name');return}doPick(id,v)});
  if(openCb)toggleCb(openCb,true)}
 function toggleCb(qid,force){document.querySelectorAll('.cbp').forEach(p=>p.remove());if(openCb===qid&&!force){openCb=null;return}
  const q=B.questions.find(x=>x.id===qid),host=document.querySelector(`.cb[data-q="${qid}"]`);if(!q||!host){openCb=null;return}openCb=qid;
- const my=ME&&ME.picks[qid],p=document.createElement('div');p.className='cbp';
+ const my=myOf(q),p=document.createElement('div');p.className='cbp';
  p.innerHTML=`<input class="inp" placeholder="Search ${q.options.length} ${q.kind==='mvp'?'players':'teams'}" aria-label="Search"><div class="cbl" role="listbox"></div>`;host.appendChild(p);
  const inp=p.querySelector('input'),list=p.querySelector('.cbl');
  const draw=()=>{const f=inp.value.trim().toLowerCase();list.innerHTML=q.options.filter(o=>!f||o.toLowerCase().includes(f)).map(o=>`<button role="option" class="${o===my?'sel':''}" data-o="${esc(o)}">${esc(o)}</button>`).join('')||'<div class="muted" style="padding:10px">No match</div>';
@@ -230,22 +264,22 @@ function toggleCb(qid,force){document.querySelectorAll('.cbp').forEach(p=>p.remo
  draw();inp.oninput=draw;p.onclick=e=>e.stopPropagation();if(window.innerWidth>600)inp.focus();
  inp.onkeydown=e=>{if(e.key==='Escape'){openCb=null;p.remove()}if(e.key==='Enter'){const b=list.querySelector('button');if(b)b.click()}}}
 document.addEventListener('click',()=>{if(openCb){openCb=null;document.querySelectorAll('.cbp').forEach(p=>p.remove())}});
-async function doPick(qid,o){if(!ME){toast('Join first (top of the page)');$('joinCard').scrollIntoView({behavior:'smooth'});return}
- if(busy[qid])return;busy[qid]=1;const prev=ME.picks[qid];ME.picks[qid]=o;renderQs();
- try{await api('pick',{qid,option:o});toast('Pick saved: '+o);loadBoard()}catch(e){if(prev)ME.picks[qid]=prev;else delete ME.picks[qid];toast(e.message);renderQs()}finally{delete busy[qid]}}
+async function doPick(qid,o){if(!ME){toast('Enter your Instagram ID first');$('joinCard').scrollIntoView({behavior:'smooth'});return}
+ if(busy[qid])return;busy[qid]=1;const prev=ME.picks[qid];ME.picks[qid]=Array.isArray(o)?[...o]:o;delete draft[qid];renderQs();
+ try{await api('pick',{qid,option:o});toast('Saved: '+(Array.isArray(o)?o.join(', '):o));renderJoin();loadBoard()}catch(e){if(prev!==undefined)ME.picks[qid]=prev;else delete ME.picks[qid];toast(e.message);renderQs()}finally{delete busy[qid]}}
 
 // ---------- leaderboard ----------
 function lbTabs(){const t=[['all','Overall'],...['1','2','3'].map(d=>[d,'Day '+d])];
  $('ltabs').innerHTML=t.map(([k,l])=>`<button data-k="${k}" class="${k===lbTab?'on':''}">${l}</button>`).join('');
  $('ltabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{lbTab=b.dataset.k;lbTabs();renderLb()})}
-function lbRow(r,cls){return `<tr class="${cls} ${r.rank<=3?'r'+r.rank:''} ${lbTab==='all'&&r.rank<=5?'top5':''}"><td class="rk">${r.rank}</td><td style="max-width:0;width:100%"><button class="nm" data-h="${esc(r.handle)}">${esc(r.name)}</button><a class="hd" href="https://www.instagram.com/${esc(r.handle)}/" target="_blank" rel="noopener nofollow">@${esc(r.handle)}</a></td><td class="num"><b>${r.pts}</b></td><td class="num hide-m">${r.correct}</td></tr>`}
+function lbRow(r,cls){return `<tr class="${cls} ${r.rank<=3?'r'+r.rank:''} ${lbTab==='all'&&r.rank<=5?'top5':''}"><td class="rk">${r.rank}</td><td style="max-width:0;width:100%"><div class="pl"><button class="nm" data-h="${esc(r.handle)}">${esc(disp(r))}</button>${r.name&&r.name!==r.handle?`<a class="hd" href="https://www.instagram.com/${esc(r.handle)}/" target="_blank" rel="noopener nofollow">@${esc(r.handle)}</a>`:''}</div></td><td class="num"><b>${r.pts}</b></td><td class="num hide-m">${r.correct}</td></tr>`}
 function renderLb(){const rows=(B.boards[lbTab]||[]);const meH=ME&&ME.player.handle;
  let h=rows.map(r=>lbRow(r,r.handle===meH?'you':'')).join('')||'<tr><td colspan=4 class="muted">No points yet. The board fills up as questions are settled.</td></tr>';
  const mr=ME&&ME.ranks&&ME.ranks[lbTab];
  if(mr&&!rows.some(r=>r.handle===meH)&&rows.length)h+=`<tr class="you pin"><td class="rk">${mr.rank}</td><td colspan=3><b>You: #${mr.rank} · ${mr.pts} pts</b> <span class="muted mono" style="font-size:12px">of ${ME.of}</span></td></tr>`;
  $('lb').innerHTML=h;$('lb').querySelectorAll('.nm').forEach(b=>b.onclick=()=>showProfile(b.dataset.h))}
 async function showProfile(h){$('pmt').textContent='@'+h;$('pms').textContent='Loading...';$('pmb').innerHTML='';$('pmodal').classList.add('on');
- try{const p=await api('profile/'+encodeURIComponent(h));$('pmt').textContent=p.name;
+ try{const p=await api('profile/'+encodeURIComponent(h));$('pmt').textContent=disp(p);
   $('pms').innerHTML=`<a href="https://www.instagram.com/${esc(p.handle)}/" target="_blank" rel="noopener nofollow">@${esc(p.handle)}</a> · ${p.rank?'#'+p.rank+' · ':''}${p.pts} pts · ${p.correct} correct`;
   $('pmb').innerHTML=p.picks.map(k=>`<div class="row"><span><span class="muted mono" style="font-size:11px">${esc(k.tag)}</span><br>${esc(k.title)}</span><span style="text-align:right"><b>${esc(k.pick)}</b><br>${k.void?'<span class="muted">cancelled</span>':k.correct===null?'<span class="muted">awaiting result</span>':k.correct?`<span class="ok">+${k.pts}</span>`:'<span class="no">0</span>'}</span></div>`).join('')||'<div class="muted">No closed picks yet. Picks become public when a question closes.</div>'}
  catch(e){$('pms').textContent=e.message}}
@@ -266,7 +300,7 @@ function lbCard(){const {c,x,T,M,F,W}=cardBase(),rows=(B.boards[lbTab]||[]).slic
  if(!rows.length)T('THE BOARD FILLS UP AS QUESTIONS ARE SETTLED',80,330,F(36),'#eeeef5');
  rows.forEach((r,j)=>{const y=300+j*84,gold=lbTab==='all'&&r.rank<=5,c=r.rank===1?'#f5c451':gold?'#f5c451':r.rank<=3?'#b6f23a':'#eeeef5';
   x.fillStyle=j%2?'rgba(255,255,255,.03)':'rgba(255,255,255,.06)';x.fillRect(60,y-8,W-120,74);if(gold){x.fillStyle='#f5c451';x.fillRect(60,y-8,8,74)}
-  T(String(r.rank),110,y+12,F(38),c,'center');T(r.name.toUpperCase(),160,y,F(34),'#ffffff',null,W-160-300);T('@'+r.handle,160,y+40,M(22),'#8d8ca3',null,W-160-300);
+  T(String(r.rank),110,y+12,F(38),c,'center');if(r.name&&r.name!==r.handle){T(r.name.toUpperCase(),160,y,F(34),'#ffffff',null,W-160-300);T('@'+r.handle,160,y+40,M(22),'#8d8ca3',null,W-160-300)}else T('@'+r.handle,160,y+12,F(34),'#ffffff',null,W-160-300);
   T(r.pts+' PTS',W-90,y+10,F(38),c,'right')});return c}
 function meCard(){const {c,x,T,M,F,W}=cardBase(),r=(ME.ranks||{}).all||{},h='@'+ME.player.handle;
  T('// MY RANK',80,205,M(30),'#ff4d5e');
@@ -276,11 +310,11 @@ function meCard(){const {c,x,T,M,F,W}=cardBase(),r=(ME.ranks||{}).all||{},h='@'+
  x.fillStyle='rgba(245,196,81,.12)';x.fillRect(80,770,W-160,150);x.fillStyle='#f5c451';x.fillRect(80,770,8,150);
  T('TOP 5 WIN A GIFT CARD',112,800,F(44),'#f5c451');T('Think you can beat me? Make your calls before they lock.',112,858,M(26),'#eeeef5',null,W-220);
  const top=(B.boards.all||[]).slice(0,3);T('// CURRENT TOP 3',80,970,M(26),'#ff4d5e');
- top.forEach((t,j)=>{T(`${t.rank}. ${t.name.toUpperCase()}`,80,1012+j*44,F(32),j?'#eeeef5':'#f5c451',null,700);T(t.pts+' PTS',W-80,1012+j*44,F(32),j?'#eeeef5':'#f5c451','right')});return c}
+ top.forEach((t,j)=>{T(`${t.rank}. ${disp(t).toUpperCase()}`,80,1012+j*44,F(32),j?'#eeeef5':'#f5c451',null,700);T(t.pts+' PTS',W-80,1012+j*44,F(32),j?'#eeeef5':'#f5c451','right')});return c}
 let shared=null;
 async function share(type){await FONTS;const c=type==='me'?meCard():lbCard();$('smt').textContent=type==='me'?'Share my rank':'Share leaderboard';$('simg').removeAttribute('src');$('smodal').classList.add('on');
  const r=(ME&&ME.ranks.all)||{};
- const text=type==='me'?`@${ME.player.handle} is #${r.rank||'-'} on Predict & Win · ${r.pts||0} pts. BMSD 2026 Grand Finals: call the winners, top 5 win a gift card.`:`BMSD 2026 Predict & Win leaderboard${lbTab==='all'?'':' (Day '+lbTab+')'}: ${(B.boards[lbTab]||[]).slice(0,3).map(x=>`${x.rank}. ${x.name} ${x.pts}`).join(' | ')}. Free to play, top 5 win a gift card.`;
+ const text=type==='me'?`@${ME.player.handle} is #${r.rank||'-'} on Predict & Win · ${r.pts||0} pts. BMSD 2026 Grand Finals: call the winners, top 5 win a gift card.`:`BMSD 2026 Predict & Win leaderboard${lbTab==='all'?'':' (Day '+lbTab+')'}: ${(B.boards[lbTab]||[]).slice(0,3).map(x=>`${x.rank}. ${disp(x)} ${x.pts}`).join(' | ')}. Free to play, top 5 win a gift card.`;
  c.toBlob(b=>{shared={blob:b,text,name:type==='me'?'predict-my-rank.png':'predict-leaderboard.png'};$('simg').src=URL.createObjectURL(b)},'image/png')}
 $('sNative').onclick=async()=>{if(!shared)return;const f=new File([shared.blob],shared.name,{type:'image/png'});
  try{if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],text:shared.text+' '+URLP});else if(navigator.share)await navigator.share({text:shared.text,url:URLP});else{dl();toast('Image downloaded')}}catch(e){}};
@@ -304,51 +338,64 @@ function tick(){if(!B)return;B.questions.forEach(q=>{if(!q.closed&&nowS()>=q.clo
  setInterval(()=>{if(!document.hidden&&!openCb)loadBoard()},DEMO?4000:20000);setInterval(()=>{if(!document.hidden&&TOKEN)loadMe().then(renderLb)},60000)})();
 
 // ---------- preview engine (DEMO only: everything below runs in the browser, nothing is saved) ----------
-function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.close+':00+05:30')/1000;
+function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.close+':00+05:30')/1000,T=SEED.teams;
  const names=['Aarav','Ishaan','Kabir','Vihaan','Rohan','Arjun','Neha','Priya','Sneha','Ananya','Rahul','Karan','Dev','Aditya','Tanvi','Meera','Yash','Om','Riya','Zoya','Sahil','Varun','Manav','Nikhil','Pooja','Kriti','Harsh','Siddh','Tara','Ira','Aryan','Ayaan','Diya','Jay','Laksh','Mihir','Nisha','Parth','Rehan','Veer'];
- DB={players:names.map((n,i)=>({id:i+1,handle:(n+'_'+['gg','op','x','bgmi','yt','fps'][i%6]).toLowerCase(),name:n+(i%3?'':' OP'),created:t0-9000+i*60,hidden:false})),qs:[],picks:{},me:null,seq:1};
+ DB={players:names.map((n,i)=>({id:i+1,handle:(n+'_'+['gg','op','x','bgmi','yt','fps'][i%6]).toLowerCase(),name:i%4?n+(i%3?'':' OP'):'',created:t0-9000+i*60,hidden:false})),qs:[],picks:{},me:null,seq:1};
  const add=(kind,title,opts,close,day,tag,style,extra)=>DB.qs.push(Object.assign({id:DB.seq++,kind,title,options:opts,close_ts:close,day,tag,style,locked:false,answer:null,void:false},extra||{}));
- add('match','Sample: a match that already finished',SEED.teams,t0-3600,1,'SAMPLE · SETTLED','dropdown');
- for(const day of ['1','2','3']){for(let m=1;m<=SEED.matches;m++)add('match',`Day ${day} · Match ${m}: Who wins?`,SEED.teams,cl(day),+day,'MATCH WINNER','dropdown');
-  add('peak',`What will Day ${day} peak viewers be?`,SEED.buckets,cl(day),+day,'PEAK VIEWERS','buttons')}
- add('mvp','Day 1 MVP: who takes it?',['Jonathan (GodLike)','Neyoo (Blue Army)','Goblin (Soul)','Spower (Nebula)','Aditya (Gladiators)','Clutchgod (Genesis)','Shadow (Meta Ninza)'],cl('1'),1,'MVP','dropdown');
- add('yesno',"Will BMSD 2026 beat BMPS 2026's 730K peak?",['Yes','No'],cl('1'),0,'RECORD WATCH','buttons');
- add('other','Which team gets the most finishes on Day 1?',['GodLike','Soul','Nebula','Gladiators','Other'],cl('1'),1,'BONUS','buttons');
- const w=o=>o.map((v,i)=>[v,1/Math.pow(i+1,.8)]);const pickW=o=>{const ws=w(o),s=ws.reduce((a,b)=>a+b[1],0);let r=Math.random()*s;for(const [v,x] of ws){r-=x;if(r<=0)return v}return o[0]};
- DB.players.forEach(p=>DB.qs.forEach(q=>{if(Math.random()<.75)DB.picks[p.id+':'+q.id]=pickW(q.options)}));
- const q1=DB.qs[0];q1.locked=true;q1.answer=q1.options[2]}
+ add('team','Which team will win the BMSD 2026 Grand Finals?',T,cl('3'),0,'CHAMPION','dropdown');
+ add('multi','Predict the top 3 teams of the Grand Finals',T,cl('1'),0,'TOP 3','multi',{pick:3});
+ add('multi','Which 6 teams qualify for BMIC?',T,cl('1'),0,'BMIC QUALIFIERS','multi',{pick:6});
+ add('text','Who will be the top eliminator of the Grand Finals?',[],cl('1'),0,'TOP ELIMINATOR','text');
+ add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKENS','dropdown');
+ add('peak','What will Day 1 peak viewers be?',SEED.buckets,cl('1'),1,'PEAK VIEWERS','buttons');
+ const pw=o=>{const ws=o.map((v,i)=>[v,1/Math.pow(i+1,.8)]),s=ws.reduce((a,b)=>a+b[1],0);let r=Math.random()*s;for(const [v,x] of ws){r-=x;if(r<=0)return v}return o[0]};
+ const elim=['Jonathan','Jonathan','Goblin','Spower','jonathan ','Aditya','Neyoo','Clutchgod'];
+ DB.players.forEach(p=>DB.qs.forEach(q=>{if(Math.random()>.8)return;let v;
+  if(q.kind==='multi'){const s=new Set();while(s.size<q.pick)s.add(pw(q.options));v=[...s]}else if(q.kind==='text')v=elim[Math.floor(Math.random()*elim.length)];else v=pw(q.options);DB.picks[p.id+':'+q.id]=v}))}
 const dClosed=q=>q.locked||nowS()>=q.close_ts;
-function dCounts(){const c={};for(const k in DB.picks){const [pid,qid]=k.split(':').map(Number);if(DB.players[pid-1]&&DB.players[pid-1].hidden)continue;(c[qid]=c[qid]||{})[DB.picks[k]]=((c[qid]||{})[DB.picks[k]]||0)+1}return c}
-function dWorth(q,c){const n=Object.values(c).reduce((a,b)=>a+b,0),k=c[q.answer]||0;return!n||!k?100:100+Math.round(100*(1-k/n))}
-function dScores(){const C=dCounts(),sc={};DB.players.forEach(p=>sc[p.id]={all:[0,0],1:[0,0],2:[0,0],3:[0,0]});
- DB.qs.filter(q=>q.answer&&!q.void).forEach(q=>{const w=dWorth(q,C[q.id]||{});DB.players.forEach(p=>{if(DB.picks[p.id+':'+q.id]===q.answer){for(const b of q.day?['all',q.day]:['all']){sc[p.id][b][0]+=w;sc[p.id][b][1]++}}})});return sc}
-function dRank(b){const sc=dScores();const rows=DB.players.filter(p=>!p.hidden).map(p=>({id:p.id,handle:p.handle,name:p.name,pts:sc[p.id][b][0],correct:sc[p.id][b][1],created:p.created})).sort((a,b)=>b.pts-a.pts||b.correct-a.correct||a.created-b.created);
- let rk=0,prev=null;rows.forEach((r,i)=>{const k=r.pts+'/'+r.correct;if(k!==prev){rk=i+1;prev=k}r.rank=rk});return rows}
-async function demoApi(path,body){await new Promise(r=>setTimeout(r,120));const err=(m,c)=>{throw Object.assign(new Error(m),{code:c||400})};
- if(path==='board'){const C=dCounts();return{now:nowS(),players:DB.players.filter(p=>!p.hidden).length,prize:'Top 5 on the overall leaderboard win a gift card of their choice.',days:SEED.days,
-  questions:DB.qs.map(q=>({id:q.id,kind:q.kind,tag:q.tag,title:q.title,day:q.day,style:q.style,options:q.options,close_ts:q.close_ts,closed:dClosed(q),void:q.void,answer:q.answer,counts:C[q.id]||{},total:Object.values(C[q.id]||{}).reduce((a,b)=>a+b,0),worth:q.answer?dWorth(q,C[q.id]||{}):null})),
+const tn=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function dStats(q){const s={n:0,inc:{},names:{}};DB.players.forEach(p=>{if(p.hidden)return;const v=DB.picks[p.id+':'+q.id];if(v===undefined)return;s.n++;
+ if(q.kind==='multi')v.forEach(t=>s.inc[t]=(s.inc[t]||0)+1);else if(q.kind==='text'){const k=tn(v);s.inc[k]=(s.inc[k]||0)+1;s.names[k]=s.names[k]||v.trim()}else s.inc[v]=(s.inc[v]||0)+1});return s}
+const dAns=q=>!q.answer?[]:Array.isArray(q.answer)?q.answer:[q.answer];
+function dPts(q,s,v){if(!q.answer||q.void||v===undefined)return 0;const n=Math.max(1,s.n),A=dAns(q);
+ if(q.kind==='multi')return Math.round(v.filter(t=>A.includes(t)).reduce((a,t)=>a+(100+100*(1-(s.inc[t]||1)/n))/q.pick,0));
+ if(q.kind==='text'){const acc=A.map(tn);if(!acc.includes(tn(v)))return 0;const c=Object.entries(s.inc).filter(([k])=>acc.includes(k)).reduce((a,e)=>a+e[1],0)||1;return 100+Math.round(100*(1-c/n))}
+ return v===q.answer?100+Math.round(100*(1-(s.inc[v]||1)/n)):0}
+function dBest(q,s){if(!q.answer||q.void)return null;const n=Math.max(1,s.n),A=dAns(q);
+ if(q.kind==='multi')return Math.round(A.reduce((a,t)=>a+100+100*(1-(s.inc[t]||1)/n),0)/q.pick);
+ if(q.kind==='text'){const acc=A.map(tn),c=Object.entries(s.inc).filter(([k])=>acc.includes(k)).reduce((a,e)=>a+e[1],0)||1;return 100+Math.round(100*(1-c/n))}
+ return 100+Math.round(100*(1-(s.inc[q.answer]||1)/n))}
+function dRank(b){const S={};DB.qs.forEach(q=>S[q.id]=dStats(q));
+ const rows=DB.players.filter(p=>!p.hidden).map(p=>{let pts=0,c=0;DB.qs.forEach(q=>{if(b!=='all'&&q.day!==b)return;const x=dPts(q,S[q.id],DB.picks[p.id+':'+q.id]);if(x){pts+=x;c++}});return{id:p.id,handle:p.handle,name:p.name,pts,correct:c,created:p.created}})
+  .sort((a,b)=>b.pts-a.pts||b.correct-a.correct||a.created-b.created);rows.forEach((r,i)=>r.rank=i+1);return rows}
+async function demoApi(path,body){await new Promise(r=>setTimeout(r,100));const err=(m,c)=>{throw Object.assign(new Error(m),{code:c||400})};
+ if(path==='board'){return{now:nowS(),players:DB.players.filter(p=>!p.hidden).length,prize:SEED.prize,days:SEED.days,
+  questions:DB.qs.map(q=>{const s=dStats(q),cl=dClosed(q);let counts=s.inc;if(q.kind==='text'){counts={};if(cl)Object.entries(s.inc).sort((a,b)=>b[1]-a[1]).slice(0,5).forEach(([k,v])=>counts[s.names[k]]=v)}
+   return{id:q.id,kind:q.kind,tag:q.tag,title:q.title,day:q.day,style:q.style,options:q.options,close_ts:q.close_ts,closed:cl,void:q.void,answer:q.answer,pick:q.pick,counts,total:s.n,worth:dBest(q,s)}}),
   boards:Object.fromEntries(['all','1','2','3'].map(b=>[b,dRank(b==='all'?'all':+b).filter(r=>r.pts>0).slice(0,10).map(({rank,handle,name,pts,correct})=>({rank,handle,name,pts,correct}))]))}}
  if(path==='join'){let h=(body.handle||'').trim();const m=h.match(/instagram\.com\/([^/?#\s]+)/i);if(m)h=m[1];h=h.replace(/^@/,'').toLowerCase();
-  if(!/^[a-z0-9._]{1,30}$/.test(h))err('Enter a valid Instagram handle (letters, numbers, . and _ only).');if(!(body.name||'').trim())err('Enter a display name.');
-  if(!body.consent)err('Please tick the box to agree your handle, name and closed picks are shown publicly.');
-  if(DB.players.some(p=>p.handle===h))err("That handle is already playing on another device. If it's yours, DM @letsgrowesports.igc on Instagram to release it.",409);
-  const p={id:DB.players.length+1,handle:h,name:body.name.trim().slice(0,32),created:nowS(),hidden:false};DB.players.push(p);DB.me=p.id;return{token:'demo',player:p}}
- if(path==='me'){if(!DB.me)err('Not joined',401);const p=DB.players[DB.me-1],picks={};DB.qs.forEach(q=>{const v=DB.picks[p.id+':'+q.id];if(v)picks[q.id]=v});
+  if(!/^[a-z0-9._]{1,30}$/.test(h))err('Enter a valid Instagram ID (letters, numbers, . and _ only).');
+  if(!body.consent)err('Please tick the box to agree your ID, name and closed picks are shown publicly.');
+  if(DB.players.some(p=>p.handle===h))err("That Instagram ID is already playing on another device. If it's yours, DM @letsgrowesports.igc to release it.",409);
+  const p={id:DB.players.length+1,handle:h,name:(body.name||'').trim().slice(0,32),created:nowS(),hidden:false};DB.players.push(p);DB.me=p.id;return{token:'demo',player:p}}
+ if(path==='me'){if(!DB.me)err('Not joined',401);const p=DB.players[DB.me-1],picks={},pts={};DB.qs.forEach(q=>{const v=DB.picks[p.id+':'+q.id];if(v!==undefined){picks[q.id]=v;if(q.answer)pts[q.id]=dPts(q,dStats(q),v)}});
   const ranks={};['all','1','2','3'].forEach(b=>{const r=dRank(b==='all'?'all':+b).find(r=>r.id===p.id);ranks[b]={rank:r.rank,pts:r.pts,correct:r.correct}});
-  return{player:{handle:p.handle,name:p.name},picks,ranks,of:DB.players.length}}
+  return{player:{handle:p.handle,name:p.name},picks,pts,ranks,of:DB.players.length}}
  if(path==='pick'){if(!DB.me)err('Join first.',401);const q=DB.qs.find(q=>q.id===body.qid);if(!q)err('No such question',404);if(q.void)err('This question was cancelled.',409);if(dClosed(q))err('Picks for this question are closed.',409);
+  if(q.kind==='multi'&&(!Array.isArray(body.option)||new Set(body.option).size!==q.pick))err(`Pick exactly ${q.pick} teams.`);
   DB.picks[DB.me+':'+q.id]=body.option;return{ok:true}}
- if(path.startsWith('profile/')){const h=decodeURIComponent(path.slice(8)),p=DB.players.find(p=>p.handle===h);if(!p)err('No such player',404);const C=dCounts(),r=dRank('all').find(r=>r.id===p.id);
-  return{handle:p.handle,name:p.name,rank:r.rank,pts:r.pts,correct:r.correct,picks:DB.qs.filter(q=>dClosed(q)&&DB.picks[p.id+':'+q.id]).map(q=>{const k=DB.picks[p.id+':'+q.id];return{qid:q.id,title:q.title,tag:q.tag,day:q.day,pick:k,answer:q.answer,void:q.void,correct:q.answer&&!q.void?k===q.answer:null,pts:q.answer&&k===q.answer?dWorth(q,C[q.id]||{}):0}})}}
+ if(path.startsWith('profile/')){const h=decodeURIComponent(path.slice(8)),p=DB.players.find(p=>p.handle===h);if(!p)err('No such player',404);const r=dRank('all').find(r=>r.id===p.id);
+  return{handle:p.handle,name:p.name,rank:r.rank,pts:r.pts,correct:r.correct,picks:DB.qs.filter(q=>dClosed(q)&&DB.picks[p.id+':'+q.id]!==undefined).map(q=>{const k=DB.picks[p.id+':'+q.id],x=dPts(q,dStats(q),k);return{qid:q.id,title:q.title,tag:q.tag,day:q.day,pick:Array.isArray(k)?k.join(', '):k,answer:dAns(q).join(', '),void:q.void,correct:q.answer&&!q.void?x>0:null,pts:x}})}}
  err('Unknown',404)}
 if(DEMO){const bar=document.createElement('div');bar.className='demo';
  bar.innerHTML='PREVIEW · SAMPLE DATA · OWNER: <select id="dq"></select><select id="da"></select><button id="dlock">Lock</button><button id="dset">Settle</button><button id="dme">Leave</button>';document.body.appendChild(bar);
- const fill=()=>{$('dq').innerHTML=DB.qs.map(q=>`<option value="${q.id}">${esc(q.title.slice(0,38))}${q.answer?' ✓':dClosed(q)?' (locked)':''}</option>`).join('');fillA()};
- const fillA=()=>{const q=DB.qs.find(q=>q.id===+$('dq').value)||DB.qs[0];$('da').innerHTML=q.options.map(o=>`<option>${esc(o)}</option>`).join('')};
+ const fill=()=>{$('dq').innerHTML=DB.qs.map(q=>`<option value="${q.id}">${esc(q.tag)}${q.answer?' ✓':dClosed(q)?' (locked)':''}</option>`).join('');fillA()};
+ const fillA=()=>{const q=DB.qs.find(q=>q.id===+$('dq').value)||DB.qs[0];
+  $('da').innerHTML=q.kind==='multi'?'<option value="auto">crowd favourites</option>':q.kind==='text'?'<option>Jonathan</option><option>Goblin</option>':q.options.map(o=>`<option>${esc(o)}</option>`).join('')};
  setTimeout(()=>{fill();$('dq').onchange=fillA},0);
  bar.addEventListener('click',async e=>{const id=e.target.id,q=DB.qs.find(q=>q.id===+$('dq').value);if(!q)return;
   if(id==='dlock'){q.locked=true;toast('Locked: crowd picks are now public')}
-  if(id==='dset'){q.locked=true;q.answer=$('da').value;toast('Settled: '+q.answer)}
+  if(id==='dset'){q.locked=true;if(q.kind==='multi'){const s=dStats(q);q.answer=Object.entries(s.inc).sort((a,b)=>b[1]-a[1]).slice(0,q.pick).map(e=>e[0])}else q.answer=q.kind==='text'?[$('da').value]:$('da').value;toast('Settled: '+dAns(q).join(', '))}
   if(id==='dme'){DB.me=null;saveTok(null);ME=null;renderJoin();toast('Left the game (preview)')}
   if(['dlock','dset'].includes(id)){const v=q.id;fill();$('dq').value=v;fillA();await loadBoard();if(DB.me){TOKEN='demo';await loadMe();renderLb()}}});
  }
@@ -366,10 +413,10 @@ td{font-size:13px;vertical-align:top}.cnt{font:11px "Share Tech Mono",monospace;
 <a class="btn ghost sm" href="/predict/preview" target="_blank">Public preview</a></div></div>
 <div class="wrap">
 <div class="grid">
- <div class="card"><div class="lbl">// create match day</div><div class="row2"><label class="field"><span>DAY</span><select class="inp" id="mdDay"><option>1</option><option>2</option><option>3</option></select></label>
+ <div class="card"><div class="lbl">// create questions</div><div class="row2"><label class="field"><span>DAY</span><select class="inp" id="mdDay"><option>1</option><option>2</option><option>3</option></select></label>
   <label class="field"><span>CLOSE (IST)</span><input class="inp" id="mdClose" type="datetime-local"></label></div>
-  <p class="muted" style="font-size:12px">Makes "Day N · Match 1..6: Who wins?" with the team list below. Skips matches that already exist.</p>
-  <div class="acts"><button class="btn" data-a="matchday">Create match day</button><button class="btn ghost" data-a="peak">+ Peak viewers (auto)</button><button class="btn ghost" data-a="mvpday">+ Day MVP</button><button class="btn ghost" data-a="mvpevent">+ Event MVP</button><button class="btn ghost" data-a="record">+ Beat 730K?</button></div></div>
+  <p class="muted" style="font-size:12px">Tournament questions (once): champion (closes Day 3), top 3, BMIC 6, top eliminator (close at the time above). Day questions: most chicken dinners + peak viewers for the chosen day. Nothing is duplicated.</p>
+  <div class="acts"><button class="btn" data-a="eventset">Create tournament questions</button><button class="btn" data-a="dayset">Create day questions</button><button class="btn ghost" data-a="matchday">+ Match winners x6</button><button class="btn ghost" data-a="peak">+ Peak viewers (auto)</button><button class="btn ghost" data-a="mvpday">+ Day MVP</button><button class="btn ghost" data-a="mvpevent">+ Event MVP</button><button class="btn ghost" data-a="record">+ Beat 730K?</button></div></div>
  <div class="card"><div class="lbl">// custom question</div><label class="field"><span>TITLE</span><input class="inp" id="cqT" placeholder="Which team gets the most finishes on Day 1?"></label>
   <div class="row2"><label class="field"><span>TAG</span><input class="inp" id="cqTag" value="BONUS"></label><label class="field"><span>DAY (0 = event)</span><select class="inp" id="cqD"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label><label class="field"><span>STYLE</span><select class="inp" id="cqS"><option>buttons</option><option>dropdown</option></select></label></div>
   <label class="field"><span>OPTIONS (one per line)</span><textarea class="inp" id="cqO" style="min-height:90px"></textarea></label>
@@ -401,14 +448,14 @@ async function load(){const j=await api('state');S=j.settings;Q=j.questions;P=j.
  $('sClose').value=S.close;$('sMatches').value=S.matches;$('sPrize').value=S.prize;
  if(!$('mdClose').value)$('mdClose').value=S.days[$('mdDay').value]+'T'+S.close;if(!$('cqC').value)$('cqC').value=S.days['1']+'T'+S.close;
  const now=Date.now()/1000;$('qh').textContent=`Questions (${Q.length})`;
- $('qt').innerHTML=Q.map(q=>{const cl=q.locked||now>=q.close_ts,st=q.void?'<span class="no">VOID</span>':q.answer?`<span class="ok">SETTLED: ${esc(q.answer)}</span>`:cl?'<span class="no">LOCKED</span>':'<span class="ok">OPEN</span>';
+ $('qt').innerHTML=Q.map(q=>{const cl=q.locked||now>=q.close_ts,st=q.void?'<span class="no">VOID</span>':q.answer&&q.answer.length?`<span class="ok">SETTLED: ${esc(Array.isArray(q.answer)?q.answer.join(', '):q.answer)}</span>`:cl?'<span class="no">LOCKED</span>':'<span class="ok">OPEN</span>';
   const cnt=Object.entries(q.counts).sort((a,b)=>b[1]-a[1]).map(([o,n])=>`${esc(o)}: ${n}`).join(' · ');
   return `<tr><td>${q.id}</td><td><b>${esc(q.title)}</b><div class="cnt">${esc(q.tag)} · day ${q.day||'event'} · ${q.kind}${q.meta&&q.meta.auto?' · auto-resolve':''}</div></td>
   <td><input class="inp" type="datetime-local" value="${toLocal(q.close_ts)}" data-close="${q.id}" style="padding:4px;font-size:12px;width:180px"></td><td>${st}</td><td class="cnt">${q.total} picks<br>${cnt}</td>
-  <td><div class="acts"><select class="inp" data-ans="${q.id}" style="padding:4px;font-size:12px;max-width:170px">${q.options.map(o=>`<option ${o===q.answer?'selected':''}>${esc(o)}</option>`).join('')}</select>
+  <td><div class="acts">${q.kind==='text'?`<input class="inp" data-ans="${q.id}" placeholder="Accepted names, comma separated" value="${esc((q.answer||[]).join(', '))}" style="padding:4px;font-size:12px;max-width:220px">`:`<select class="inp" data-ans="${q.id}" ${q.kind==='multi'?'multiple size="6"':''} style="padding:4px;font-size:12px;max-width:190px">${q.options.map(o=>`<option ${(Array.isArray(q.answer)?q.answer.includes(o):o===q.answer)?'selected':''}>${esc(o)}</option>`).join('')}</select>`}
   <button class="btn" data-q="answer" data-id="${q.id}">Mark answer</button>${['peak','yesno'].includes(q.kind)?`<button class="btn ghost" data-q="tracker" data-id="${q.id}">From tracker</button>`:''}
   ${cl?`<button class="btn ghost" data-q="reopen" data-id="${q.id}">Reopen</button>`:`<button class="btn ghost" data-q="lock" data-id="${q.id}">Lock now</button>`}
-  ${q.answer?`<button class="btn ghost" data-q="unresolve" data-id="${q.id}">Unsettle</button>`:''}<button class="btn ghost" data-q="${q.void?'unvoid':'void'}" data-id="${q.id}">${q.void?'Unvoid':'Void'}</button><button class="btn ghost" data-q="delete" data-id="${q.id}">Delete</button></div></td></tr>`}).join('')||'<tr><td colspan=6 class="muted">No questions yet. Use "Create match day".</td></tr>';
+  ${q.answer&&q.answer.length?`<button class="btn ghost" data-q="unresolve" data-id="${q.id}">Unsettle</button>`:''}<button class="btn ghost" data-q="${q.void?'unvoid':'void'}" data-id="${q.id}">${q.void?'Unvoid':'Void'}</button><button class="btn ghost" data-q="delete" data-id="${q.id}">Delete</button></div></td></tr>`}).join('')||'<tr><td colspan=6 class="muted">No questions yet. Use "Create match day".</td></tr>';
  drawP()}
 function drawP(){const f=$('pf').value.toLowerCase();$('ph').textContent=`Players (${P.length})`;
  $('pt').innerHTML=P.filter(p=>!f||(p.handle+' '+p.name).toLowerCase().includes(f)).map(p=>`<tr><td><a href="https://www.instagram.com/${esc(p.handle)}/" target="_blank" rel="noopener nofollow">@${esc(p.handle)}</a></td><td>${esc(p.name)}</td><td class="cnt">${ist(p.created)}</td><td class="num">${p.picks}</td><td class="num">${p.pts}</td>
@@ -418,6 +465,8 @@ document.addEventListener('change',async e=>{const id=e.target.dataset.close;if(
 document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.a,q=b.dataset.q,p=b.dataset.p,id=b.dataset.id;
  try{
  if(a==='reload')return load();
+ if(a==='eventset'){const j=await api('eventset',{close_ts:toTs($('mdClose').value)});toast(`Created ${j.created.length} tournament questions`)}
+ if(a==='dayset'){const j=await api('dayset',{day:+$('mdDay').value,close_ts:toTs($('mdClose').value)});toast(`Created ${j.created.length} day questions`)}
  if(a==='matchday'){const j=await api('matchday',{day:+$('mdDay').value,close_ts:toTs($('mdClose').value)});toast(`Created ${j.created.length} questions`)}
  if(a==='peak'){await api('add',{type:'peak',day:+$('mdDay').value,close_ts:toTs($('mdClose').value)});toast('Peak question added')}
  if(a==='mvpday'){await api('add',{type:'mvp',day:+$('mdDay').value,close_ts:toTs($('mdClose').value)});toast('MVP question added')}
@@ -427,7 +476,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
  if(a==='settings'){await api('settings',{teams:$('sTeams').value.split('\n').map(s=>s.trim()).filter(Boolean),mvp:$('sMvp').value.split('\n').map(s=>s.trim()).filter(Boolean),
   buckets:$('sBuckets').value.split(',').map(s=>parseInt(s)).filter(n=>n>0),days:{'1':$('sD1').value,'2':$('sD2').value,'3':$('sD3').value},close:$('sClose').value,matches:+$('sMatches').value,prize:$('sPrize').value});toast('Settings saved')}
  if(q){if(q==='delete'&&!confirm('Delete this question and all its picks?'))return;
-  if(q==='answer'){const v=document.querySelector(`[data-ans="${id}"]`).value;if(!confirm('Settle with: '+v+' ?'))return;await api('q/'+id,{action:'answer',value:v});toast('Settled')}
+  if(q==='answer'){const el=document.querySelector(`[data-ans="${id}"]`);const v=el.multiple?[...el.selectedOptions].map(o=>o.value):el.value;if(!confirm('Settle with: '+(Array.isArray(v)?v.join(', '):v)+' ?'))return;await api('q/'+id,{action:'answer',value:v});toast('Settled')}
   else if(q==='tracker'){const j=await api('q/'+id+'/tracker',{});toast('Settled from tracker: '+j.answer)}
   else await api('q/'+id,{action:q});}
  if(p){await api('player/'+id,{action:p});toast('Done')}

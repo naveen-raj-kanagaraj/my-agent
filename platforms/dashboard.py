@@ -141,15 +141,21 @@ def predict_api(sub):
     try:
         if sub == "state":
             qs = predict.questions()
-            counts = predict._counts()
+            st = predict._qstats({q["id"]: q for q in qs})
             for q in qs:
-                q["counts"] = counts.get(q["id"], {})
-                q["total"] = sum(q["counts"].values())
+                s_ = st.get(q["id"]) or {"n": 0, "inc": {}, "names": {}}
+                q["counts"] = {s_["names"].get(k, k): v for k, v in s_["inc"].items()} if q["kind"] == "text" else s_["inc"]
+                q["total"] = s_["n"]
+                q["answer"] = predict.ans_list(q) if q["kind"] in ("multi", "text") else q["answer"]
             return jsonify({"settings": predict.settings(), "questions": qs, "players": predict.players_admin()})
         if sub == "settings":
             return jsonify(predict.save_settings(**{k: j.get(k) for k in predict.DEFAULTS if k in j}))
         if sub == "matchday":
             return jsonify({"created": predict.create_match_day(int(j.get("day") or 1), j.get("close_ts"))})
+        if sub == "eventset":
+            return jsonify({"created": predict.create_event_set(j.get("close_ts"))})
+        if sub == "dayset":
+            return jsonify({"created": predict.create_day_set(int(j.get("day") or 1), j.get("close_ts"))})
         if sub == "add":
             t, ts = j.get("type"), j.get("close_ts")
             if t == "peak":

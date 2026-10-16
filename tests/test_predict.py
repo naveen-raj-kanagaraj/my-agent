@@ -121,7 +121,7 @@ class PredictTests(unittest.TestCase):
         self.assertEqual(b["boards"]["all"][0]["handle"], "u05")
         self.assertEqual([r["handle"] for r in b["boards"]["2"]], ["u05"])
         me = self.web.post("/predict/api/me", json={}, headers={"X-PW-Token": toks[11]}).get_json()
-        self.assertEqual(me["ranks"]["all"]["rank"], 2)       # tied players share a rank
+        self.assertEqual(me["ranks"]["all"]["rank"], 12)      # ties: earlier joiners rank higher
 
     def test_profile_hides_open_picks(self):
         t = self.tok("carol")
@@ -159,12 +159,56 @@ class PredictTests(unittest.TestCase):
         st = {"peak": 812000, "days": [{"day": "Fri 16 Oct", "peak": 455000}], "official_live": False,
               "last_broadcast": {"end": predict.ist_ts("2026-10-16", "20:00")}}
         q = predict.get_question(qid)
-        self.assertEqual(predict.tracker_answer(q, st), "400K-500K")
+        self.assertEqual(predict.tracker_answer(q, st), "450K-500K")
         rec = predict.create_record()
         self.assertEqual(predict.tracker_answer(predict.get_question(rec), st), "Yes")
         done = predict.auto_resolve(st, now=predict.ist_ts("2026-10-16", "20:31"))
         self.assertEqual(done, [qid])
-        self.assertEqual(predict.get_question(qid)["answer"], "400K-500K")
+        self.assertEqual(predict.get_question(qid)["answer"], "450K-500K")
+
+    def test_event_and_day_sets(self):
+        ids = predict.create_event_set()
+        self.assertEqual(len(ids), 4)
+        self.assertEqual(predict.create_event_set(), [])
+        champ = predict.get_question(ids[0])
+        self.assertEqual(champ["close_ts"], predict.ist_ts("2026-10-18", "14:45"))
+        self.assertEqual(predict.get_question(ids[1])["close_ts"], predict.ist_ts("2026-10-16", "14:45"))
+        d = predict.create_day_set(1)
+        self.assertEqual(len(d), 2)
+        peak = predict.get_question(d[1])
+        self.assertEqual(peak["options"][0], "Under 350K")
+        self.assertIn("350K-450K", peak["options"])
+
+    def test_multi_pick_scoring(self):
+        a, b = self.tok("ma"), self.tok("mb")
+        qid = predict.add_question("multi", "Top 3", ["A", "B", "C", "D", "E"], time.time() + 3600, 0, "TOP 3",
+                                   meta={"pick": 3})
+        self.assertEqual(self.pick(a, qid, ["A", "B"]).status_code, 400)       # must pick exactly 3
+        self.assertEqual(self.pick(a, qid, ["A", "B", "C"]).status_code, 200)
+        self.assertEqual(self.pick(b, qid, ["A", "D", "E"]).status_code, 200)
+        predict.update_question(qid, "lock")
+        predict.resolve(qid, ["A", "B", "D"])
+        top = predict.board()["boards"]["all"]
+        pts = {r["handle"]: r["pts"] for r in top}
+        # A: picked by 2/2 -> 100/3 each; B: 1/2 -> 150/3; D: 1/2 -> 150/3
+        self.assertEqual(pts["ma"], round(100 / 3 + 150 / 3))
+        self.assertEqual(pts["mb"], round(100 / 3 + 150 / 3))
+
+    def test_text_answer_matching(self):
+        a, b, c = self.tok("ta"), self.tok("tb"), self.tok("tc")
+        qid = predict.add_question("text", "Top eliminator", [], time.time() + 3600, 0, "TOP ELIMINATOR")
+        self.pick(a, qid, "Jonathan ")
+        self.pick(b, qid, "jonathan")
+        self.pick(c, qid, "Goblin")
+        self.assertEqual(predict.board()["questions"][0]["counts"], {})        # hidden until locked
+        predict.update_question(qid, "lock")
+        predict.resolve(qid, "Jonathan, Jonny")
+        pts = {r["handle"]: r["pts"] for r in predict.board()["boards"]["all"]}
+        self.assertEqual(pts, {"ta": 133, "tb": 133})
+
+    def test_display_name_optional(self):
+        r = self.web.post("/predict/api/join", json={"handle": "noname", "name": "", "consent": True})
+        self.assertEqual(r.status_code, 200)
 
     def test_public_cache_headers(self):
         self.assertIn("max-age=5", self.web.get("/predict/api/board").headers["Cache-Control"])

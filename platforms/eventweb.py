@@ -159,7 +159,9 @@ def predict_me():
 def predict_pick():
     j = request.get_json(silent=True) or {}
     try:
-        return _json(predict.pick(_tok(), int(j.get("qid") or 0), str(j.get("option", ""))))
+        opt = j.get("option", "")
+        opt = [str(x) for x in opt][:20] if isinstance(opt, list) else str(opt)
+        return _json(predict.pick(_tok(), int(j.get("qid") or 0), opt))
     except predict.GameError as e:
         return _err(e)
     except (TypeError, ValueError):

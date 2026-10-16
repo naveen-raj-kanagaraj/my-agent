@@ -22,7 +22,7 @@ DEFAULTS = {
     "teams": ["Meta Ninza", "8Bit Esports", "RNTX Esports", "Epigrotive", "TAG", "Nebula", "K9 Esports", "Blue Army",
               "Outrage", "GodLike", "Gladiators", "Soul", "Myth Esports", "Welt Esports", "Genesis", "Wyld Fangs"],
     "mvp": [],
-    "buckets": [300, 400, 500, 600, 700],                         # thousands; labels are built from these
+    "buckets": [350, 450, 500, 550, 600, 650, 700],                         # thousands; labels are built from these
     "days": {"1": "2026-10-16", "2": "2026-10-17", "3": "2026-10-18"},
     "close": "14:45",                                             # IST, default close time on a match day
     "matches": 6,
@@ -134,8 +134,6 @@ def join(handle: str, name: str, consent: bool) -> dict:
     name = re.sub(r"\s+", " ", (name or "")).strip()[:32]
     if not h:
         raise GameError("Enter a valid Instagram handle (letters, numbers, . and _ only).")
-    if not name:
-        raise GameError("Enter a display name.")
     if not consent:
         raise GameError("Please tick the box to agree your handle, name and closed picks are shown publicly.")
     token = secrets.token_urlsafe(32)
@@ -180,11 +178,31 @@ def rename(token: str, name: str) -> dict:
 
 
 # ---------------- questions ----------------
+# kinds: single-answer ('match', 'mvp', 'peak', 'yesno', 'team', 'other'), 'multi' (pick exactly meta.pick options),
+# 'text' (free text, owner marks the accepted spellings).
 def _q(r) -> dict:
     q = dict(r)
     q["options"] = json.loads(q["options"])
     q["meta"] = json.loads(q.get("meta") or "{}")
     return q
+
+
+def ans_list(q: dict) -> list:
+    """Accepted answers as a list (multi and text store a JSON list; others a plain string)."""
+    a = q.get("answer")
+    if not a:
+        return []
+    if q["kind"] in ("multi", "text"):
+        try:
+            v = json.loads(a)
+            return v if isinstance(v, list) else [str(v)]
+        except ValueError:
+            return [a]
+    return [a]
+
+
+def tnorm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
 def is_closed(q: dict, now: float = None) -> bool:
@@ -194,12 +212,20 @@ def is_closed(q: dict, now: float = None) -> bool:
 def add_question(kind: str, title: str, options: list, close_ts: float, day: int = 0, tag: str = "",
                  style: str = None, meta: dict = None, sort: int = 0) -> int:
     opts = []
-    for o in options:
+    for o in options or []:
         o = str(o).strip()[:60]
         if o and o not in opts:
             opts.append(o)
-    if len(opts) < 2:
+    meta = dict(meta or {})
+    if kind == "text":
+        opts, style = [], "text"
+    elif len(opts) < 2:
         raise GameError("A question needs at least two options.")
+    if kind == "multi":
+        k = int(meta.get("pick") or 0)
+        if not 2 <= k < len(opts):
+            raise GameError("A multi-pick question needs 'pick' between 2 and the number of options minus 1.")
+        style = "multi"
     if not title.strip():
         raise GameError("Title is required.")
     style = style or ("dropdown" if len(opts) > 6 else "buttons")
@@ -208,10 +234,15 @@ def add_question(kind: str, title: str, options: list, close_ts: float, day: int
             "INSERT INTO pw_questions (kind, tag, title, day, style, options, close_ts, meta, sort, created) "
             "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (kind, tag.strip()[:24], title.strip()[:140], int(day), style, json.dumps(opts), float(close_ts),
-             json.dumps(meta or {}), int(sort), time.time())).lastrowid
+             json.dumps(meta), int(sort), time.time())).lastrowid
         _db().commit()
     _bust()
     return qid
+
+
+def _close(day, close_ts=None):
+    s = settings()
+    return close_ts or ist_ts(s["days"][str(day or 1)], s["close"])
 
 
 def create_match_day(day: int, close_ts: float = None) -> list:
@@ -219,7 +250,7 @@ def create_match_day(day: int, close_ts: float = None) -> list:
     day = int(day)
     if str(day) not in s["days"]:
         raise GameError("Day must be 1, 2 or 3.")
-    close_ts = close_ts or ist_ts(s["days"][str(day)], s["close"])
+    close_ts = _close(day, close_ts)
     with store._lock:
         have = {r["title"] for r in _db().execute("SELECT title FROM pw_questions WHERE kind='match' AND day=?", (day,))}
     ids = []
@@ -232,32 +263,63 @@ def create_match_day(day: int, close_ts: float = None) -> list:
     return ids
 
 
+def _exists(kind, title) -> bool:
+    with store._lock:
+        return bool(_db().execute("SELECT 1 FROM pw_questions WHERE kind=? AND title=?", (kind, title)).fetchone())
+
+
+def create_event_set(close_ts: float = None) -> list:
+    """Whole-event questions: champion (open until the last day), top 3, BMIC qualifiers, top eliminator."""
+    s = settings()
+    first = _close(1, close_ts)
+    last = ist_ts(s["days"]["3"], s["close"])
+    spec = [("team", "Which team will win the BMSD 2026 Grand Finals?", s["teams"], last, "CHAMPION", "dropdown", {}, 1),
+            ("multi", "Predict the top 3 teams of the Grand Finals", s["teams"], first, "TOP 3", "multi", {"pick": 3}, 2),
+            ("multi", "Which 6 teams qualify for BMIC?", s["teams"], first, "BMIC QUALIFIERS", "multi", {"pick": 6}, 3),
+            ("text", "Who will be the top eliminator of the Grand Finals?", [], first, "TOP ELIMINATOR", "text", {}, 4)]
+    ids = []
+    for kind, title, opts, close, tag, style, meta, sort in spec:
+        if not _exists(kind, title):
+            ids.append(add_question(kind, title, opts, close, 0, tag, style, meta, sort))
+    return ids
+
+
+def create_day_set(day: int, close_ts: float = None) -> list:
+    """Per-day questions: most chicken dinners that day, and that day's peak viewers (auto-resolved)."""
+    s = settings()
+    day = int(day)
+    close = _close(day, close_ts)
+    ids = []
+    t = f"Which team gets the most chicken dinners on Day {day}?"
+    if not _exists("team", t):
+        ids.append(add_question("team", t, s["teams"], close, day, "MOST CHICKENS", "dropdown", sort=10))
+    if not _exists("peak", f"What will Day {day} peak viewers be?"):
+        ids.append(create_peak(day, close))
+    return ids
+
+
 def create_mvp(day: int = 0, close_ts: float = None) -> int:
     s = settings()
     if len(s["mvp"]) < 2:
         raise GameError("Paste the MVP candidates first (one per line).")
     day = int(day)
-    if not close_ts:
-        close_ts = ist_ts(s["days"][str(day or 1)], s["close"])
     title = f"Day {day} MVP: who takes it?" if day else "BMSD 2026 Grand Finals MVP"
-    return add_question("mvp", title, s["mvp"], close_ts, day, "MVP", "dropdown", sort=50)
+    return add_question("mvp", title, s["mvp"], _close(day, close_ts), day, "MVP", "dropdown", sort=50)
 
 
 def create_peak(day: int, close_ts: float = None, auto: bool = True) -> int:
     s = settings()
     day = int(day)
-    close_ts = close_ts or ist_ts(s["days"][str(day)], s["close"])
-    return add_question("peak", f"What will Day {day} peak viewers be?", bucket_labels(), close_ts, day,
+    return add_question("peak", f"What will Day {day} peak viewers be?", bucket_labels(), _close(day, close_ts), day,
                         "PEAK VIEWERS", "buttons", {"date": s["days"][str(day)], "auto": bool(auto),
                                                     "buckets": s["buckets"]}, sort=60)
 
 
 def create_record(close_ts: float = None) -> int:
     s = settings()
-    close_ts = close_ts or ist_ts(s["days"]["1"], s["close"])
     rec = int(s["record"])
-    return add_question("yesno", f"Will BMSD 2026 beat BMPS 2026's {rec // 1000}K peak?", ["Yes", "No"], close_ts,
-                        0, "RECORD WATCH", "buttons", {"record": rec}, sort=70)
+    return add_question("yesno", f"Will BMSD 2026 beat BMPS 2026's {rec // 1000}K peak?", ["Yes", "No"],
+                        _close(1, close_ts), 0, "RECORD WATCH", "buttons", {"record": rec}, sort=70)
 
 
 def get_question(qid: int) -> dict:
@@ -270,8 +332,26 @@ def get_question(qid: int) -> dict:
 
 def questions() -> list:
     with store._lock:
-        rows = _db().execute("SELECT * FROM pw_questions ORDER BY day=0, day, sort, close_ts, id").fetchall()
+        rows = _db().execute("SELECT * FROM pw_questions ORDER BY day=0 DESC, day, sort, close_ts, id").fetchall()
     return [_q(r) for r in rows]
+
+
+def _clean_answer(q: dict, value):
+    if q["kind"] == "multi":
+        vals = value if isinstance(value, list) else [v for v in str(value or "").split("\n")]
+        vals = [v.strip() for v in vals if v and v.strip()]
+        if not vals or any(v not in q["options"] for v in vals):
+            raise GameError("Pick the correct teams from the options.")
+        return json.dumps(sorted(set(vals), key=q["options"].index))
+    if q["kind"] == "text":
+        vals = value if isinstance(value, list) else re.split(r"[,\n]", str(value or ""))
+        vals = [v.strip()[:40] for v in vals if v and v.strip()]
+        if not vals:
+            raise GameError("Type the accepted name(s), separated by commas.")
+        return json.dumps(vals)
+    if value not in q["options"]:
+        raise GameError("Answer must be one of the options.")
+    return value
 
 
 def update_question(qid: int, action: str, value=None) -> dict:
@@ -294,10 +374,8 @@ def update_question(qid: int, action: str, value=None) -> dict:
             c.execute("DELETE FROM pw_picks WHERE qid=?", (q["id"],))
             c.execute("DELETE FROM pw_questions WHERE id=?", (q["id"],))
         elif action == "answer":
-            if value not in q["options"]:
-                raise GameError("Answer must be one of the options.")
             c.execute("UPDATE pw_questions SET answer=?, locked=1, resolved_ts=? WHERE id=?",
-                      (value, time.time(), q["id"]))
+                      (_clean_answer(q, value), time.time(), q["id"]))
         elif action == "unresolve":
             c.execute("UPDATE pw_questions SET answer=NULL, resolved_ts=NULL WHERE id=?", (q["id"],))
         elif action == "title":
@@ -309,7 +387,7 @@ def update_question(qid: int, action: str, value=None) -> dict:
     return {"ok": True}
 
 
-def resolve(qid: int, answer: str) -> dict:
+def resolve(qid: int, answer) -> dict:
     return update_question(qid, "answer", answer)
 
 
@@ -373,7 +451,16 @@ def auto_resolve(st: dict = None, now: float = None) -> list:
 
 
 # ---------------- picks ----------------
-def pick(token: str, qid: int, option: str, now: float = None) -> dict:
+def _decode(q: dict, raw: str):
+    if q["kind"] == "multi":
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return []
+    return raw
+
+
+def pick(token: str, qid: int, option, now: float = None) -> dict:
     p = player_by_token(token)
     if not p:
         raise GameError("Join first.", 401)
@@ -384,69 +471,117 @@ def pick(token: str, qid: int, option: str, now: float = None) -> dict:
         raise GameError("This question was cancelled.", 409)
     if is_closed(q, now):
         raise GameError("Picks for this question are closed.", 409)
-    if option not in q["options"]:
-        raise GameError("Pick one of the options.")
+    if q["kind"] == "multi":
+        k = int(q["meta"]["pick"])
+        vals = option if isinstance(option, list) else []
+        vals = list(dict.fromkeys(str(v) for v in vals))
+        if len(vals) != k or any(v not in q["options"] for v in vals):
+            raise GameError(f"Pick exactly {k} teams.")
+        stored, shown = json.dumps(sorted(vals, key=q["options"].index)), vals
+    elif q["kind"] == "text":
+        stored = re.sub(r"\s+", " ", str(option or "")).strip()[:40]
+        if len(tnorm(stored)) < 2:
+            raise GameError("Type a player name.")
+        shown = stored
+    else:
+        if option not in q["options"]:
+            raise GameError("Pick one of the options.")
+        stored = shown = option
     with store._lock:
         _db().execute("INSERT INTO pw_picks (player_id, qid, option, ts) VALUES (?,?,?,?) "
                       "ON CONFLICT(player_id, qid) DO UPDATE SET option=excluded.option, ts=excluded.ts",
-                      (p["id"], q["id"], option, time.time()))
+                      (p["id"], q["id"], stored, time.time()))
         _db().commit()
     _bust()
-    return {"ok": True, "qid": q["id"], "option": option}
+    return {"ok": True, "qid": q["id"], "option": shown}
 
 
-def _counts() -> dict:
+def _qstats(qs: dict) -> dict:
+    """Per question: n players who picked, and how many picked/included each option (text: by normalised name)."""
     with store._lock:
-        rows = _db().execute("SELECT k.qid, k.option, COUNT(*) n FROM pw_picks k JOIN pw_players p ON p.id=k.player_id "
-                             "WHERE p.hidden=0 GROUP BY k.qid, k.option").fetchall()
+        rows = _db().execute("SELECT k.qid, k.option FROM pw_picks k JOIN pw_players p ON p.id=k.player_id "
+                             "WHERE p.hidden=0").fetchall()
     out = {}
     for r in rows:
-        out.setdefault(r["qid"], {})[r["option"]] = r["n"]
+        q = qs.get(r["qid"])
+        if not q:
+            continue
+        s = out.setdefault(q["id"], {"n": 0, "inc": {}, "names": {}})
+        s["n"] += 1
+        if q["kind"] == "multi":
+            for v in _decode(q, r["option"]):
+                s["inc"][v] = s["inc"].get(v, 0) + 1
+        elif q["kind"] == "text":
+            k = tnorm(r["option"])
+            s["inc"][k] = s["inc"].get(k, 0) + 1
+            s["names"].setdefault(k, r["option"])
+        else:
+            s["inc"][r["option"]] = s["inc"].get(r["option"], 0) + 1
     return out
 
 
-def points_for(q: dict, counts: dict) -> int:
-    """Points a correct pick earns on a resolved question."""
-    n = sum(counts.values())
-    c = counts.get(q["answer"], 0)
-    if not n or not c:
-        return 100
-    return 100 + round(100 * (1 - c / n))
+def points_for(q: dict, st: dict, raw: str) -> int:
+    """Points one pick earns on a settled question. 100 + underdog bonus 100 x (1 - share right);
+    multi-pick splits that across the k picks, per correct team."""
+    if not q.get("answer") or q.get("void"):
+        return 0
+    n = max(1, (st or {}).get("n", 0))
+    inc = (st or {}).get("inc", {})
+    ans = ans_list(q)
+    if q["kind"] == "multi":
+        k = int(q["meta"]["pick"])
+        hit = [t for t in _decode(q, raw) if t in ans]
+        return round(sum((100 + 100 * (1 - inc.get(t, 1) / n)) / k for t in hit))
+    if q["kind"] == "text":
+        acc = {tnorm(a) for a in ans}
+        if tnorm(raw) not in acc:
+            return 0
+        c = sum(v for kk, v in inc.items() if kk in acc) or 1
+        return 100 + round(100 * (1 - c / n))
+    if raw != q["answer"]:
+        return 0
+    return 100 + round(100 * (1 - (inc.get(q["answer"], 1)) / n))
 
 
 def _scores():
-    """{player_id: {'all': [pts, correct], 1: [...], 2: [...], 3: [...]}} for visible players."""
-    qs = {q["id"]: q for q in questions() if q["answer"] and not q["void"]}
-    counts = _counts()
-    worth = {qid: points_for(q, counts.get(qid, {})) for qid, q in qs.items()}
+    """(players, {player_id: {'all': [pts, correct], 1: [...], 2: [...], 3: [...]}}, qstats, qs)"""
+    qs = {q["id"]: q for q in questions()}
+    st = _qstats(qs)
     with store._lock:
         players = {r["id"]: dict(r) for r in _db().execute(
             "SELECT id, handle, name, created FROM pw_players WHERE hidden=0")}
         picks = _db().execute("SELECT player_id, qid, option FROM pw_picks").fetchall()
-    sc = {pid: {"all": [0, 0], 1: [0, 0], 2: [0, 0], 3: [0, 0], "picks": 0} for pid in players}
+    sc = {pid: {"all": [0, 0], 1: [0, 0], 2: [0, 0], 3: [0, 0]} for pid in players}
     for k in picks:
-        if k["player_id"] not in sc:
-            continue
-        sc[k["player_id"]]["picks"] += 1
         q = qs.get(k["qid"])
-        if q and k["option"] == q["answer"]:
+        if k["player_id"] not in sc or not q or not q["answer"] or q["void"]:
+            continue
+        pts = points_for(q, st.get(q["id"]), k["option"])
+        if pts:
             for b in ("all", q["day"]) if q["day"] else ("all",):
-                sc[k["player_id"]][b][0] += worth[q["id"]]
+                sc[k["player_id"]][b][0] += pts
                 sc[k["player_id"]][b][1] += 1
-    return players, sc, worth
+    return players, sc, st, qs
 
 
 def _ranked(players, sc, board):
     rows = [{"id": pid, "handle": p["handle"], "name": p["name"], "pts": sc[pid][board][0],
              "correct": sc[pid][board][1], "created": p["created"]} for pid, p in players.items()]
     rows.sort(key=lambda r: (-r["pts"], -r["correct"], r["created"]))
-    rank, prev = 0, None
-    for i, r in enumerate(rows):
-        key = (r["pts"], r["correct"])
-        if key != prev:
-            rank, prev = i + 1, key
-        r["rank"] = rank
+    for i, r in enumerate(rows):   # unique ranks: ties go to more correct picks, then whoever joined first
+        r["rank"] = i + 1
     return rows
+
+
+def _public_counts(q: dict, s: dict, closed: bool) -> dict:
+    if not s:
+        return {}
+    if q["kind"] == "text":   # free text is only shown after close, top 5 names
+        if not closed:
+            return {}
+        top = sorted(s["inc"].items(), key=lambda kv: -kv[1])[:5]
+        return {s["names"][k]: v for k, v in top}
+    return dict(s["inc"])
 
 
 def board(now: float = None) -> dict:
@@ -459,21 +594,34 @@ def board(now: float = None) -> dict:
         auto_resolve(now=now)
     except Exception:
         pass
-    counts = _counts()
-    players, sc, worth = _scores()
-    qs = []
-    for q in questions():
-        cnt = counts.get(q["id"], {})
-        qs.append({"id": q["id"], "kind": q["kind"], "tag": q["tag"], "title": q["title"], "day": q["day"],
-                   "style": q["style"], "options": q["options"], "close_ts": q["close_ts"],
-                   "closed": is_closed(q, now), "void": bool(q["void"]), "answer": q["answer"],
-                   "counts": cnt, "total": sum(cnt.values()), "worth": worth.get(q["id"])})
+    players, sc, st, qmap = _scores()
+    out_q = []
+    for q in qmap.values():
+        s = st.get(q["id"]) or {}
+        closed = is_closed(q, now)
+        best = None
+        if q["answer"] and not q["void"]:
+            n = max(1, s.get("n", 0))
+            if q["kind"] == "multi":
+                best = round(sum(100 + 100 * (1 - s.get("inc", {}).get(t, 1) / n) for t in ans_list(q)) / int(q["meta"]["pick"]))
+            elif q["kind"] == "text":
+                acc = {tnorm(a) for a in ans_list(q)}
+                c = sum(v for k, v in s.get("inc", {}).items() if k in acc) or 1
+                best = 100 + round(100 * (1 - c / n))
+            else:
+                best = 100 + round(100 * (1 - s.get("inc", {}).get(q["answer"], 1) / n))
+        out_q.append({"id": q["id"], "kind": q["kind"], "tag": q["tag"], "title": q["title"], "day": q["day"],
+                      "style": q["style"], "options": q["options"], "close_ts": q["close_ts"], "closed": closed,
+                      "void": bool(q["void"]), "answer": ans_list(q) if q["kind"] in ("multi", "text") else q["answer"],
+                      "pick": q["meta"].get("pick"), "counts": _public_counts(q, s, closed), "total": s.get("n", 0),
+                      "worth": best})
+    out_q.sort(key=lambda q: (q["day"] != 0, q["day"], next(x["sort"] for x in qmap.values() if x["id"] == q["id"]), q["id"]))
     boards = {}
     for b in ("all", 1, 2, 3):
         boards[str(b)] = [{k: r[k] for k in ("rank", "handle", "name", "pts", "correct")}
                           for r in _ranked(players, sc, b) if r["pts"] > 0][:10]
     s = settings()
-    out = {"now": now, "questions": qs, "boards": boards, "players": len(players), "prize": s["prize"],
+    out = {"now": now, "questions": out_q, "boards": boards, "players": len(players), "prize": s["prize"],
            "days": s["days"]}
     _cache["board"] = (now, out)
     return out
@@ -483,17 +631,20 @@ def me(token: str) -> dict:
     p = player_by_token(token)
     if not p:
         raise GameError("Not joined.", 401)
+    qs = {q["id"]: q for q in questions()}
     with store._lock:
-        picks = {r["qid"]: r["option"] for r in _db().execute("SELECT qid, option FROM pw_picks WHERE player_id=?",
-                                                               (p["id"],))}
-    players, sc, _ = _scores()
+        rows = _db().execute("SELECT qid, option FROM pw_picks WHERE player_id=?", (p["id"],)).fetchall()
+    picks = {str(r["qid"]): _decode(qs[r["qid"]], r["option"]) for r in rows if r["qid"] in qs}
+    players, sc, st, _ = _scores()
     ranks = {}
     if p["id"] in players:
         for b in ("all", 1, 2, 3):
             r = next(r for r in _ranked(players, sc, b) if r["id"] == p["id"])
             ranks[str(b)] = {"rank": r["rank"], "pts": r["pts"], "correct": r["correct"]}
+    mypts = {str(r["qid"]): points_for(qs[r["qid"]], st.get(r["qid"]), r["option"]) for r in rows
+             if r["qid"] in qs and qs[r["qid"]]["answer"]}
     return {"player": {"handle": p["handle"], "name": p["name"], "hidden": bool(p["hidden"])},
-            "picks": {str(k): v for k, v in picks.items()}, "ranks": ranks, "of": len(players)}
+            "picks": picks, "pts": mypts, "ranks": ranks, "of": len(players)}
 
 
 def profile(handle: str, now: float = None) -> dict:
@@ -503,8 +654,7 @@ def profile(handle: str, now: float = None) -> dict:
         p = _db().execute("SELECT id, handle, name FROM pw_players WHERE handle=? AND hidden=0", (h,)).fetchone()
     if not p:
         raise GameError("No such player.", 404)
-    qs = {q["id"]: q for q in questions()}
-    counts = _counts()
+    players, sc, st, qs = _scores()
     with store._lock:
         rows = _db().execute("SELECT qid, option FROM pw_picks WHERE player_id=?", (p["id"],)).fetchall()
     picks = []
@@ -512,12 +662,13 @@ def profile(handle: str, now: float = None) -> dict:
         q = qs.get(r["qid"])
         if not q or not is_closed(q, now):
             continue
-        ok = None if not q["answer"] or q["void"] else r["option"] == q["answer"]
-        picks.append({"qid": q["id"], "title": q["title"], "tag": q["tag"], "day": q["day"], "pick": r["option"],
-                      "answer": q["answer"], "void": bool(q["void"]), "correct": ok,
-                      "pts": points_for(q, counts.get(q["id"], {})) if ok else 0})
-    picks.sort(key=lambda x: (x["day"] == 0, x["day"], x["qid"]))
-    players, sc, _ = _scores()
+        v = _decode(q, r["option"])
+        pts = points_for(q, st.get(q["id"]), r["option"])
+        picks.append({"qid": q["id"], "title": q["title"], "tag": q["tag"], "day": q["day"],
+                      "pick": ", ".join(v) if isinstance(v, list) else v,
+                      "answer": ", ".join(ans_list(q)), "void": bool(q["void"]),
+                      "correct": None if not q["answer"] or q["void"] else pts > 0, "pts": pts})
+    picks.sort(key=lambda x: (x["day"] != 0, x["day"], x["qid"]))
     r = next((r for r in _ranked(players, sc, "all") if r["id"] == p["id"]), None)
     return {"handle": p["handle"], "name": p["name"], "rank": r["rank"] if r else None, "pts": r["pts"] if r else 0,
             "correct": r["correct"] if r else 0, "picks": picks}
@@ -529,7 +680,7 @@ def players_admin() -> list:
         rows = _db().execute("SELECT p.id, p.handle, p.name, p.created, p.hidden, p.token_hash IS NOT NULL bound, "
                              "(SELECT COUNT(*) FROM pw_picks k WHERE k.player_id=p.id) picks FROM pw_players p "
                              "ORDER BY p.created DESC").fetchall()
-    players, sc, _ = _scores()
+    players, sc, _, _ = _scores()
     out = []
     for r in rows:
         d = dict(r)
