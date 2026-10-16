@@ -138,7 +138,7 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .mo.on{border-color:var(--lime);background:rgba(182,242,58,.16);color:var(--lime)}
 .mbar{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .tlb{flex:none;width:44px;height:24px;display:inline-flex;align-items:center;justify-content:center;margin-right:10px}.tlb img{max-width:44px;max-height:24px;object-fit:contain;display:block}
-.mgrid{grid-template-columns:repeat(8,1fr)}.mo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:10px 4px;font-size:13px;white-space:normal;line-height:1.15;min-height:64px}
+.mgrid{grid-template-columns:repeat(8,1fr)}.mo{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:10px 4px;font-size:13px;white-space:normal;line-height:1.15;min-height:64px}
 .mo .tlb{margin:0;width:60px;height:30px}.mo .tlb img{max-width:60px;max-height:30px}.mo>span:last-child{white-space:normal;overflow:visible}
 .nmx{display:flex;align-items:center;min-width:0}.nmx>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cbl button{display:flex;align-items:center}.how{font-size:13px;color:var(--muted);margin-top:-4px}.ch{font-size:12px;margin-bottom:2px}
@@ -147,6 +147,8 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 @media(max-width:600px){.mgrid{grid-template-columns:repeat(4,1fr);gap:5px}.mo{font-size:11px;padding:8px 2px;min-height:60px;gap:5px}.mo .tlb{width:50px;height:26px}.mo .tlb img{max-width:50px;max-height:26px}.wrap{padding:0 10px 90px}.bar .in{padding:8px 10px}.title h1{font-size:16px}.hero h2{font-size:24px}
  .card{padding:12px}.qs{grid-template-columns:1fr}.tabs button{padding:8px 10px;font-size:12px}td{padding:8px 5px}.hide-m{display:none}
  .prize{padding:10px}.prize b{font-size:14px}}
+.mo{position:relative}.mo .rk{position:absolute;top:4px;left:5px;font:700 12px "Chakra Petch";color:#0a0a14;background:var(--lime);padding:0 5px;line-height:17px}
+.mo[disabled]{cursor:default}.mo.ok{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}.mo.ok:after{content:"\2713 RESULT";position:absolute;top:4px;right:5px;font:10px "Share Tech Mono";color:var(--gold)}
 """
 
 PAGE = r"""<!doctype html>
@@ -229,7 +231,7 @@ function renderJoin(){const c=$('joinCard');
    <button class="btn sm" id="shareMe">Share my rank</button></div>`;
   $('shareMe').onclick=()=>share('me');return}
  c.innerHTML=`<div class="lbl">// step 1</div><h2 style="margin-top:4px">Enter your Instagram ID</h2>
-  <div class="muted" style="font-size:13px;margin-top:4px">If you finish in the top 5, we'll DM you on Instagram. No password needed.</div>
+  <div class="muted" style="font-size:13px;margin-top:4px">If you finish in the top 5, we'll DM you on Instagram. No password needed.<br><b style="color:var(--ink)">Each pick saves automatically and can't be changed.</b></div>
   <div id="jf"><label class="field"><span>INSTAGRAM ID</span><div class="at"><i>@</i><input class="inp" id="jh" maxlength="80" placeholder="yourhandle" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email" required></div></label>
   <label class="field"><span>NAME (OPTIONAL)</span><input class="inp" id="jn" maxlength="32" placeholder="Shown on the leaderboard"></label>
   <div class="muted" style="font-size:12px;margin:10px 0">Your Instagram ID and picks will show on the leaderboard.</div>
@@ -261,24 +263,24 @@ function crowdBars(q,limit){const my=myOf(q),mine=Array.isArray(my)?my:[my];cons
  (Array.isArray(q.answer)?q.answer:q.answer?[q.answer]:[]).forEach(a=>{if(!top.some(e=>e[0]===a))top.push([a,cnt(q,a)])});
  const rest=q.kind==='multi'?0:ent.slice(limit).reduce((a,e)=>a+e[1],0);
  return `<div class="crowd"><div class="muted ch">What everyone picked</div>${top.map(([o,n])=>`<div class="cr ${mine.includes(o)?'mine':''} ${isAns(q,o)?'ok':''}"><div class="fill" style="width:${n}%"></div><span class="nmx">${tl(o)}<span>${esc(o)}</span></span><span class="pc">${n}%</span></div>`).join('')}${rest?`<div class="cr"><div class="fill" style="width:${rest}%"></div><span class="nmx"><span>Others</span></span><span class="pc">${rest}%</span></div>`:''}${!ent.length?'<div class="muted" style="font-size:13px">No picks were made.</div>':''}</div>`}
-function tiles(q,sel,attr,showPct){return `<div class="mgrid">${q.options.map(o=>`<button class="mo ${sel.includes(o)?'on':''}" ${attr}="${q.id}" data-o="${esc(o)}">${tl(o)}<span>${esc(o)}</span>${showPct?`<em class="tp">${pct(q,o)}%</em>`:''}</button>`).join('')}</div>`}
-function qBody(q,shut){const my=myOf(q);
- if(q.kind==='multi'){if(shut)return crowdBars(q,Math.max(q.pick,5));const sel=draft[q.id]||(my?[...my]:[]);
-  return tiles(q,sel,'data-mq',!!my&&!draft[q.id])+`<div class="mbar"><span class="mono">${sel.length} of ${q.pick} picked</span><button class="btn sm" data-msave="${q.id}" ${sel.length===q.pick?'':'disabled'}>${my?'Update':'Save'}</button></div>`}
- if(q.style==='grid'){if(shut)return crowdBars(q,5);return tiles(q,my?[my]:[],'data-gq',!!my)}
+function tiles(q,sel,attr,showPct,locked,ranked){return `<div class="mgrid">${q.options.map(o=>{const i=sel.indexOf(o);return `<button class="mo ${i>=0?'on':''} ${isAns(q,o)?'ok':''}" ${attr}="${q.id}" data-o="${esc(o)}" ${locked?'disabled':''}>${ranked&&i>=0?`<b class="rk">#${i+1}</b>`:''}${tl(o)}<span>${esc(o)}</span>${showPct?`<em class="tp">${pct(q,o)}%</em>`:''}</button>`}).join('')}</div>`}
+function qBody(q,shut){const my=myOf(q),done=shut||!!my;
+ if(q.kind==='multi'){const sel=my?[...my]:(draft[q.id]||[]);const t=tiles(q,sel,'data-mq',done&&q.picked,done,q.ranked);
+  return done?t:t+`<div class="mbar"><span class="mono">${sel.length} of ${q.pick} picked</span><button class="btn sm" data-msave="${q.id}" ${sel.length===q.pick?'':'disabled'}>Save</button></div>`}
+ if(q.style==='grid')return tiles(q,my?[my]:[],'data-gq',done&&q.picked,done)
  if(q.kind==='text'){if(shut)return crowdBars(q,5);
   return `<div class="tx"><input class="inp" data-tq="${q.id}" maxlength="40" placeholder="Type a player name" value="${esc(draft[q.id]??my??'')}"><button class="btn sm" data-tsave="${q.id}">${my?'Update':'Save'}</button></div>`}
  if(q.style==='dropdown'&&!shut)return `<div class="cb" data-q="${q.id}"><button class="cbb ${my?'mine':''}" data-cb="${q.id}">${my?`<span class="nmx">${tl(my)}<span>${esc(my)}</span></span>`:`<span class="ph">${q.kind==='mvp'?'Choose a player':'Choose a team'}</span>`}</button></div>`;
  if(q.style==='dropdown')return crowdBars(q,5);
- return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut?'disabled':''}><div class="fill" style="width:${shut||my?pct(q,o):0}%"></div><span>${esc(o)}</span><span class="pc">${(shut||my)&&q.picked?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
-const HOW={multi:q=>`Tap ${q.pick} teams, then press Save.`,grid:()=>'Tap a team. It saves right away. You can change it until picks lock.',dropdown:()=>'Choose from the list. It saves right away.',buttons:()=>'Tap one. It saves right away.'};
+ return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut||my?'disabled':''}><div class="fill" style="width:${shut||my?pct(q,o):0}%"></div><span>${esc(o)}</span><span class="pc">${(shut||my)&&q.picked?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
+const HOW={multi:q=>q.ranked?`Tap ${q.pick} teams in order: first tap is #1, then #2, then #3. Tap a team again to remove it. Then press Save.`:`Tap ${q.pick} teams, then press Save.`,grid:()=>'Tap a team. It saves right away.',dropdown:()=>'Choose from the list. It saves right away.',buttons:()=>'Tap one. It saves right away.'};
 function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=Array.isArray(my)?my.length:my;
  let foot='';const got=ME&&ME.pts?ME.pts[q.id]:undefined;const ans=Array.isArray(q.answer)?q.answer.join(', '):q.answer;
  if(q.answer&&has)foot=got>0?`<span class="good">Correct · +${got} points</span>`:`<span class="bad">Missed · Answer: ${esc(ans)}</span>`;
  else if(q.answer)foot=`<span>Answer: ${esc(ans)}</span>`;
- else if(has)foot=`<span class="saved">✓ Saved${shut?' · locked':''}</span>`;
+ else if(has)foot=`<span class="saved">✓ Saved · ${q.picked?'% = share of players who picked each team':'final'}</span>`;
  else if(!shut)foot=`<span>${ME?'Not picked yet':'Enter your Instagram ID above to play'}</span>`;
- const how=!shut?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.style]||HOW.buttons)(q)}</div>`:'';
+ const how=!shut&&!has?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.style]||HOW.buttons)(q)} <b>You can't change it after.</b></div>`:'';
  return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}" data-id="${q.id}"><div class="qt"><span class="tag">${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
 function visibleQs(){const ev=B.questions.filter(q=>!q.day),dq=B.questions.filter(q=>q.day===dayTab);return{ev:dayTab===1?ev:ev.filter(q=>!shutQ(q)||q.answer),dq}}
 function renderQs(){const {ev,dq}=visibleQs(),ids=[...ev,...dq].map(q=>q.id).join(',');const box=$('qs');
@@ -291,8 +293,8 @@ function updCard(id){const q=B.questions.find(x=>x.id===id),el=$('qs').querySele
 $('qs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
  if(d.cb){e.stopPropagation();toggleCb(+d.cb);return}
  if(d.gq){doPick(+d.gq,d.o);return}
- if(d.mq){const id=+d.mq,q=B.questions.find(x=>x.id===id),my=myOf(q);const sel=draft[id]||(my?[...my]:[]);const i=sel.indexOf(d.o);
-  if(i>=0)sel.splice(i,1);else if(sel.length<q.pick)sel.push(d.o);else{toast(`You already picked ${q.pick}. Tap one to remove it.`);return}draft[id]=sel;updCard(id);return}
+ if(d.mq){const id=+d.mq,q=B.questions.find(x=>x.id===id);const sel=draft[id]||[];const i=sel.indexOf(d.o);
+  if(myOf(q))return;if(i>=0)sel.splice(i,1);else if(sel.length<q.pick)sel.push(d.o);else{toast(`You already picked ${q.pick}. Tap one to remove it.`);return}draft[id]=sel;updCard(id);return}
  if(d.msave){const id=+d.msave;doPick(id,draft[id]||myOf(B.questions.find(x=>x.id===id)));return}
  if(d.tsave){const id=+d.tsave,v=$('qs').querySelector(`[data-tq="${id}"]`).value.trim();if(v.length<2){toast('Type a player name');return}doPick(id,v);return}
  if(d.q&&b.classList.contains('opt')){doPick(+d.q,d.o)}});
@@ -386,16 +388,16 @@ function demoInit(){const t0=nowS(),d=SEED.days,cl=k=>Date.parse(d[k]+'T'+SEED.c
  DB={players:names.map((n,i)=>({id:i+1,handle:(n+'_'+['gg','op','x','bgmi','yt','fps'][i%6]).toLowerCase(),name:i%4?n+(i%3?'':' OP'):'',created:t0-9000+i*60,hidden:false})),qs:[],picks:{},me:null,seq:1};
  const add=(kind,title,opts,close,day,tag,style,extra)=>DB.qs.push(Object.assign({id:DB.seq++,kind,title,options:opts,close_ts:close,day,tag,style,locked:false,answer:null,void:false},extra||{}));
  add('team','Who will win the BMSD 2026 Grand Finals?',T,cl('3'),0,'CHAMPION','grid');
- add('multi','Which teams will finish in the top 3?',T,cl('1'),0,'TOP 3','multi',{pick:3});
+ add('multi','Which teams will finish in the top 3?',T,cl('1'),0,'TOP 3','multi',{pick:3,ranked:true});
  add('multi','Which 6 teams will qualify for BMIC?',T,cl('1'),0,'BMIC','multi',{pick:6});
- for(let m=1;m<=SEED.matches;m++)add('match',`Match ${m}: Which team gets the chicken dinner?`,T,m<=2?t0-1800:cl('1'),1,`MATCH ${m}`,'grid');
+ for(let m=1;m<=SEED.matches;m++)add('match',`Match ${m}: Which team gets the chicken dinner?`,T,cl('1'),1,`MATCH ${m}`,'grid');
  add('team','Which team gets the most chicken dinners on Day 1?',T,cl('1'),1,'MOST CHICKEN DINNERS','grid');
  add('peak','How many people will watch at the peak on Day 1?',SEED.buckets,cl('1'),1,'PEAK VIEWERS','buttons');
  const pw=o=>{const ws=o.map((v,i)=>[v,1/Math.pow(i+1,.8)]),s=ws.reduce((a,b)=>a+b[1],0);let r=Math.random()*s;for(const [v,x] of ws){r-=x;if(r<=0)return v}return o[0]};
  const elim=['Jonathan','Jonathan','Goblin','Spower','jonathan ','Aditya','Neyoo','Clutchgod'];
  DB.players.forEach(p=>DB.qs.forEach(q=>{if(Math.random()>.8)return;let v;
   if(q.kind==='multi'){const s=new Set();while(s.size<q.pick)s.add(pw(q.options));v=[...s]}else if(q.kind==='text')v=elim[Math.floor(Math.random()*elim.length)];else v=pw(q.options);DB.picks[p.id+':'+q.id]=v}));
- DB.qs.filter(q=>q.close_ts<t0).forEach((q,i)=>{q.locked=true;q.answer=q.options[i]})}
+ DB.bonus={};DB.players.forEach((p,i)=>{if(i<14)DB.bonus[p.id]=Math.round(420-i*22-Math.random()*15)})}
 const dClosed=q=>q.locked||nowS()>=q.close_ts;
 const tn=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function dStats(q){const s={n:0,inc:{},names:{}};DB.players.forEach(p=>{if(p.hidden)return;const v=DB.picks[p.id+':'+q.id];if(v===undefined)return;s.n++;
@@ -410,13 +412,13 @@ function dBest(q,s){if(!q.answer||q.void)return null;const n=Math.max(1,s.n),A=d
  if(q.kind==='text'){const acc=A.map(tn),c=Object.entries(s.inc).filter(([k])=>acc.includes(k)).reduce((a,e)=>a+e[1],0)||1;return 100+Math.round(100*(1-c/n))}
  return 100+Math.round(100*(1-(s.inc[q.answer]||1)/n))}
 function dRank(b){const S={};DB.qs.forEach(q=>S[q.id]=dStats(q));
- const rows=DB.players.filter(p=>!p.hidden).map(p=>{let pts=0,c=0;DB.qs.forEach(q=>{if(b!=='all'&&q.day!==b)return;const x=dPts(q,S[q.id],DB.picks[p.id+':'+q.id]);if(x){pts+=x;c++}});return{id:p.id,handle:p.handle,name:p.name,pts,correct:c,created:p.created}})
+ const rows=DB.players.filter(p=>!p.hidden).map(p=>{let pts=b==='all'||b===1?(DB.bonus[p.id]||0):0,c=pts?1:0;DB.qs.forEach(q=>{if(b!=='all'&&q.day!==b)return;const x=dPts(q,S[q.id],DB.picks[p.id+':'+q.id]);if(x){pts+=x;c++}});return{id:p.id,handle:p.handle,name:p.name,pts,correct:c,created:p.created}})
   .sort((a,b)=>b.pts-a.pts||b.correct-a.correct||a.created-b.created);rows.forEach((r,i)=>r.rank=i+1);return rows}
 async function demoApi(path,body){await new Promise(r=>setTimeout(r,100));const err=(m,c)=>{throw Object.assign(new Error(m),{code:c||400})};
  if(path==='board'){return{now:nowS(),prize:SEED.prize,days:SEED.days,
   questions:DB.qs.map(q=>{const s=dStats(q),cl=dClosed(q);let counts=s.inc;if(q.kind==='text'){counts={};if(cl)Object.entries(s.inc).sort((a,b)=>b[1]-a[1]).slice(0,5).forEach(([k,v])=>counts[s.names[k]]=v)}
    const pct={};if(s.n)for(const k in counts)pct[k]=Math.round(100*counts[k]/s.n);
-   return{id:q.id,kind:q.kind,tag:q.tag,title:q.title,day:q.day,style:q.style,options:q.options,close_ts:q.close_ts,closed:cl,void:q.void,answer:q.answer,pick:q.pick,pct,picked:s.n>0,worth:dBest(q,s)}}),
+   return{id:q.id,kind:q.kind,tag:q.tag,title:q.title,day:q.day,style:q.style,options:q.options,close_ts:q.close_ts,closed:cl,void:q.void,answer:q.answer,pick:q.pick,ranked:!!q.ranked,pct,picked:s.n>0,worth:dBest(q,s)}}),
   boards:Object.fromEntries(['all','1','2','3'].map(b=>[b,dRank(b==='all'?'all':+b).filter(r=>r.pts>0).slice(0,10).map(({rank,handle,name,pts,correct})=>({rank,handle,name,pts,correct}))]))}}
  if(path==='join'){let h=(body.handle||'').trim();const m=h.match(/instagram\.com\/([^/?#\s]+)/i);if(m)h=m[1];h=h.replace(/^@/,'').toLowerCase();
   if(!/^[a-z0-9._]{1,30}$/.test(h))err('Enter a valid Instagram ID (letters, numbers, . and _ only).');
@@ -426,7 +428,7 @@ async function demoApi(path,body){await new Promise(r=>setTimeout(r,100));const 
  if(path==='me'){if(!DB.me)err('Not joined',401);const p=DB.players[DB.me-1],picks={},pts={};DB.qs.forEach(q=>{const v=DB.picks[p.id+':'+q.id];if(v!==undefined){picks[q.id]=v;if(q.answer)pts[q.id]=dPts(q,dStats(q),v)}});
   const ranks={};['all','1','2','3'].forEach(b=>{const r=dRank(b==='all'?'all':+b).find(r=>r.id===p.id);ranks[b]={rank:r.rank,pts:r.pts,correct:r.correct}});
   return{player:{handle:p.handle,name:p.name},picks,pts,ranks}}
- if(path==='pick'){if(!DB.me)err('Join first.',401);const q=DB.qs.find(q=>q.id===body.qid);if(!q)err('No such question',404);if(q.void)err('This question was cancelled.',409);if(dClosed(q))err('Picks for this question are closed.',409);
+ if(path==='pick'){if(!DB.me)err('Join first.',401);const q=DB.qs.find(q=>q.id===body.qid);if(!q)err('No such question',404);if(q.void)err('This question was cancelled.',409);if(dClosed(q))err('Picks for this question are closed.',409);if(DB.picks[DB.me+':'+q.id]!==undefined)err("You've already made this pick. Picks can't be changed.",409);
   if(q.kind==='multi'&&(!Array.isArray(body.option)||new Set(body.option).size!==q.pick))err(`Pick exactly ${q.pick} teams.`);
   DB.picks[DB.me+':'+q.id]=body.option;return{ok:true}}
  if(path.startsWith('profile/')){const h=decodeURIComponent(path.slice(8)),p=DB.players.find(p=>p.handle===h);if(!p)err('No such player',404);const r=dRank('all').find(r=>r.id===p.id);
@@ -441,7 +443,7 @@ if(DEMO){const bar=document.createElement('div');bar.className='demo';
  bar.addEventListener('click',async e=>{const id=e.target.id,q=DB.qs.find(q=>q.id===+$('dq').value);if(!q)return;
   if(id==='dlock'){q.locked=true;toast('Locked: crowd picks are now public')}
   if(id==='dset'){q.locked=true;if(q.kind==='multi'){const s=dStats(q);q.answer=Object.entries(s.inc).sort((a,b)=>b[1]-a[1]).slice(0,q.pick).map(e=>e[0])}else q.answer=q.kind==='text'?[$('da').value]:$('da').value;toast('Settled: '+dAns(q).join(', '))}
-  if(id==='dme'){DB.me=null;saveTok(null);ME=null;renderJoin();renderQs();toast('Reset. Join again to test.')}
+  if(id==='dme'){for(const k in DB.picks)if(k.startsWith(DB.me+':'))delete DB.picks[k];DB.me=null;saveTok(null);ME=null;renderJoin();renderQs();toast('Reset. Join again to test.')}
   if(['dlock','dset'].includes(id)){const v=q.id;fill();$('dq').value=v;fillA();await loadBoard();if(DB.me){TOKEN='demo';await loadMe();renderLb()}}});
  }
 </script></body></html>""".replace("__CSS__", CSS)

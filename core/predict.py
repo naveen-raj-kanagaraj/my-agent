@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import secrets
+import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -277,7 +278,7 @@ def create_event_set(close_ts: float = None) -> list:
     first = _close(1, close_ts)
     last = ist_ts(s["days"]["3"], s["close"])
     spec = [("team", "Who will win the BMSD 2026 Grand Finals?", s["teams"], last, "CHAMPION", "grid", {}, 1),
-            ("multi", "Which teams will finish in the top 3?", s["teams"], first, "TOP 3", "multi", {"pick": 3}, 2),
+            ("multi", "Which teams will finish in the top 3?", s["teams"], first, "TOP 3", "multi", {"pick": 3, "ranked": True}, 2),
             ("multi", "Which 6 teams will qualify for BMIC?", s["teams"], first, "BMIC", "multi", {"pick": 6}, 3)]
     ids = []
     for kind, title, opts, close, tag, style, meta, sort in spec:
@@ -483,7 +484,7 @@ def pick(token: str, qid: int, option, now: float = None) -> dict:
         vals = list(dict.fromkeys(str(v) for v in vals))
         if len(vals) != k or any(v not in q["options"] for v in vals):
             raise GameError(f"Pick exactly {k} teams.")
-        stored, shown = json.dumps(sorted(vals, key=q["options"].index)), vals
+        stored, shown = json.dumps(vals if q["meta"].get("ranked") else sorted(vals, key=q["options"].index)), vals
     elif q["kind"] == "text":
         stored = re.sub(r"\s+", " ", str(option or "")).strip()[:40]
         if len(tnorm(stored)) < 2:
@@ -494,9 +495,11 @@ def pick(token: str, qid: int, option, now: float = None) -> dict:
             raise GameError("Pick one of the options.")
         stored = shown = option
     with store._lock:
-        _db().execute("INSERT INTO pw_picks (player_id, qid, option, ts) VALUES (?,?,?,?) "
-                      "ON CONFLICT(player_id, qid) DO UPDATE SET option=excluded.option, ts=excluded.ts",
-                      (p["id"], q["id"], stored, time.time()))
+        try:   # picks are final: the first save wins
+            _db().execute("INSERT INTO pw_picks (player_id, qid, option, ts) VALUES (?,?,?,?)",
+                          (p["id"], q["id"], stored, time.time()))
+        except sqlite3.IntegrityError:
+            raise GameError("You've already made this pick. Picks can't be changed.", 409)
         _db().commit()
     _bust()
     return {"ok": True, "qid": q["id"], "option": shown}
@@ -624,7 +627,7 @@ def board(now: float = None) -> dict:
         out_q.append({"id": q["id"], "kind": q["kind"], "tag": q["tag"], "title": q["title"], "day": q["day"],
                       "style": q["style"], "options": q["options"], "close_ts": q["close_ts"], "closed": closed,
                       "void": bool(q["void"]), "answer": ans_list(q) if q["kind"] in ("multi", "text") else q["answer"],
-                      "pick": q["meta"].get("pick"), "pct": _pct(_public_counts(q, s, closed), s.get("n", 0)),
+                      "pick": q["meta"].get("pick"), "ranked": bool(q["meta"].get("ranked")), "pct": _pct(_public_counts(q, s, closed), s.get("n", 0)),
                       "picked": bool(s.get("n")), "worth": best})
     out_q.sort(key=lambda q: (q["day"] != 0, q["day"], next(x["sort"] for x in qmap.values() if x["id"] == q["id"]), q["id"]))
     boards = {}

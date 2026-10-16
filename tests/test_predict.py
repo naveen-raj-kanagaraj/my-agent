@@ -71,9 +71,9 @@ class PredictTests(unittest.TestCase):
     def test_pick_before_close_and_rejected_after(self):
         t = self.tok("alice")
         qid = predict.add_question("other", "Q?", ["A", "B"], time.time() + 3600)
-        self.assertEqual(self.pick(t, qid, "A").status_code, 200)
-        self.assertEqual(self.pick(t, qid, "B").status_code, 200)        # change allowed before close
         self.assertEqual(self.pick(t, qid, "Z").status_code, 400)        # not an option
+        self.assertEqual(self.pick(t, qid, "B").status_code, 200)
+        self.assertEqual(self.pick(t, qid, "A").status_code, 409)        # picks are final
         predict.update_question(qid, "close_ts", time.time() - 1)
         r = self.pick(t, qid, "A")
         self.assertEqual(r.status_code, 409)
@@ -195,6 +195,15 @@ class PredictTests(unittest.TestCase):
         # A: picked by 2/2 -> 100/3 each; B: 1/2 -> 150/3; D: 1/2 -> 150/3
         self.assertEqual(pts["ma"], round(100 / 3 + 150 / 3))
         self.assertEqual(pts["mb"], round(100 / 3 + 150 / 3))
+
+    def test_ranked_top3_keeps_tap_order(self):
+        t = self.tok("rk")
+        ids = predict.create_event_set()
+        top3 = ids[1]
+        self.assertEqual(self.pick(t, top3, ["Soul", "GodLike", "Nebula"]).status_code, 200)
+        me = self.web.post("/predict/api/me", json={}, headers={"X-PW-Token": t}).get_json()
+        self.assertEqual(me["picks"][str(top3)], ["Soul", "GodLike", "Nebula"])
+        self.assertEqual(self.pick(t, top3, ["Soul", "GodLike", "TAG"]).status_code, 409)
 
     def test_text_answer_matching(self):
         a, b, c = self.tok("ta"), self.tok("tb"), self.tok("tc")

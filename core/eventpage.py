@@ -325,7 +325,7 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 .mbox img{width:100%;display:block;border:1px solid var(--line);margin:10px 0}.mrow{display:flex;gap:8px;flex-wrap:wrap}
 </style></head><body>
 <div class="bar"><div class="in">
- <div class="title"><a class="brand" href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a><h1>__TITLE__ <span>live viewership</span></h1></div>
+ <div class="title"><span class="brand">__BRAND__</span><h1>__TITLE__ <span>live viewership</span></h1></div>
  <span id="st" class="pill"><span class="dot"></span><span id="stt">Live</span></span>
  <span class="pill" title="Time since the newest reading">UPDATED <span id="ago">-</span></span>
  <span class="pill" id="nx"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle class="p" id="rp" cx="10" cy="10" r="7" stroke-dasharray="44" stroke-dashoffset="0"/></svg>NEXT <span id="nxt">-</span></span>
@@ -391,7 +391,7 @@ function render(){
   if(mode!=='cd'){mode='cd';app.innerHTML=`<div class="card cd" id="cd" style="margin-top:12px"><div class="lbl">// Grand finals go live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>${historyHTML()}
    <div class="card" id="wpCard" style="margin-top:12px"><div class="head"><div><h2 id="wph">Watch party streamers</h2><div class="muted" style="font-size:12px">Official watch parties for the grand finals.</div></div><button class="btn sm" id="shareBoard">Share</button></div>
    <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Status</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
-   <div class="foot" id="foot"><div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div><div class="disc">Unofficial viewership tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON.</div></div>`;
+   <div class="foot" id="foot"><div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div><div class="disc">Unofficial viewership tracker by __BRAND__. Not affiliated with or endorsed by KRAFTON.</div></div>`;
    document.getElementById('shareHist').onclick=()=>openShare('history');window.addEventListener('resize',drawHistCanvas)}
   wpRows();drawHistCanvas();return}
  if(mode==='cd'){mode=null;app.innerHTML=''}
@@ -458,7 +458,7 @@ function render(){
  document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
  document.getElementById('foot').innerHTML=`Concurrent viewers = people watching at the same moment, summed across every live YouTube stream (official, watch parties, community). Recorded only while the official broadcast is live. Counted from: ${esc(D.method)}.
   <div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div>
-  <div class="disc">Unofficial viewership tracker by <a href="__BRANDURL__" target="_blank" rel="noopener">__BRAND__</a>. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included.</div>`;
+  <div class="disc">Unofficial viewership tracker by __BRAND__. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included.</div>`;
  rows();wpRows();chips();drawChart();mark();
 }
 function wpRows(){const sb=document.getElementById('shareBoard');if(sb)sb.onclick=()=>openShare('board');
