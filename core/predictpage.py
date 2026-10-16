@@ -145,7 +145,7 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .rules ul{margin:8px 0 0;padding-left:18px}.rules li{margin:5px 0;font-size:14px;color:var(--ink)}
 .tx{display:flex;gap:8px}.cq{padding:12px 0;border-top:1px solid var(--line)}.cq:first-child{border-top:0;padding-top:0}.cqt{font:700 15px 'Chakra Petch',sans-serif;margin:4px 0 8px}.cr.mine{outline:1px solid var(--lime)}.qbadge{height:44px;display:block}
 .sbar{position:fixed;left:50%;transform:translateX(-50%);width:min(948px,calc(100% - 20px));bottom:10px;z-index:65;display:none;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:rgba(18,18,25,.96);border:1px solid var(--lime);box-shadow:0 8px 30px rgba(0,0,0,.6)}
-.sbar .mono{font-size:13px;color:var(--muted)}.sbar .btn[disabled]{background:var(--card2);color:var(--muted);opacity:1}.tx .inp{flex:1;min-width:0}
+.sbar .mono{font-size:13px;color:var(--muted)}@media(max-width:600px){.sbar{padding:8px 10px;bottom:8px}.sbar .btn{padding:10px 12px;font-size:12px}}.sbar .btn[disabled]{background:var(--card2);color:var(--muted);opacity:1}.tx .inp{flex:1;min-width:0}
 @view-transition{navigation:auto}
 .pwin{position:fixed;inset:0;z-index:999;pointer-events:none;background:#0b0b12;display:grid;place-items:center;animation:pwout .5s .35s cubic-bezier(.7,0,.3,1) forwards}
 .pwin b{font:700 22px "Chakra Petch",sans-serif;letter-spacing:.2em;color:#f5c451;animation:pwfade .25s .3s forwards}
@@ -187,8 +187,7 @@ PAGE = r"""<!doctype html>
  </div>
  <div class="card" id="joinCard"></div>
  <div class="card" id="qcard"><div class="lbl">// step 2</div><h2 style="margin:4px 0 12px">Make your picks</h2>
-  <div class="tabs" id="dtabs"></div><div class="qs" id="qs"></div>
-  <div class="sbar" id="sbar"><span id="sbt" class="mono"></span><button class="btn" id="sbb" disabled>Submit my picks</button></div></div>
+  <div class="tabs" id="dtabs"></div><div class="qs" id="qs"></div></div>
  <div class="card" id="crowdCard" style="display:none"><div class="lbl">// what everyone picked</div><h2 style="margin:4px 0 4px">Crowd picks</h2>
   <div class="muted" style="font-size:13px;margin-bottom:10px">Updates live. The leaderboard and winners are revealed after the finals on Sun 18 Oct.</div><div id="crowd"></div></div>
  <div class="card" id="lbCard" style="display:none"><div class="head"><div><div class="lbl">// leaderboard</div><h2>Top 10</h2></div><button class="btn sm" id="shareLb">Share</button></div>
@@ -207,6 +206,7 @@ PAGE = r"""<!doctype html>
   </ul>
  </div>
 </div>
+<div class="sbar" id="sbar"><span id="sbt" class="mono"></span><button class="btn" id="sbb" disabled>Submit my picks</button></div>
 <div class="modal" id="smodal"><div class="mbox"><div class="head"><div><h2 id="smt">Share</h2></div><button class="btn ghost sm" data-close>Close</button></div>
  <img id="simg" alt="Share image"><div class="mrow"><button class="btn" id="sNative">Share</button><button class="btn ghost" id="sCopy">Copy link</button><button class="btn ghost" id="sX">X</button><button class="btn ghost" id="sWa">WhatsApp</button><button class="btn ghost" id="sDl" style="grid-column:1/-1">Download image</button></div>
  <div class="muted" style="font-size:12px;margin-top:8px">Instagram: download the image, then post it to your story and tag @letsgrowesports.igc.</div></div></div>
@@ -296,7 +296,7 @@ function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=my!==un
  const how=!shut&&!has?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.kind==='text'?'text':q.style]||HOW.buttons)(q)}</div>`:'';
  return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}" data-id="${q.id}"><div class="qt"><span class="tag">${q.tag==='BMIC'&&TLOGO.BMIC26?`<img class="qbadge" src="${TLOGO.BMIC26}" alt="BMIC">`:esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
 function sbar(){const el=$('sbar');if(!el||!B)return;const oq=openQs(),n=oq.filter(q=>isDone(q,draft[q.id])).length;
- if(!oq.length){el.style.display='none';return}el.style.display='flex';
+ if(!oq.length){el.style.display='none';$('qcard').style.paddingBottom='';return}el.style.display='flex';$('qcard').style.paddingBottom=(el.offsetHeight+28)+'px';
  $('sbt').textContent=`${n} of ${oq.length} answered`;const b=$('sbb');b.disabled=n<oq.length;b.textContent=n<oq.length?`Answer all ${oq.length} to submit`:'Submit my picks'}
 function saveDraft(){try{localStorage.setItem('pw_draft',JSON.stringify(draft))}catch(e){}}
 try{draft=JSON.parse(localStorage.getItem('pw_draft')||'{}')||{}}catch(e){}
