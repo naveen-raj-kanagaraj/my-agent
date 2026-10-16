@@ -116,6 +116,12 @@ tr.you td{background:rgba(182,242,58,.08)}tr.pin td{border-top:2px dashed var(--
 .nmx{display:flex;align-items:center;min-width:0}.nmx>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cbl button{display:flex;align-items:center}.how{font-size:13px;color:var(--muted);margin-top:-4px}.ch{font-size:12px;margin-bottom:2px}
 .rules ul{margin:8px 0 0;padding-left:18px}.rules li{margin:5px 0;font-size:14px;color:var(--ink)}
+.qh{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:6px;width:100%;box-sizing:border-box}
+.q.shut{gap:0;padding:12px 14px}.q.shut h3{font-size:15px}.q.shut:hover{border-color:var(--lime)}.q.done.shut{border-color:rgba(182,242,58,.35)}
+.qb{display:flex;flex-direction:column;gap:10px;margin-top:10px;animation:qin .25s ease-out}@keyframes qin{from{opacity:0;transform:translateY(-6px)}to{opacity:1}}
+.sm{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}.sm.muted{justify-content:space-between}.chev{color:var(--lime);font-size:20px;line-height:1}
+.chipx{display:inline-flex;align-items:center;gap:0;padding:4px 8px;background:var(--bg2);border:1px solid var(--line);font:600 13px "Chakra Petch"}.chipx b{color:var(--lime);margin-right:6px}.chipx .tlb{width:30px;height:18px;margin-right:6px}.chipx .tlb img{max-width:30px;max-height:18px}
+.qs{gap:8px}
 .tx{display:flex;gap:8px}.tx .inp{flex:1;min-width:0}
 @media(max-width:600px){.mgrid{grid-template-columns:repeat(4,1fr);gap:5px}.mo{font-size:11px;padding:8px 2px;min-height:60px;gap:5px}.mo .tlb{width:50px;height:26px}.mo .tlb img{max-width:50px;max-height:26px}.wrap{padding:0 10px 90px}.bar .in{padding:8px 10px}.title h1{font-size:16px}.hero h2{font-size:24px}
  .card{padding:12px}.qs{grid-template-columns:1fr}.tabs button{padding:8px 10px;font-size:12px}td{padding:8px 5px}.hide-m{display:none}
@@ -233,23 +239,32 @@ function qBody(q,shut){const my=myOf(q),done=shut||!!my;
  if(q.style==='dropdown')return crowdBars(q,5);
  return `<div class="opts ${q.options.length>4||q.options.some(o=>o.length>14)?'one':''}">${q.options.map(o=>`<button class="opt ${o===my?'mine':''} ${isAns(q,o)?'ok':''}" data-q="${q.id}" data-o="${esc(o)}" ${shut||my?'disabled':''}><div class="fill" style="width:${shut||my?pct(q,o):0}%"></div><span>${esc(o)}</span><span class="pc">${(shut||my)&&q.picked?pct(q,o)+'%':''}</span></button>`).join('')}</div>`}
 const HOW={multi:q=>q.ranked?`Tap ${q.pick} teams in order: first tap is #1, then #2, then #3. Tap a team again to remove it. Then press Save.`:`Tap ${q.pick} teams, then press Save.`,grid:()=>'Tap a team. It saves right away.',dropdown:()=>'Choose from the list. It saves right away.',buttons:()=>'Tap one. It saves right away.'};
-function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=Array.isArray(my)?my.length:my;
+let openQ=null;
+function nextOpen(after){const {ev,dq}=visibleQs(),L=[...ev,...dq].filter(q=>!shutQ(q)&&!(Array.isArray(myOf(q))?myOf(q).length:myOf(q)));
+ if(after==null)return L[0]?L[0].id:null;const all=[...ev,...dq].map(q=>q.id),i=all.indexOf(after);return(L.find(q=>all.indexOf(q.id)>i)||L[0]||{}).id??null}
+function summary(q,my,shut){const v=Array.isArray(my)?my:my?[my]:[];
+ if(v.length)return `<div class="sm">${v.map((o,i)=>`<span class="chipx">${q.ranked?`<b>#${i+1}</b>`:''}${tl(o)}<span>${esc(o)}</span></span>`).join('')}</div>`;
+ if(q.answer)return `<div class="sm"><span class="chipx">${tl(Array.isArray(q.answer)?q.answer[0]:q.answer)}<span>Result: ${esc(Array.isArray(q.answer)?q.answer.join(', '):q.answer)}</span></span></div>`;
+ return `<div class="sm muted">${shut?'Picks closed':'Tap to pick'} <span class="chev">›</span></div>`}
+function qCard(q){const [ct,cc]=closeTxt(q),my=myOf(q),shut=shutQ(q),has=Array.isArray(my)?my.length:my,ex=openQ===q.id;
  let foot='';const got=ME&&ME.pts?ME.pts[q.id]:undefined;const ans=Array.isArray(q.answer)?q.answer.join(', '):q.answer;
  if(q.answer&&has)foot=got>0?`<span class="good">Correct · +${got} points</span>`:`<span class="bad">Missed · Answer: ${esc(ans)}</span>`;
  else if(q.answer)foot=`<span>Answer: ${esc(ans)}</span>`;
  else if(has)foot=`<span class="saved">✓ Saved</span><span>${q.picked?'% = share of players who picked each team':'Crowd % shows once 20 players have picked'}</span>`;
  else if(!shut)foot=`<span>${ME?'Not picked yet':'Enter your Instagram ID above to play'}</span>`;
  const how=!shut&&!has?`<div class="how">${(HOW[q.kind==='multi'?'multi':q.style]||HOW.buttons)(q)} <b>You can't change it after.</b></div>`:'';
- return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'}" data-id="${q.id}"><div class="qt"><span class="tag">${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`}
+ return `<div class="q ${q.answer?'res':''} ${q.void?'void':''} ${q.day?'':'ev'} ${ex?'open':'shut'} ${has?'done':''}" data-id="${q.id}"><button class="qh" data-x="${q.id}"><div class="qt"><span class="tag">${has?'✓ ':''}${esc(q.tag||q.kind)}</span><span class="cl ${cc}" data-cl="${q.id}">${ct}</span></div><h3>${esc(q.title)}</h3>${ex?'':summary(q,my,shut)}</button>${ex?`<div class="qb">${how}${qBody(q,shut)}<div class="qf">${foot}</div></div>`:''}</div>`}
 function visibleQs(){const ev=B.questions.filter(q=>!q.day),dq=B.questions.filter(q=>q.day===dayTab);return{ev:dayTab===1?ev:ev.filter(q=>!shutQ(q)||q.answer),dq}}
-function renderQs(){const {ev,dq}=visibleQs(),ids=[...ev,...dq].map(q=>q.id).join(',');const box=$('qs');
+function renderQs(){const {ev,dq}=visibleQs(),ids=[...ev,...dq].map(q=>q.id).join(',');const box=$('qs');if(openQ===null&&ME&&!renderQs.did){renderQs.did=1;openQ=nextOpen(null)}
  if(box.dataset.ids===ids){[...ev,...dq].forEach(q=>{const h=qCard(q);if(cardHtml[q.id]!==h){cardHtml[q.id]=h;const el=box.querySelector(`.q[data-id="${q.id}"]`);if(el)el.outerHTML=h}});if(openCb)toggleCb(openCb,true);return}
  box.dataset.ids=ids;cardHtml={};
  box.innerHTML=(ev.length?`<div class="qsec">Whole tournament</div>`+ev.map(q=>(cardHtml[q.id]=qCard(q))).join(''):'')+
   `<div class="qsec">Day ${dayTab} · ${dayName(dayTab)}</div>`+(dq.map(q=>(cardHtml[q.id]=qCard(q))).join('')||`<div class="muted" style="font-size:14px">Day ${dayTab} questions open after Day ${dayTab-1}.</div>`);
  if(openCb)toggleCb(openCb,true)}
 function updCard(id){const q=B.questions.find(x=>x.id===id),el=$('qs').querySelector(`.q[data-id="${id}"]`);if(!q||!el)return renderQs();const h=qCard(q);cardHtml[id]=h;el.outerHTML=h}
+function setOpen(id,scroll){const prev=openQ;openQ=id;if(prev!=null)updCard(prev);if(id!=null){updCard(id);if(scroll){const el=$('qs').querySelector(`.q[data-id="${id}"]`);if(el)setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),60)}}}
 $('qs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const d=b.dataset;
+ if(d.x){const id=+d.x;setOpen(openQ===id?null:id,false);return}
  if(d.cb){e.stopPropagation();toggleCb(+d.cb);return}
  if(d.gq){doPick(+d.gq,d.o);return}
  if(d.mq){const id=+d.mq,q=B.questions.find(x=>x.id===id);const sel=draft[id]||[];const i=sel.indexOf(d.o);
@@ -270,7 +285,7 @@ function toggleCb(qid,force){document.querySelectorAll('.cbp').forEach(p=>p.remo
 document.addEventListener('click',()=>{if(openCb){openCb=null;document.querySelectorAll('.cbp').forEach(p=>p.remove())}});
 async function doPick(qid,o){if(!ME){toast('Enter your Instagram ID first');$('joinCard').scrollIntoView({behavior:'smooth'});return}
  if(busy[qid])return;busy[qid]=1;const prev=ME.picks[qid];ME.picks[qid]=Array.isArray(o)?[...o]:o;delete draft[qid];updCard(qid);
- try{await api('pick',{qid,option:o});toast('Saved');renderJoin();loadBoard()}catch(e){if(prev!==undefined)ME.picks[qid]=prev;else delete ME.picks[qid];toast(e.message);updCard(qid)}finally{delete busy[qid]}}
+ try{await api('pick',{qid,option:o});toast('Saved');renderJoin();const nx=nextOpen(qid);setTimeout(()=>{setOpen(nx,true);loadBoard()},450)}catch(e){if(prev!==undefined)ME.picks[qid]=prev;else delete ME.picks[qid];toast(e.message);updCard(qid)}finally{delete busy[qid]}}
 
 // ---------- leaderboard ----------
 function lbTabs(){const ds=[...new Set(B.questions.filter(q=>q.day).map(q=>String(q.day)))].sort();const t=[['all','Overall'],...ds.map(d=>[d,'Day '+d])];$('ltabs').style.display=t.length>2?'':'none';
