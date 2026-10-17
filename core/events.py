@@ -57,7 +57,7 @@ PRESETS = {
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
                          "@sriop-sr70", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
-        "next_start": "2026-10-17 13:00",       # IST; shown as a countdown while the official stream is offline
+        "next_start": "2026-10-18 13:00",       # IST; shown as a countdown while the official stream is offline
         "match": ["bmsd", "bgmi showdown", "battlegrounds mobile india showdown", "battlegrounds mobile showdown",
                   "bgmi show down", "bm showdown"],
         "queries": ["BMSD", "BMSD 2026", "BGMI Showdown", "Battlegrounds Mobile India Showdown", "BMSD watch party"],
@@ -360,11 +360,19 @@ _JUMP = {}       # vid -> (ts, viewers) of an unconfirmed big jump from the watc
 _fast_pool = ThreadPoolExecutor(max_workers=24)
 
 
+def paused(key: str) -> bool:
+    """Owner said the broadcast is over (kv event_stop:<key> = epoch): record nothing and show off-air until then,
+    even if an official stream is still up (post-show, end screen)."""
+    return (store.kv_get(f"event_stop:{key}") or 0) > time.time()
+
+
 def fast_tick(ev: dict, now: float = None) -> dict:
     """Re-count every live stream from its own live counter and record one total. Big streams every FAST_SEC,
     tiny ones every MINOR_SEC. Returns {'total', 'live'} or {} if nothing is known to be live."""
     key = ev["key"]
     now = now or time.time()
+    if paused(key):
+        return {}
     live = {v: x for v, x in _LIVE.get(key, {}).items() if permitted(ev, x)}
     if not live:
         return {}
@@ -728,7 +736,7 @@ def poll(ev: dict, now: int = None) -> dict:
     _LIVE[ev["key"]] = {s["vid"]: s for s in streams}
     total = sum(s["viewers"] for s in streams)
     by = {k: sum(s["viewers"] for s in streams if s["kind"] == k) for k in ("official", "watch party", "community")}
-    official_live = by["official"] > 0
+    official_live = by["official"] > 0 and not paused(ev["key"])
     with store._lock:
         c = _db()
         for s in streams:
@@ -866,6 +874,8 @@ def stats(key: str, since: float = 0, until: float = None) -> dict:
         out["live_now"] = sorted((x for x in lastv.values() if x["viewers"] > 0 and (not evx or permitted(evx, x))),
                                  key=lambda x: -x["viewers"])
     out["official_live"] = (recent and ticks[-1]["official"] > 0) or any(x["kind"] == "official" for x in out["live_now"])
+    if paused(key):
+        out["official_live"] = False
     if not out["official_live"]:
         out["live_now"] = []          # only show streams while the official broadcast is on
     # broadcasts: runs of readings with no gap over 1 hour (restarts leave short gaps) (readings only exist while official was live)

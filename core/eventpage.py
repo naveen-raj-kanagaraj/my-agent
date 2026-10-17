@@ -469,7 +469,7 @@ async function toggleDay(d){const row=document.getElementById('dx-'+d),hd=docume
   const x=document.getElementById('dx-'+d);if(x)x.querySelector('.dxin').innerHTML=dayHTML(j)}catch(e){row.querySelector('.dxin').innerHTML='<span class="muted">Could not load this day. Try again.</span>'}}
 function render(){
  const app=document.getElementById('app');
- if(cdMode()){
+ if(cdMode()&&!(D.ticks&&D.last_broadcast)){   // no broadcast yet: countdown page. After a broadcast the countdown sits on top of its numbers
   if(mode!=='cd'){mode='cd';app.innerHTML=`<div class="card cd" id="cd" style="margin-top:12px"><div class="lbl">// Grand finals go live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>${historyHTML()}
    <div class="card" id="wpCard" style="margin-top:12px"><div class="head"><div><h2 id="wph">Watch party streamers</h2><div class="muted" style="font-size:12px">Official watch parties for the grand finals.</div></div><button class="btn sm" id="shareBoard">Share</button></div>
    <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Status</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
@@ -484,7 +484,7 @@ function render(){
  const by=off?{official:LB.split.official,'watch party':LB.split.watch,community:LB.split.community}:{official:0,'watch party':0,community:0};
  if(!off)live.forEach(s=>by[s.kind]=(by[s.kind]||0)+s.viewers);
  if(!document.getElementById('big')){
-  app.innerHTML=`<div class="card cd" id="cd" style="display:none;margin-top:12px"><div class="lbl">// Next broadcast goes live in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>
+  app.innerHTML=`<div class="card cd" id="cd" style="display:none;margin-top:12px"><div class="lbl">// Grand finals continue in</div><div class="cdv mono" id="cdv"></div><div class="muted" id="cdw"></div></div>
   <div class="hero"><div class="card big"><div class="head" style="margin:0"><div class="lbl" id="bk"></div><button class="btn sm" id="shareHero">Share</button></div><div class="v" id="big" data-v="0">0</div>
     <div><span id="dl" class="delta flat"></span> <span class="muted" id="nlive"></span></div>
     <div class="split" id="split"></div><div class="legend" id="leg"></div></div>
