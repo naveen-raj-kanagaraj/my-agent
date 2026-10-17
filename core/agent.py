@@ -404,7 +404,7 @@ def chat(user_id: str, platform: str, message: str, ctx: "context.Ctx" = None,
             alerts.notify("anthropic_credits", "Anthropic API credits are used up. The agent can't answer anyone. "
                           "Top up at console.anthropic.com > Billing.", 120)
         elif isinstance(e, anthropic.AuthenticationError):
-            alerts.notify("anthropic_auth", "Anthropic rejected the API key. Check ANTHROPIC_API_KEY.", 120)
+            alerts.notify("anthropic_auth", "Anthropic rejected the API key. Check ANTHROPIC_API_KEY.", 1440)   # once a day, not every 2h
         if not is_owner and _is_credit_error(e):
             return "I'm temporarily unavailable. Please try again later."
         return friendly_error(e)
