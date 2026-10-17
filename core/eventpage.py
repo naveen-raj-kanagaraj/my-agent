@@ -79,7 +79,8 @@ def data(key: str = None) -> dict:
             peak_official=st["peak_official"], peak_watch=st["peak_watch"],
             days=[{"day": d["day"], "peak": d["peak"], "avg": round(d["avg_broadcast"]),
                    "at": datetime.fromtimestamp(d["peak_at"], events.REPORT_TZ).strftime("%I:%M %p") if d.get("peak_at") else "",
-                   "peak_ts": d.get("peak_at"), "split": d.get("split", {})}
+                   "peak_ts": d.get("peak_at"), "split": d.get("split", {}),
+                   "date": datetime.fromtimestamp(d["peak_at"], events.REPORT_TZ).strftime("%Y-%m-%d") if d.get("peak_at") else ""}
                   for d in st["days"]],
             series_all=_thin(series, 1500),
             series_recent=_thin([t for t in recent if t[0] < series[-1][0] - 200], 2400) + [t for t in recent if t[0] >= series[-1][0] - 200], official_live=st.get("official_live", False))
@@ -387,6 +388,9 @@ tr.fu td.num{animation:fu 1.2s}tr.fd td.num{animation:fd 1.2s}@keyframes fu{0%{c
 .modal{position:fixed;inset:0;z-index:60;background:rgba(3,2,12,.82);display:none;align-items:center;justify-content:center;padding:16px}
 .modal.on{display:flex}.mbox{background:var(--bg2);border:1px solid var(--line);padding:14px;max-width:440px;width:100%;max-height:94vh;overflow:auto}
 .mbox img{width:100%;display:block;border:1px solid var(--line);margin:10px 0}.mrow{display:flex;gap:8px;flex-wrap:wrap}
+.dayr{cursor:pointer}.dayr:hover td{background:rgba(182,242,58,.05)}.dayr .car{display:inline-block;width:14px;color:var(--lime);transition:transform .2s}.dayr.open .car{transform:rotate(90deg)}.dayr.open td{background:rgba(182,242,58,.07)}
+.dayx>td{padding:0!important;background:var(--bg2)}.dxin{padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:780px){.dxin{grid-template-columns:1fr}}
+.dxt table{width:100%}.dxt .lbl{margin-bottom:4px}.dxs{display:flex;align-items:center;gap:8px;color:var(--ink)}.dxs img{width:22px;height:22px;border-radius:50%}.dxs span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
 </style></head><body>
 <div class="bar"><div class="in">
  <div class="title"><span class="brand">__BRAND__</span><h1>__TITLE__ <span>live viewership</span></h1></div>
@@ -454,6 +458,15 @@ function historyHTML(){const h=hist(),top=[...h].sort((a,b)=>b[2]-a[2]),best={},
 function cdMode(){const ns=D.next_start,LB=D.last_broadcast;if(!ns||D.official_live)return false;
  // keep the countdown ('starting soon') after the scheduled time until that day's broadcast actually starts (max 12h)
  const started=LB&&LB.end>=ns-1800;return ns-nowS()>0||(!started&&nowS()-ns<12*3600)}
+let OPEN_DAY=null;const DAYC={};
+function dayTable(list,title){if(!list.length)return '';return `<div class="dxt"><div class="lbl">// ${title}</div><table><thead><tr><th>#</th><th>Stream</th><th class="num">Peak</th><th class="hide-m">At</th><th class="num">Avg</th></tr></thead><tbody>${list.map((x,i)=>`<tr><td class="mono muted">${i+1}</td><td><a class="dxs" href="${esc(x.url)}" target="_blank" rel="noopener">${x.logo?`<img src="${esc(x.logo)}" alt="" referrerpolicy="no-referrer" loading="lazy">`:''}<span>${esc(x.channel)}</span></a></td><td class="num">${fmt(x.peak)}</td><td class="hide-m muted">${esc(x.at)}</td><td class="num muted">${fmt(x.avg)}</td></tr>`).join('')}</tbody></table></div>`}
+function dayHTML(j){const a=dayTable(j.official||[],'Official &amp; live streams'),b=dayTable(j.watch||[],'Watch parties');return (a+b)||'<span class="muted">No stream data for this day.</span>'}
+async function toggleDay(d){const row=document.getElementById('dx-'+d),hd=document.querySelector(`.dayr[data-d="${d}"]`);if(!row)return;
+ if(OPEN_DAY===d){OPEN_DAY=null;row.hidden=true;hd.classList.remove('open');return}
+ document.querySelectorAll('.dayx').forEach(x=>x.hidden=true);document.querySelectorAll('.dayr').forEach(x=>x.classList.remove('open'));
+ OPEN_DAY=d;row.hidden=false;hd.classList.add('open');
+ try{const r=await fetch('daystreams/'+d+'?t='+Math.floor(Date.now()/30000),{cache:'no-store'});const j=await r.json();DAYC[d]=j;
+  const x=document.getElementById('dx-'+d);if(x)x.querySelector('.dxin').innerHTML=dayHTML(j)}catch(e){row.querySelector('.dxin').innerHTML='<span class="muted">Could not load this day. Try again.</span>'}}
 function render(){
  const app=document.getElementById('app');
  if(cdMode()){
@@ -494,7 +507,7 @@ function render(){
     <button class="more" id="more"></button></div>
    <div class="card" id="wpCard"><div class="head"><div><h2 id="wph">Watch party leaderboard</h2><div class="muted" style="font-size:12px">Streamers: share your rank card.</div></div><button class="btn sm" id="shareBoard">Share</button></div>
     <div class="scroll"><table><thead><tr><th>#</th><th>Streamer</th><th class="num" id="wpth">Live</th><th class="num hide-m">Peak</th><th></th></tr></thead><tbody id="wprows"></tbody></table></div><button class="more" id="wpmore"></button></div>
-   <div class="card"><div class="head"><div><h2>By day</h2></div></div><div class="scroll"><table><thead><tr><th>Day (IST)</th><th class="num">Peak</th><th>At</th><th class="num">Average</th></tr></thead><tbody id="days"></tbody></table></div></div>
+   <div class="card"><div class="head"><div><h2>By day</h2><div class="muted" style="font-size:12px">Tap a day for every live stream and watch party.</div></div></div><div class="scroll"><table><thead><tr><th>Day (IST)</th><th class="num">Peak</th><th>At</th><th class="num">Average</th></tr></thead><tbody id="days"></tbody></table></div></div>
   </div><div class="foot" id="foot"></div>`;
   document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{view=b.dataset.v;hover=null;drawChart();mark()});
   document.querySelectorAll('#rg button').forEach(b=>b.onclick=()=>{if(b.disabled)return;range=b.dataset.r;hover=null;ys={};drawChart();mark()});
@@ -526,7 +539,9 @@ function render(){
  {const e=document.getElementById('ktp');if(e){e.textContent=fmt(D.peak);document.getElementById('ktpw').textContent=(D.peak_when||'')+' // all days so far'}}
  const bc=LB.peak!=null;document.getElementById('kp').textContent=fmt(bc?LB.peak:D.peak);document.getElementById('kpw').textContent=bc?LB.peak_when:D.peak_when;
  document.getElementById('ka').textContent=fmt(bc&&LB.avg!=null?LB.avg:D.avg);document.getElementById('ko').textContent=fmt(bc&&LB.peak_official!=null?LB.peak_official:D.peak_official);document.getElementById('kw').textContent=fmt(bc&&LB.peak_watch!=null?LB.peak_watch:D.peak_watch);
- document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
+ {const dEl=document.getElementById('days'),sig=(D.days||[]).map(d=>d.date+d.peak).join();if(dEl.dataset.sig!==sig){dEl.dataset.sig=sig;
+ dEl.innerHTML=(D.days||[]).slice().reverse().map(d=>`<tr class="dayr${OPEN_DAY===d.date?' open':''}" data-d="${esc(d.date)}"><td><span class="car">\u25B8</span>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr><tr class="dayx" id="dx-${esc(d.date)}"${OPEN_DAY===d.date?'':' hidden'}><td colspan="4"><div class="dxin">${DAYC[d.date]?dayHTML(DAYC[d.date]):'<span class="muted mono">LOADING...</span>'}</div></td></tr>`).join('');
+ dEl.querySelectorAll('.dayr').forEach(r=>r.onclick=()=>toggleDay(r.dataset.d))}}
  document.getElementById('foot').innerHTML=`Concurrent viewers = people watching at the same moment, summed across every live YouTube stream (official, watch parties, community). Recorded only while the official broadcast is live. Counted from: ${esc(D.method)}.
   <div class="follow"><span>FOLLOW __BRAND__</span>__SOCIAL__</div>
   <div class="disc">Unofficial viewership tracker by __BRAND__. Not affiliated with or endorsed by KRAFTON. YouTube only; other platforms are not included.</div>`;

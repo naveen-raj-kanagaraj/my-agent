@@ -112,6 +112,20 @@ def data():
     return _memo("/data", 1, _jdump(eventpage.live_data), "application/json")
 
 
+@app.route("/daystreams/<date>")
+def daystreams(date):
+    import re as _re
+    from core import events
+    if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        return Response(status=404)
+    ev = events.get(None)
+    if not ev:
+        return _json({})
+    r = _memo("/daystreams/" + date, 30, _jdump(lambda: events.day_streams(ev["key"], date)), "application/json")
+    r.headers["Cache-Control"] = "public, max-age=30, s-maxage=30"
+    return r
+
+
 @app.route("/series")
 def series():
     return _memo("/series", 20, _jdump(eventpage.series_data), "application/json")

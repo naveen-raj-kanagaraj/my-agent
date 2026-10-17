@@ -968,6 +968,46 @@ def stream_series(key: str, vids: list, t0: float, t1: float, limit: int = 600) 
     return out
 
 
+_DAYS = {}
+
+
+def day_streams(key: str, date: str) -> dict:
+    """One IST day: every stream's peak (with time) and average while live, split into official/live streams and
+    watch parties. Uses the full-resolution readings when that day has them, else the 30s samples."""
+    try:
+        d0 = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=REPORT_TZ).timestamp()
+    except ValueError:
+        return {}
+    hit = _DAYS.get((key, date))
+    today = datetime.now(REPORT_TZ).strftime("%Y-%m-%d")
+    if hit and (date != today or time.time() - hit[0] < 30):
+        return hit[1]
+    d1 = d0 + 86400
+    with store._lock:
+        c = _db()
+        table = "ev_fine" if c.execute("SELECT 1 FROM ev_fine WHERE event=? AND ts BETWEEN ? AND ? LIMIT 1",
+                                       (key, d0, d1)).fetchone() else "ev_samples"
+        rows = c.execute(f"SELECT vid, MAX(viewers) AS peak, ts AS at, AVG(viewers) AS avg FROM {table} "
+                         f"WHERE event=? AND ts BETWEEN ? AND ? AND viewers>0 GROUP BY vid", (key, d0, d1)).fetchall()
+        meta = {r["vid"]: dict(r) for r in c.execute("SELECT vid, channel, channel_id, title, kind FROM ev_streams WHERE event=?",
+                                                    (key,))}
+    out = {"date": date, "official": [], "watch": []}
+    for r in sorted(rows, key=lambda r: -r["peak"]):
+        m = meta.get(r["vid"], {})
+        if not m:
+            continue
+        name = m.get("channel", "")
+        tag = re.search(r"\[([^\]]{2,20})\]", m.get("title", "")) if m.get("kind") == "official" else None
+        if tag:   # the official channel runs several streams at once: say which one
+            name = f"KRAFTON {tag.group(1).upper()}"
+        x = {"vid": r["vid"], "channel": name, "title": m.get("title", ""), "kind": m.get("kind", ""),
+             "logo": avatar(m.get("channel_id", "")), "url": yt_link(r["vid"]), "peak": int(r["peak"]),
+             "at": datetime.fromtimestamp(r["at"], REPORT_TZ).strftime("%I:%M %p"), "avg": int(round(r["avg"] or 0))}
+        out["watch" if x["kind"] == "watch party" else "official"].append(x)
+    _DAYS[(key, date)] = (time.time(), out)
+    return out
+
+
 def stream_tail(key: str, vids: list, n: int = 90) -> dict:
     h = _HIST.get(key, {})
     return {v: [list(x) for x in list(h[v])[-n:]] for v in vids if v in h}
