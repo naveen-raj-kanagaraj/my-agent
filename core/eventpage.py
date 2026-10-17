@@ -318,7 +318,7 @@ a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}
 .split{display:flex;height:10px;overflow:hidden;background:var(--line);margin:14px 0 8px}.split div{transition:width .6s}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font:12px "Share Tech Mono",monospace;color:var(--muted)}.legend b{color:var(--ink);font-weight:400}
 .sw{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px}
-.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kpi.tpk{grid-column:1/-1;border-color:rgba(182,242,58,.45);background:linear-gradient(90deg,rgba(182,242,58,.12),rgba(182,242,58,.02))}.kpi.tpk .v{color:var(--lime);text-shadow:0 0 18px rgba(182,242,58,.35)}
 .kpi .v{font:700 24px "Chakra Petch",sans-serif;margin-top:4px;font-variant-numeric:tabular-nums}.kpi .s{color:var(--muted);font-size:12px}
 .head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}.head>div:first-child{margin-right:auto}
 h2{font:700 15px "Chakra Petch",sans-serif;text-transform:uppercase;letter-spacing:.04em;margin:0}
@@ -476,6 +476,7 @@ function render(){
     <div><span id="dl" class="delta flat"></span> <span class="muted" id="nlive"></span></div>
     <div class="split" id="split"></div><div class="legend" id="leg"></div></div>
    <div class="kpis">
+    <div class="card kpi tpk"><div class="lbl">BMSD 2026 tournament peak</div><div class="v" id="ktp"></div><div class="s" id="ktpw"></div></div>
     <div class="card kpi"><div class="lbl" id="kpl">Peak concurrent</div><div class="v" id="kp"></div><div class="s" id="kpw"></div></div>
     <div class="card kpi"><div class="lbl">Average concurrent</div><div class="v" id="ka"></div><div class="s" id="kas">this broadcast</div></div>
     <div class="card kpi"><div class="lbl">Official peak</div><div class="v" id="ko"></div><div class="s">official streams combined</div></div>
@@ -522,6 +523,7 @@ function render(){
  const cols={official:css('--orange'),'watch party':css('--cyan'),community:css('--purple')};
  document.getElementById('split').innerHTML=Object.keys(by).map(k=>`<div style="width:${tot?100*by[k]/tot:0}%;background:${cols[k]}"></div>`).join('');
  document.getElementById('leg').innerHTML=Object.keys(by).filter(k=>k!=='community'||by[k]>0).map(k=>`<span><span class="sw" style="background:${cols[k]}"></span>${k==='watch party'?'WATCH PARTIES':k.toUpperCase()} <b>${fmt(by[k])}</b>${tot?` (${(100*by[k]/tot).toFixed(0)}%)`:''}</span>`).join('');
+ {const e=document.getElementById('ktp');if(e){e.textContent=fmt(D.peak);document.getElementById('ktpw').textContent=(D.peak_when||'')+' // all days so far'}}
  const bc=LB.peak!=null;document.getElementById('kp').textContent=fmt(bc?LB.peak:D.peak);document.getElementById('kpw').textContent=bc?LB.peak_when:D.peak_when;
  document.getElementById('ka').textContent=fmt(bc&&LB.avg!=null?LB.avg:D.avg);document.getElementById('ko').textContent=fmt(bc&&LB.peak_official!=null?LB.peak_official:D.peak_official);document.getElementById('kw').textContent=fmt(bc&&LB.peak_watch!=null?LB.peak_watch:D.peak_watch);
  document.getElementById('days').innerHTML=(D.days||[]).map(d=>`<tr><td>${esc(d.day)}</td><td class="num">${fmt(d.peak)}</td><td>${esc(d.at)}</td><td class="num">${fmt(d.avg)}</td></tr>`).join('');
