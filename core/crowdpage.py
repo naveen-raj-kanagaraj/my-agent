@@ -138,13 +138,21 @@ span.av{border:1px solid var(--line)}
 .lead .ln{position:relative;font:700 52px/1 "Chakra Petch",sans-serif;margin-top:18px;text-shadow:0 0 20px rgba(182,242,58,.3)}
 .lead .lw{position:relative;font-size:20px;font-weight:700;text-transform:uppercase;margin-top:4px}.lead small{position:relative;font:11px "Share Tech Mono",monospace;color:var(--muted)}
 .tm div{gap:2px}.tm .tav{position:absolute;top:6px;right:6px;aspect-ratio:1;border-radius:4px;object-fit:cover;background:rgba(0,0,0,.28);pointer-events:none}.tm b,.tm span{position:relative;z-index:1;text-shadow:0 1px 6px rgba(0,0,0,.25)}
+.res .rh{display:flex;align-items:center;justify-content:space-between;gap:10px}.res h3{margin-bottom:10px}
+.sbtn{font:700 13px "Chakra Petch",sans-serif;background:var(--lime);color:#0b0b12;border:0;padding:8px 14px;cursor:pointer;clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px)}
+.wg{display:grid;grid-template-columns:1fr 1fr;gap:22px}@media(max-width:780px){.wg{grid-template-columns:1fr}}
+.l2{font:12px "Share Tech Mono",monospace;color:var(--muted);margin-bottom:6px}.wr{display:flex;gap:12px;align-items:center;padding:8px 6px;border-bottom:1px dashed var(--line);font-weight:600}
+.wr.g{background:rgba(245,196,81,.05)}.wr b{width:36px;font:700 18px "Chakra Petch",sans-serif}.wr em{margin-left:auto;font:normal 15px "Share Tech Mono",monospace;text-align:right}.wr em.ans{color:var(--lime)}
+.shm{position:fixed;inset:0;z-index:60;background:rgba(3,2,12,.85);display:none;align-items:center;justify-content:center;padding:16px}.shm.on{display:flex}
+.shm .bx{background:var(--card);border:1px solid var(--line);padding:14px;max-width:420px;width:100%;max-height:94vh;overflow:auto}.shm img{width:100%;display:block;margin:10px 0}
+.shm .rw{display:flex;gap:8px}.shm .rw button{flex:1;font:700 13px "Chakra Petch",sans-serif;padding:10px;border:1px solid var(--line);background:var(--card2);color:var(--ink);cursor:pointer}.shm .rw button.p{background:var(--lime);color:#0b0b12;border-color:var(--lime)}
 /* curve */
 .cv svg{width:100%;height:auto;display:block}
 .foot{margin-top:22px;font:12px "Share Tech Mono",monospace;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
 @media(prefers-reduced-motion:reduce){.c{opacity:1;transform:none;transition:none}}
 </style></head><body>
 <div class="bar"><div class="in"><div><span class="brand">letsgrowesports</span><h1>BMSD 2026 <span>// Predict &amp; Win</span></h1></div><a class="back" href="/">LIVE VIEWERSHIP &rarr;</a></div></div>
-<div class="wrap"><div class="hero"><div class="lbl">// THE COMMUNITY HAS SPOKEN</div><h2>What the community predicted</h2><p>Predictions closed 4 PM IST, 16 Oct. Results after the grand finals.</p></div>
+<div class="wrap"><div class="hero"><div class="lbl">// THE COMMUNITY HAS SPOKEN</div><h2 id="hh">What the community predicted</h2><p id="hp">Predictions closed 4 PM IST, 16 Oct. Results after the grand finals.</p></div>
 <div class="grid" id="g"></div>
 <div class="foot"><span>Percentages of everyone who played. Typed names are grouped (spellings and team tags).</span></div></div>
 <script>
@@ -161,6 +169,39 @@ const lead=(q,col)=>{const L=q.rows[0];return `<div class="lead">${cut(L.label,'
 const Q=t=>C.questions.find(q=>q.tag===t),ok=(q,l)=>(q.answer||[]).map(a=>a.toLowerCase()).includes(String(l).toLowerCase())?'ok':'';
 const card=(q,cls,inner)=>q?`<section class="c ${cls}"><div class="t">// ${esc(q.tag)}</div><h3>${esc(q.title)}</h3>${inner}<div class="ft">${esc(q.note)}</div></section>`:'';
 const arc=(cx,cy,r,a0,a1)=>{const p=a=>[cx+r*Math.cos(a),cy+r*Math.sin(a)],[x0,y0]=p(a0),[x1,y1]=p(a1);return `M${x0} ${y0}A${r} ${r} 0 ${a1-a0>Math.PI?1:0} 1 ${x1} ${y1}`};
+
+// 0. results: winners + correct answers, with a share card
+const short=t=>({'8Bit Esports':'8Bit','K9 Esports':'K9','RNTX Esports':'RNTX','Myth Esports':'Myth','Welt Esports':'Welt'}[t]||t);
+function results(){const W=C.winners||[];const A=t=>(Q(t)||{}).answer||[];if(!A('CHAMPION').length)return '';
+ const pk=A('PEAK VIEWERS')[0];const rows=[['Champion',A('CHAMPION').join('')],['Top 3',(C.podium&&C.podium.length?C.podium:A('TOP 3')).map(short).join(' · ')],['BMIC',A('BMIC').map(short).join(' · ')],
+  ['Final MVP',A('FINAL MVP').join(', ')],['MVP of the tournament',A('TOURNAMENT MVP').join(', ')],['Best IGL',A('BEST IGL').join(', ')],['The Eliminator',A('THE ELIMINATOR').join(', ')],
+  ['Peak viewers',(C.peak_actual?C.peak_actual+' ':'')+(pk?`(${pk})`:'')]];window._RES={W,rows};
+ const md=i=>['#f5c451','#cfd3dc','#d08a4a'][i]||'var(--muted)';
+ return `<section class="c s12 res"><div class="t">// RESULTS</div><div class="rh"><h3>The winners</h3><button class="sbtn" onclick="shareRes()">SHARE RESULTS</button></div><div class="wg">
+ ${W.length?`<div><div class="l2">TOP ${W.length} PLAYERS</div>${W.map((r,i)=>`<div class="wr${i<5?' g':''}"><b style="color:${md(i)}">#${r.rank}</b><span>@${esc(r.handle)}</span><em>${r.pts} pts</em></div>`).join('')}<div class="ft">Top 5 win a gift card. Ties go to more correct picks, then whoever joined first.</div></div>`:''}
+ <div><div class="l2">CORRECT ANSWERS</div>${rows.map(([a,b])=>`<div class="wr"><span style="color:var(--muted)">${a}</span><em class="ans">${esc(b)}</em></div>`).join('')}</div></div></section>`}
+async function shareRes(){const R=window._RES;if(!R)return;await document.fonts.ready;
+ const c=document.createElement('canvas'),S=2,Wd=1080,H=1350;c.width=Wd*S;c.height=H*S;const x=c.getContext('2d');x.scale(S,S);
+ const g=x.createRadialGradient(Wd*.85,0,40,Wd*.85,0,1300);g.addColorStop(0,'#2a1d5c');g.addColorStop(1,'#0b0b12');x.fillStyle=g;x.fillRect(0,0,Wd,H);
+ const T=(t,X,Y,f,col,al,mw)=>{x.font=f;if(mw){const w=x.measureText(t).width;if(w>mw){const m=f.match(/(\d+)px/);x.font=f.replace(/\d+px/,Math.floor(+m[1]*mw/w)+'px')}}x.fillStyle=col;x.textAlign=al||'left';x.textBaseline='top';x.fillText(t,X,Y)};
+ const M=s=>`${s}px "Share Tech Mono",monospace`,B=s=>`700 ${s}px "Chakra Petch",sans-serif`;
+ x.strokeStyle='#b6f23a';x.lineWidth=5;x.beginPath();x.moveTo(40,80);x.lineTo(40,40);x.lineTo(80,40);x.stroke();
+ T('letsgrowesports // BMSD 2026',80,72,M(28),'#b6f23a');T('PREDICT & WIN RESULTS',80,110,B(68),'#eeeef5',null,Wd-160);
+ const ch=(window._RES.rows[0]||[])[1]||'';const lg=TL[key(ch)];let y=220;
+ if(lg){const im=new Image();im.src=lg;await new Promise(r=>{im.onload=r;im.onerror=r});const h=120,w=Math.min(240,im.width*h/im.height||h);x.drawImage(im,80,y,w,h);T('CHAMPIONS',80+w+24,y+16,M(26),'#ff4d5e');T(ch.toUpperCase(),80+w+24,y+46,B(64),'#b6f23a')}
+ else{T('CHAMPIONS',80,y,M(26),'#ff4d5e');T(ch.toUpperCase(),80,y+30,B(64),'#b6f23a')}
+ y=380;x.fillStyle='rgba(255,255,255,.08)';x.fillRect(80,y,Wd-160,2);y+=24;
+ if(R.W.length){T('// TOP 5 PLAYERS',80,y,M(26),'#ff4d5e');y+=46;R.W.slice(0,5).forEach((r,i)=>{const col=['#f5c451','#cfd3dc','#d08a4a','#eeeef5','#eeeef5'][i];
+  x.fillStyle=i===0?'rgba(245,196,81,.12)':'rgba(26,26,38,.9)';x.fillRect(80,y,Wd-160,64);T('#'+r.rank,100,y+14,B(34),col);T('@'+r.handle,190,y+14,B(34),'#eeeef5',null,560);T(r.pts+' PTS',Wd-100,y+18,M(30),'#b6f23a','right');y+=74})}
+ y+=16;T('// CORRECT ANSWERS',80,y,M(26),'#ff4d5e');y+=44;
+ R.rows.slice(1).forEach(([a,b])=>{T(a.toUpperCase(),80,y,M(22),'#8d8ca3');T(b,Wd-80,y-4,B(28),'#eeeef5','right',620);y+=46});
+ x.fillStyle='#b6f23a';x.fillRect(0,H-110,Wd,110);T('LIVE.LETSGROWESPORTS.COM/PREDICT',80,H-92,B(40),'#0a0a14');T('@letsgrowesports',80,H-44,M(24),'#0a0a14');
+ const blob=await new Promise(r=>c.toBlob(r,'image/png'));const f=new File([blob],'bmsd2026-predict-results.png',{type:'image/png'});
+ const txt=`BMSD 2026 Predict & Win results: ${ch} are champions. Top players and every correct answer: live.letsgrowesports.com/predict @letsgrowesports`;
+ const m=document.getElementById('shm');document.getElementById('shi').src=URL.createObjectURL(blob);m.classList.add('on');
+ document.getElementById('shs').onclick=async()=>{try{if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],text:txt});else{location.href='https://x.com/intent/post?text='+encodeURIComponent(txt)}}catch(e){}};
+ document.getElementById('shx').onclick=()=>window.open('https://x.com/intent/post?text='+encodeURIComponent(txt),'_blank');
+ document.getElementById('shd').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=f.name;a.click()}}
 // 1. champion: donut
 function donut(q){let a=-Math.PI/2;const tot=q.rows.reduce((s,r)=>s+r.pct,0)||1,L=q.rows[0];
  const segs=q.rows.map((r,i)=>{const da=r.pct/tot*2*Math.PI,d=arc(105,105,80,a+.012,a+da-.012);a+=da;return `<path d="${d}" stroke="${r.other?OTH:COL[i]}" stroke-width="30" fill="none" class="seg" style="--d:${i*90}ms"/>`}).join('');
@@ -168,7 +209,8 @@ function donut(q){let a=-Math.PI/2;const tot=q.rows.reduce((s,r)=>s+r.pct,0)||1,
  return card(q,'s4',`<div class="dn"><svg viewBox="0 0 210 210">${segs}${lg?`<image href="${lg}" x="55" y="58" width="100" height="56" preserveAspectRatio="xMidYMid meet"/>`:''}<text x="105" y="140" text-anchor="middle" fill="#b6f23a" font-family="Share Tech Mono,monospace" font-size="28">${pc(L.pct)}</text><text x="105" y="160" text-anchor="middle" fill="#8d8ca3" font-family="Share Tech Mono,monospace" font-size="11">${esc(L.label.toUpperCase())}</text></svg>
  <div class="leg">${q.rows.map((r,i)=>`<div class="${ok(q,r.label)}"><i style="background:${r.other?OTH:COL[i]}"></i>${logo(r)}${esc(r.label)}<span class="p">${pc(r.pct)}</span></div>`).join('')}</div></div>`)}
 // 2. top 3: rings
-function rings(q){const rows=q.rows.slice(0,8);
+function rings(q){const rows=q.rows.slice(0,8),A=q.answer||[];
+ A.forEach(a=>{if(rows.some(r=>r.label===a))return;const x=q.rows.find(r=>r.label===a),j=[...rows.keys()].reverse().find(i=>!A.includes(rows[i].label));if(x&&j!=null)rows[j]=x});   // always show the right answers
  return card(q,'s8',`<div class="rings">${rows.map((r,i)=>{const L=2*Math.PI*40,src=TL[key(r.label)];return `<div class="ring ${ok(q,r.label)}"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" stroke="#262636" stroke-width="8" fill="none"/><circle cx="50" cy="50" r="40" stroke="${i<3?'#b6f23a':'#8d8ca3'}" stroke-width="8" fill="none" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="${L}" stroke-dashoffset="${L}" data-off="${L*(1-r.pct/100)}" class="rg" ${i<3?'style="filter:drop-shadow(0 0 4px rgba(182,242,58,.6))"':''}/>${src?`<image href="${src}" x="22" y="28" width="56" height="44" preserveAspectRatio="xMidYMid meet"/>`:''}</svg><b>${esc(r.label)}</b><span>${pc(r.pct)}</span></div>`}).join('')}</div>`)}
 // 3. BMIC: heat tiles
 function heat(q){const k=6;
@@ -203,7 +245,8 @@ function curve(q){const sm=innerWidth<640,n=q.rows.length,W=sm?440:1000,H=sm?320
  <line x1="${P[top][0]}" x2="${P[top][0]}" y1="${P[top][1]}" y2="${Y(0)}" stroke="#b6f23a" stroke-dasharray="4 4"/>
  ${q.rows.map((r,i)=>`<circle cx="${P[i][0]}" cy="${P[i][1]}" r="${i===top?7:4}" fill="${i===top?'#b6f23a':'#0b0b12'}" stroke="${i===top?'#b6f23a':'#4cc9f0'}" stroke-width="2"/><text x="${P[i][0]}" y="${P[i][1]-14}" text-anchor="middle" fill="${i===top?'#b6f23a':'#eeeef5'}" font-family="Share Tech Mono,monospace" font-size="${(i===top?20:16)*fs}">${pc(r.pct)}</text><text x="${P[i][0]}" y="${H-(sm?32:18)}" text-anchor="middle" fill="${ok(q,r.label)?'#b6f23a':'#8d8ca3'}" font-family="Share Tech Mono,monospace" font-size="${sm?13:15}">${sm&&r.label.includes('-')?`<tspan x="${P[i][0]}" dy="-8">${esc(lab(r.label.split('-')[0]))}</tspan><tspan x="${P[i][0]}" dy="15">-${esc(lab(r.label.split('-')[1]))}</tspan>`:esc(lab(r.label))}</text>`).join('')}
  <line x1="${pl}" x2="${W-pr}" y1="${Y(0)}" y2="${Y(0)}" stroke="#262636"/>${sm?`<text x="${W-pr}" y="${H-2}" text-anchor="end" fill="#8d8ca3" font-family="Share Tech Mono,monospace" font-size="11">thousands of viewers</text>`:''}</svg></div>`)}
-G.innerHTML=[donut(Q('CHAMPION')),rings(Q('TOP 3')),heat(Q('BMIC')),hero(Q('TOURNAMENT MVP')),stacked(Q('FINAL MVP')),tree(Q('BEST IGL')),gauge(Q('THE ELIMINATOR')),curve(Q('PEAK VIEWERS'))].join('');
+if(((Q('CHAMPION')||{}).answer||[]).length){document.getElementById('hh').textContent='Predict & Win: results';document.getElementById('hp').textContent=`${Q('CHAMPION').answer[0]} are the BMSD 2026 champions. Here is who called it, and how the community voted.`}
+G.innerHTML=[results(),donut(Q('CHAMPION')),rings(Q('TOP 3')),heat(Q('BMIC')),hero(Q('TOURNAMENT MVP')),stacked(Q('FINAL MVP')),tree(Q('BEST IGL')),gauge(Q('THE ELIMINATOR')),curve(Q('PEAK VIEWERS'))].join('');
 // animate in as cards scroll into view
 const run=c=>{c.classList.add('in');
  c.querySelectorAll('.rg').forEach((e,i)=>{e.style.transition=`stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1) ${i*70}ms`;requestAnimationFrame(()=>e.style.strokeDashoffset=e.dataset.off)});
@@ -214,4 +257,7 @@ const run=c=>{c.classList.add('in');
  c.querySelectorAll('[data-n]').forEach(e=>{const t=+e.dataset.n,t0=performance.now();const f=n=>{const k=Math.min(1,(n-t0)/1100),v=t*(1-Math.pow(1-k,3));e.textContent=pc(k<1?Math.round(v):t);if(k<1)requestAnimationFrame(f)};requestAnimationFrame(f)})};
 const io='IntersectionObserver' in window?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){io.unobserve(e.target);run(e.target)}}),{threshold:.2}):null;
 document.querySelectorAll('.c').forEach(c=>io?io.observe(c):run(c));
-</script></body></html>"""
+</script>
+<div class="shm" id="shm" onclick="if(event.target===this)this.classList.remove('on')"><div class="bx"><div style="display:flex;justify-content:space-between;align-items:center"><b>Share the results</b><button onclick="document.getElementById('shm').classList.remove('on')" style="background:none;border:0;color:var(--muted);font:14px 'Share Tech Mono',monospace;cursor:pointer">CLOSE</button></div>
+<img id="shi" alt="Results card"><div class="rw"><button class="p" id="shs">SHARE</button><button id="shx">X</button><button id="shd">DOWNLOAD</button></div>
+<div style="font:11px 'Share Tech Mono',monospace;color:var(--muted);margin-top:8px">On your phone, Share opens Instagram stories, WhatsApp and more.</div></div></div></body></html>"""

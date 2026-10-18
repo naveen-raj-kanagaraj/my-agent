@@ -155,7 +155,7 @@ def _roster(out: dict) -> list:
     return rows
 
 
-PWR = """<link rel="prefetch" href="/predict"><a class="pwb" href="/predict" onclick="return pwGo(event,this.href)"><span class="pwt">// PREDICT &amp; WIN · VOTING CLOSED</span><b>WHAT THE COMMUNITY PREDICTED</b><span class="pws">Champion, top 3, BMIC, MVPs, best IGL and peak viewers, as the community called it.</span><i>SEE IT &rarr;</i></a>"""
+PWR = """<link rel="prefetch" href="/predict"><a class="pwb" href="/predict" onclick="return pwGo(event,this.href)"><span class="pwt">// PREDICT &amp; WIN · RESULTS ARE OUT</span><b>SEE WHO WON</b><span class="pws">The top 5 players, every correct answer and how the community voted.</span><i>RESULTS &rarr;</i></a>"""
 PWB = """<link rel="prefetch" href="/predict"><a class="pwb" href="/predict" onclick="return pwGo(event,this.href)"><span class="pwt">// NEW · FREE TO PLAY</span><b>PREDICT &amp; WIN</b><span class="pws">Call the BMSD 2026 champion, top 3 and more. Top 5 win a gift card.</span><i>PLAY NOW &rarr;</i></a>"""
 
 
