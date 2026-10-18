@@ -1,7 +1,7 @@
 # New tournament from the BMSD 2026 base
 
-The BMSD 2026 site is the template. The code as it ran for the finals is tagged **`bmsd-2026`** on GitHub
-(`git checkout bmsd-2026` to see it exactly), and the finished site is frozen in `archive/bmsd/` (see the end).
+The BMSD 2026 site is the template. The code as it ran for the finals is kept on the branch **`bmsd-2026`** on GitHub
+(`git checkout bmsd-2026` to see it exactly; never commit to that branch), and the finished site is frozen in `archive/bmsd/` (see the end).
 
 Everything a new tournament needs is below, in the order to do it. Search the file for the text in quotes.
 
