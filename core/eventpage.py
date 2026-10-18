@@ -465,6 +465,7 @@ async function toggleDay(d){const row=document.getElementById('dx-'+d),hd=docume
  if(OPEN_DAY===d){OPEN_DAY=null;row.hidden=true;hd.classList.remove('open');return}
  document.querySelectorAll('.dayx').forEach(x=>x.hidden=true);document.querySelectorAll('.dayr').forEach(x=>x.classList.remove('open'));
  OPEN_DAY=d;row.hidden=false;hd.classList.add('open');
+ if(DAYC[d]&&!LIVE){row.querySelector('.dxin').innerHTML=dayHTML(DAYC[d]);return}   // saved snapshot: day data is built in
  try{const r=await fetch('daystreams/'+d+'?t='+Math.floor(Date.now()/30000),{cache:'no-store'});const j=await r.json();DAYC[d]=j;
   const x=document.getElementById('dx-'+d);if(x)x.querySelector('.dxin').innerHTML=dayHTML(j)}catch(e){row.querySelector('.dxin').innerHTML='<span class="muted">Could not load this day. Try again.</span>'}}
 function render(){
