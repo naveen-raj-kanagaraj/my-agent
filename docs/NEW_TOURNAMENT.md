@@ -49,6 +49,9 @@ Between days, no code change is needed:
 
 ## 3. Assets (`static/`)
 
+The `bmsd-2026` base branch keeps only `static/eventlogos/`. Team logos, team marks, player photos and the
+Predict preview image are per tournament: add new ones for each event.
+
 | Folder | Used for | Format |
 |---|---|---|
 | `static/eventlogos/` | History chart logos (one per event: `BMSD26.webp` etc.) | webp, transparent |
