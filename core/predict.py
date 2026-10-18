@@ -32,7 +32,9 @@ DEFAULTS = {
     "maps": {"1": ["Rondo", "Erangel", "Erangel", "Erangel", "Miramar", "Miramar"]},   # per day; other days reuse Day 1
     "match_questions": False,                                     # per-match chicken dinner questions (off)
     "prize": "Top 5 on the overall leaderboard win a gift card of their choice.",
-    "show_leaderboard": False,                                    # owner turns this on after the finals
+    "show_leaderboard": False,
+    "peak_actual": "",
+    "podium": [],                                                 # final standings top 3 in order, for the results                                            # e.g. "653K": shown with the results                                    # owner turns this on after the finals
     "record": 730000,                                             # BMPS 2026 peak, for the yes/no question
 }
 

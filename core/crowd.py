@@ -121,7 +121,25 @@ def split(top: int = 6, all_teams: bool = False) -> dict:
             else:
                 note = f"% of players who put them in their {(q.get('meta') or {}).get('pick', 3)}"
         out.append({"tag": q["tag"], "title": q["title"], "kind": q["kind"], "rows": rows, "note": note,
-                    "answer": predict.ans_list(q) if q.get("answer") else []})
-    data = {"questions": out, "ts": int(time.time())}
+                    "answer": (_canon_answer(predict.ans_list(q)) if q["kind"] == "text" else predict.ans_list(q))
+                    if q.get("answer") else []})
+    data = {"questions": out, "ts": int(time.time()), "winners": winners(), "peak_actual": predict.settings().get("peak_actual", ""),
+            "podium": predict.settings().get("podium", [])}
     _CACHE[ck] = (time.time(), data)
     return data
+
+
+def winners(n: int = 10) -> list:
+    """Top players once the owner has turned the leaderboard on (Instagram handle and points only)."""
+    if not predict.settings().get("show_leaderboard"):
+        return []
+    players, sc, _, _ = predict._scores()
+    return [{"rank": r["rank"], "handle": r["handle"], "pts": r["pts"], "correct": r["correct"]}
+            for r in predict._ranked(players, sc, "all")[:n] if r["pts"] > 0]
+
+
+def _canon_answer(accepted: list) -> list:
+    """Accepted spellings -> the player's display name (misspellings collapse into the known name)."""
+    names = {canon(a) for a in accepted}
+    known = sorted(n for n in names if n in PLAYERS)
+    return known or sorted(names)[:1]
