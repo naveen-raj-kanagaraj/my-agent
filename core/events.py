@@ -57,7 +57,8 @@ PRESETS = {
                          "@SHARKSHE", "@MafiaNinja", "@ImRuthlessceopubg", "@RakaZoneGaming", "@AnshYT", "@casetooop",
                          "@thecasetoopapa", "@sheekgaming", "@IPREEET.69", "@MortaLyt", "@soulregaltos9810", "@SnaxGaming",
                          "@sriop-sr70", "@NEONXPAWANOP", "@LadyPredatorGaming", "@LadyPredator"],
-        "next_start": "2026-10-18 13:00",       # IST; shown as a countdown while the official stream is offline
+        "ended": True,                          # tournament over: nothing is recorded, the site shows history + by day
+        "next_start": None,
         "match": ["bmsd", "bgmi showdown", "battlegrounds mobile india showdown", "battlegrounds mobile showdown",
                   "bgmi show down", "bm showdown"],
         "queries": ["BMSD", "BMSD 2026", "BGMI Showdown", "Battlegrounds Mobile India Showdown", "BMSD watch party"],
@@ -363,7 +364,7 @@ _fast_pool = ThreadPoolExecutor(max_workers=24)
 def paused(key: str) -> bool:
     """Owner said the broadcast is over (kv event_stop:<key> = epoch): record nothing and show off-air until then,
     even if an official stream is still up (post-show, end screen)."""
-    return (store.kv_get(f"event_stop:{key}") or 0) > time.time()
+    return bool(PRESETS.get(key, {}).get("ended")) or (store.kv_get(f"event_stop:{key}") or 0) > time.time()
 
 
 def fast_tick(ev: dict, now: float = None) -> dict:
@@ -1061,6 +1062,8 @@ def channel_card(handle: str) -> dict:
 
 def next_start(key: str):
     """Next scheduled official start (epoch) if it's in the future: set with /event next, else the preset."""
+    if PRESETS.get(key, {}).get("ended"):
+        return None
     v = store.kv_get(f"event_next:{key}") or PRESETS.get(key, {}).get("next_start")
     if not v:
         return None
