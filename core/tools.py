@@ -300,13 +300,10 @@ ALL_TOOLS = [
     _schema("whatsapp_message", "Write a WhatsApp message and give a button that opens WhatsApp with it filled in "
             "(to a phone number with country code if given, otherwise they pick the chat).",
             {"text": S, "phone": S}, ["text"]),
-    _schema("event_stats", "Live viewership of a tracked event (e.g. BMSD) across all YouTube streams: live now, peak "
-            "viewers so far and when, average viewers, hours watched, airtime, by day, top channels, official vs watch "
-            "parties vs community. Use for any question about the event's viewership.", {"name": S}),
 ]
 
 TALENT_TOOLS = {"save_creator", "find_creators", "save_deal", "pipeline", "scout_creator",
-                "get_brand_voice", "save_brand_voice", "event_stats"}
+                "get_brand_voice", "save_brand_voice"}
 OWNER_ONLY = TALENT_TOOLS | ({"generate_image"} if not PUBLIC_IMAGE_GEN else set())
 
 
@@ -357,8 +354,6 @@ def execute_tool(name: str, inputs: dict) -> str:
             inputs.get("details", ""), bool(inputs.get("all_day"))),
         "whatsapp_message": lambda: __import__("core.compose", fromlist=["x"]).whatsapp_message(
             inputs["text"], inputs.get("phone", "")),
-        "event_stats": lambda: _talent_only() or __import__("core.events", fromlist=["x"]).tool_event_stats(
-            inputs.get("name", "")),
     }
     fn = handlers.get(name)
     return fn() if fn else "Unknown tool."

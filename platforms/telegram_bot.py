@@ -85,7 +85,6 @@ OWNER_HELP = HELP + (
     "\nOwner only:\n"
     "/brief - full strategic briefing now\n"
     "/channels brief - what's new in the channels you've joined\n"
-    "/event - tournament viewership (BMSD): peak, average, hours watched; /event help\n"
     "/radar - content and business radar now\n"
     "/users - who is using the bot today\n"
     "/status - health check: sources, spend, scheduler\n"
@@ -1526,124 +1525,6 @@ async def cmd_bot_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     if off else "I'm back. Mention me or reply to me to ask something.")
 
 
-# ---------- event viewership tracker (owner) ----------
-
-EVENT_HELP = ("/event - live now, peak, average concurrent\n"
-              "/event link - live dashboard that opens on any device (updates every 2s)\n"
-              "/event export - spreadsheet of everything recorded (also sent automatically after each broadcast)\n"
-              "/event next 2026-10-16 02:30 - countdown on the site to the next broadcast (IST)\n"
-              "/event visitors - who is on the public dashboard right now, today, countries, sources\n"
-              "/event chart - viewers-over-time chart\n"
-              "/event page - dashboard snapshot as a file\n"
-              "/event top - live streams ranked\n"
-              "/event add <YouTube link or @channel> - always track this stream or channel\n"
-              "/event official <@channel or name> - mark a channel as official\n"
-              "/event exclude <link, video id or channel name> - drop a stream that isn't about the event\n"
-              "/event phrase <words> - also count streams whose title has these words\n"
-              "/event start <name> | /event stop - start or pause tracking")
-
-
-async def cmd_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_owner(update):
-        return
-    from core import events, eventpage
-    args = context.args or []
-    action = args[0].lower() if args else ""
-    rest = " ".join(args[1:]).strip()
-    ev = events.get()
-    if action == "start":
-        ev = events.create(rest.split()[0] if rest else "bmsd")
-        await update.message.reply_text(f"Tracking {ev['name']}: finding new live streams every "
-                                        f"{events.POLL_SEC}s, counting each one every {events.FAST_SEC:g}s.\nPhrases: {', '.join(ev['match'])}\n\n{EVENT_HELP}")
-        return
-    if not ev:
-        await update.message.reply_text("No event yet. Start with: /event start bmsd")
-        return
-    key = ev["key"]
-    if action == "stop":
-        events.update(key, active=False)
-        await update.message.reply_text(f"Paused {ev['name']}. Data is kept; /event start {key} resumes.")
-    elif action in ("chart", "graph"):
-        png = await asyncio.to_thread(eventpage.chart_png, key)
-        if not png:
-            await update.message.reply_text("No chart yet (no data, or matplotlib isn't installed: pip install matplotlib).")
-            return
-        import io as _io
-        await update.message.reply_photo(photo=_io.BytesIO(png), caption=f"{ev['name']}: YouTube viewers over time")
-    elif action in ("page", "dashboard", "html"):
-        page = await asyncio.to_thread(eventpage.build_html, key)
-        import io as _io
-        await update.message.reply_document(document=_io.BytesIO(page.encode()), filename=f"{key}-viewership.html",
-                                            caption="Open in your browser for the full dashboard (live data is a "
-                                                    "snapshot; send /event page again for fresh numbers).")
-    elif action in ("export", "excel", "log", "data"):
-        from core import eventlog
-        import io as _io
-        xl = await asyncio.to_thread(eventlog.export_xlsx, key)
-        await update.message.reply_document(document=_io.BytesIO(xl), filename=f"{key}-viewership.xlsx",
-                                            caption="Peaks, by day, broadcasts, every stream's peak, watch parties, per-minute readings.")
-    elif action == "next":
-        if rest.strip() == "off":
-            store.kv_set(f"event_next:{key}", "1970-01-01 00:00")
-            await update.message.reply_text("Countdown removed.")
-            return
-        m = re.match(r"(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})", rest)
-        if not m:
-            await update.message.reply_text("Use: /event next 2026-10-16 02:30  (IST), or /event next off")
-            return
-        store.kv_set(f"event_next:{key}", f"{m.group(1)} {m.group(2).zfill(5)}")
-        await update.message.reply_text(f"Countdown set: next broadcast {m.group(1)} {m.group(2)} IST.")
-    elif action in ("anomalies", "spikes", "bots"):
-        from core import eventlog
-        import io as _io
-        xl, n = await asyncio.to_thread(eventlog.anomalies_xlsx, key)
-        await update.message.reply_document(document=_io.BytesIO(xl), filename=f"{key}-anomalies.xlsx",
-                                            caption=f"{n} sudden jumps/drops logged (per stream, within ~15s).")
-    elif action in ("visitors", "users", "traffic"):
-        from core import visitors
-        await update.message.reply_text(visitors.summary(), disable_web_page_preview=True)
-    elif action in ("link", "live", "url"):
-        from core import tunnel
-        url = tunnel.public_url()
-        if url and tunnel.status() == "on":
-            await update.message.reply_text(f"Live dashboard (any device, updates every 2s):\n{url}",
-                                            disable_web_page_preview=True)
-        else:
-            await update.message.reply_text(f"The public link isn't up right now ({tunnel.status()}). "
-                                            "On this computer: http://localhost:8092")
-    elif action == "top":
-        st = await asyncio.to_thread(events.stats, key)
-        live = st.get("live_now", [])
-        rows = [f"{i}. {events.fmt_n(s['viewers'])}  {s['channel']} ({s['kind']})\n   {events.yt_link(s['vid'])}"
-                for i, s in enumerate(live[:60], 1)]
-        await send_long(update, ("LIVE NOW\n" + "\n".join(rows)) if rows else "Nothing live right now.", preview=False)
-    elif action == "add" and rest:
-        vid = re.search(r"(?:v=|youtu\.be/|/live/)([A-Za-z0-9_-]{11})", rest)
-        if vid:
-            events.update(key, videos=list(dict.fromkeys(ev.get("videos", []) + [vid.group(1)])))
-            await update.message.reply_text(f"Tracking that stream ({vid.group(1)}) in {ev['name']}.")
-        else:
-            events.update(key, channels=list(dict.fromkeys(ev.get("channels", []) + [rest.split()[0]])))
-            await update.message.reply_text(f"Tracking {rest.split()[0]}'s live streams in {ev['name']}.")
-    elif action == "official" and rest:
-        events.update(key, official=list(dict.fromkeys(ev.get("official", []) + [rest.lower().lstrip("@")])))
-        await update.message.reply_text(f"'{rest}' counts as official from now on.")
-    elif action in ("exclude", "remove") and rest:
-        vid = re.search(r"(?:v=|youtu\.be/|/live/)([A-Za-z0-9_-]{11})", rest)
-        item = vid.group(1) if vid else (rest if re.fullmatch(r"[A-Za-z0-9_-]{11}", rest) else rest.lower())
-        events.update(key, excluded=list(dict.fromkeys(ev.get("excluded", []) + [item])))
-        await update.message.reply_text(f"Excluded '{item}' from {ev['name']} from now on.")
-    elif action == "phrase" and rest:
-        events.update(key, match=list(dict.fromkeys(ev["match"] + [rest.lower()])),
-                      queries=list(dict.fromkeys(ev["queries"] + [rest]))[:8])
-        await update.message.reply_text(f"Also tracking streams with '{rest}' in the title.")
-    elif action == "help":
-        await update.message.reply_text(EVENT_HELP)
-    else:
-        text = await asyncio.to_thread(events.summary, key)
-        await send_long(update, text, preview=False)
-
-
 # ---------- Telegram channels ----------
 
 async def cmd_channels(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1994,7 +1875,6 @@ def run_telegram():
     app.add_handler(CallbackQueryHandler(on_news_links, pattern=r"^nl:"))
     app.add_handler(CallbackQueryHandler(on_file_action, pattern=r"^fa:"))
     app.add_handler(CommandHandler("channels", cmd_channels, filters=PRIVATE))
-    app.add_handler(CommandHandler("event", cmd_event, filters=PRIVATE))
     app.add_handler(InlineQueryHandler(on_inline_query))
     app.add_handler(ChosenInlineResultHandler(on_inline_chosen))
     app.add_handler(CommandHandler(["botoff", "boton"], cmd_bot_toggle))

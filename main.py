@@ -72,12 +72,6 @@ if __name__ == "__main__":
     if os.getenv("DASHBOARD_ENABLED", "true").lower() == "true":
         threading.Thread(target=start_dashboard, daemon=True).start()
 
-    if os.getenv("EVENT_WEB_ENABLED", "true").lower() == "true":
-        from platforms import eventweb
-        from core import tunnel
-        threading.Thread(target=eventweb.run, daemon=True).start()
-        tunnel.start(eventweb.PORT)   # public link for the live viewership dashboard, sent to the owner on Telegram
-
     if os.getenv("DISCORD_BOT_TOKEN"):
         print("Starting Discord...")
         d = threading.Thread(target=start_discord, daemon=True)
