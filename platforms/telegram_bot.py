@@ -1812,7 +1812,7 @@ PUBLIC_COMMANDS = [("new", "Start a fresh conversation"), ("search", "Web answer
                    ("alert", "Alert me when a keyword shows up"), ("model", "Choose the AI model"),
                    ("style", "How you like replies"), ("profile", "What I know about you"),
                    ("forget", "Erase what I know about you"), ("help", "Everything I can do")]
-OWNER_COMMANDS = [("event", "Tournament viewership"), ("brief", "Full briefing now"), ("radar", "Content and business radar"),
+OWNER_COMMANDS = [("brief", "Full briefing now"), ("radar", "Content and business radar"),
                   ("status", "Health check"), ("usage", "Costs today and this week"), ("users", "Who's using the bot")]
 
 
