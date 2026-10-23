@@ -201,11 +201,37 @@ def _thinking_kwargs(model: str, level: str) -> dict:
             "max_tokens": REPLY_MAX_TOKENS + 8000}
 
 
+def _cached(messages: list) -> list:
+    """The same messages with a cache breakpoint on the last block, so the conversation so far (and earlier tool
+    rounds) is read from Anthropic's prompt cache on the next call instead of being processed again: faster replies
+    and about a tenth of the input cost. The stored history is left untouched."""
+    if not messages:
+        return messages
+    last = dict(messages[-1])
+    content = last.get("content")
+    if isinstance(content, str):
+        if not content.strip():
+            return messages
+        last["content"] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
+    elif isinstance(content, list) and content:
+        blocks = list(content)
+        b = blocks[-1]
+        b = dict(b) if isinstance(b, dict) else b.model_dump(exclude_none=True) if hasattr(b, "model_dump") else None
+        if not b or b.get("type") in ("thinking", "redacted_thinking"):
+            return messages
+        b["cache_control"] = {"type": "ephemeral"}
+        blocks[-1] = b
+        last["content"] = blocks
+    else:
+        return messages
+    return messages[:-1] + [last]
+
+
 def _run_anthropic(uid, model, system, tools, messages, level="off") -> str:
     for _ in range(MAX_TOOL_ROUNDS + 1):
         last_round = _ == MAX_TOOL_ROUNDS
         kwargs = dict(_uid=uid, model=model, max_tokens=REPLY_MAX_TOKENS, system=system, tools=tools,
-                      tool_choice={"type": "none"} if last_round else {"type": "auto"}, messages=messages)
+                      tool_choice={"type": "none"} if last_round else {"type": "auto"}, messages=_cached(messages))
         kwargs.update(_thinking_kwargs(model, level))
         c = context.get()
         try:

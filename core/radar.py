@@ -82,7 +82,7 @@ def build_radar() -> str:
     resp = client.messages.create(
         _uid="owner",
         model=RADAR_MODEL,
-        max_tokens=2000,
+        max_tokens=4000,                 # 2000 cut the radar off mid-way
         messages=[{"role": "user", "content": (
             "You are the content and business strategist for an Indian media founder. He runs a digital media brand "
             "(rooted in the Indian gaming ecosystem but growing beyond it) and is building a talent management "
