@@ -252,7 +252,7 @@ def build_digest():
     response = client.messages.create(
         _uid="owner",
         model="claude-haiku-4-5-20251001",
-        max_tokens=4000,
+        max_tokens=8000,                 # 4000 was hit on every brief, so they were being cut off
         messages=[{
             "role": "user",
             "content": f"""You are a world-class strategic analyst, historian, and mentor. Write a sharp briefing for Naveen, a marketing analytics student at DePaul University who runs a gaming media brand and is building a talent agency, content house, and production studio.

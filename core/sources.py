@@ -193,8 +193,11 @@ def _reddit_rss(path: str, params: dict) -> list:
     r = requests.get(f"https://www.reddit.com{path}.rss", params=params,
                      headers={"User-Agent": BROWSER_UA}, timeout=15)
     r.raise_for_status()
+    root = ET.fromstring(r.content)
+    if root.tag != ATOM + "feed":
+        raise ValueError("Reddit returned a page, not a feed")
     out = []
-    for e in ET.fromstring(r.content).iter(ATOM + "entry"):
+    for e in root.iter(ATOM + "entry"):
         link = e.find(ATOM + "link")
         cat = e.find(ATOM + "category")
         sub = (cat.get("label") or "r/" + cat.get("term", "")) if cat is not None else "Reddit"
@@ -242,6 +245,9 @@ def _reddit_get(path: str, params: dict) -> list:
             last = e
             if e.response is None or e.response.status_code not in (403, 429):
                 raise
+        except (ValueError, ET.ParseError) as e:
+            # 200 with an HTML block/login page instead of JSON or RSS: Reddit is blocking this route, try the next
+            last = e
     from core import store, alerts
     store.kv_set("reddit_blocked_until", time.time() + REDDIT_RETRY_HOURS * 3600)
     alerts.notify("reddit_closed", "Reddit blocks free access (it closed its free API in 2025-26). "
